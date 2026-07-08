@@ -35,6 +35,6 @@ What happened instead?
 
 Do not attach private media, Telegram credentials, `.tvmeta` files, local databases, or logs containing personal data.
 
-## Logs or screenshots
+## Logs
 
-Attach sanitized screenshots or logs if helpful.
+Attach sanitized logs if helpful.

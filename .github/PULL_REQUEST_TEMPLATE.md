@@ -8,7 +8,7 @@ Describe what changed and why.
 - [ ] Does this change add or change Android permissions?
 - [ ] Does this change affect encryption, vault, login, sync, or restore?
 - [ ] Has this been tested on Android?
-- [ ] Are screenshots included for UI changes?
+- [ ] Are UI changes described clearly?
 
 ## Testing
 

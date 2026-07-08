@@ -23,7 +23,6 @@ TeleVault is an independent project and is not affiliated with, endorsed by, or 
 - [Features](#features)
 - [Privacy & security](#privacy--security)
 - [What is encrypted?](#what-is-encrypted)
-- [Screenshots](#screenshots)
 - [Build from source](#build-from-source)
 - [Roadmap preview](#roadmap-preview)
 - [Contributing](#contributing)
@@ -114,14 +113,6 @@ Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting gu
 | Normal non-vault uploads | Not client-side encrypted by TeleVault in the current implementation. |
 
 If you need all-media client-side encryption, treat that as future work and do not assume it exists today.
-
-## Screenshots
-
-Screenshots and short demo GIFs are planned before the public launch. Use sanitized demo media only.
-
-| Library | Bucket Setup | Vault |
-| --- | --- | --- |
-| `docs/screenshots/library.png` coming soon | `docs/screenshots/bucket-setup.png` coming soon | `docs/screenshots/vault.png` coming soon |
 
 ## Build from source
 

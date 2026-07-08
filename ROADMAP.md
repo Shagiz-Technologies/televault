@@ -25,4 +25,3 @@ This roadmap is intentionally conservative. TeleVault handles private media and 
 - Consider all-media client-side encryption as an optional mode.
 - Add richer album and label management.
 - Prepare iOS support after Android stability gates pass.
-- Add screenshots and demo media to the README.
