@@ -1,44 +1,148 @@
 ﻿# TeleVault
 
-TeleVault is a privacy-first Android media backup and vault app built with Flutter. It lets a user connect their own Telegram account, create private Telegram channels as backup buckets, organize local media, and protect selected items in a vault.
+[![Flutter CI](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml/badge.svg)](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml)
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![Platform: Android](https://img.shields.io/badge/platform-Android-3DDC84.svg)
+![Privacy-first](https://img.shields.io/badge/privacy-first-blue.svg)
+![Open source](https://img.shields.io/badge/open-source-brightgreen.svg)
 
-TeleVault is an independent project by Shagiz Technologies. It is not affiliated with, endorsed by, or sponsored by Telegram.
+A Flutter Android media library, backup manager, and vault for people who want their personal media organized locally and backed up to private Telegram channels they control.
 
-## Why it exists
+An open-source Android app for backing up, organizing, and protecting personal media using a Telegram-backed storage model.
 
-Many people already use gallery apps such as Google Photos because the experience is simple: open the app, see the library, and trust that backup is happening in the background. TeleVault aims to bring that same simple media-library experience to users who want to use storage they control through their own Telegram account instead of sending files to a TeleVault-operated backend.
+TeleVault is an independent project and is not affiliated with, endorsed by, or sponsored by Telegram.
 
-This repository does not include a TeleVault backend server.
+> TeleVault explores a Telegram-as-Storage (TaaS) model: your own Telegram account acts as the storage backend, while TeleVault provides the media library, bucket organization, vault, sync state, and local privacy controls.
 
-## Current features
+## Quick Navigation
 
-- Telegram login through TDLib/libtdjson.
-- Private Telegram channel buckets for media backup.
-- Android gallery scanning for photos and videos.
-- Library-first UI with albums, vault, settings, selection, labels, filters, and media previews.
-- Backup status indicators for queued, uploading, synced, failed, vaulted, and deleted-local states.
-- Bucket preferences for media type selection and sync behavior.
-- Vault lock/unlock support with a Vault PIN or password and device biometric authentication where supported.
-- Vault-protected media encryption flow for items moved into the vault.
-- Manual metadata export/import using encrypted `.tvmeta` packages.
-- Safe Uninstall flow that uploads pending media first and uploads encrypted metadata last to the active Telegram bucket.
-- Local operational diagnostics screens. No external analytics or telemetry SDK was found during the open-source preparation audit.
+- [What is TeleVault?](#what-is-televault)
+- [Choose your path](#choose-your-path)
+- [The idea: Telegram-as-Storage (TaaS)](#the-idea-telegram-as-storage-taas)
+- [How it works](#how-it-works)
+- [Features](#features)
+- [Privacy & security](#privacy--security)
+- [What is encrypted?](#what-is-encrypted)
+- [Screenshots](#screenshots)
+- [Build from source](#build-from-source)
+- [Roadmap preview](#roadmap-preview)
+- [Contributing](#contributing)
 
-## What is encrypted
+## What is TeleVault?
 
-- Vault-protected media is encrypted by TeleVault before being stored as vaulted content.
-- Metadata backup packages are encrypted with a user passphrase and are bound to the Telegram account recorded in the package.
-- Normal non-vault media backups are not client-side encrypted by TeleVault in the current implementation. They are sent to Telegram as regular media/files using the user's Telegram account and private bucket channel.
+TeleVault is a privacy-conscious Android app built with Flutter. It lets a user sign in with their own Telegram account, create private channel buckets, scan local photos and videos, track backup state in a local Drift/SQLite database, and protect selected media through a vault flow.
+
+The goal is simple: make backup feel familiar like a modern gallery app, while keeping storage tied to the user's own Telegram account instead of a TeleVault-operated backend server.
+
+## Choose your path
+
+| If you want to... | Start here |
+| --- | --- |
+| Understand the idea | [What is TeleVault?](#what-is-televault) |
+| Build the app locally | [Build from source](#build-from-source) |
+| Check privacy boundaries | [Privacy & security](#privacy--security) |
+| See what is encrypted | [What is encrypted?](#what-is-encrypted) |
+| Contribute code or docs | [Contributing](#contributing) |
+| Report a security issue | [Security](#security) |
+
+## The idea: Telegram-as-Storage (TaaS)
+
+TeleVault explores a Telegram-as-Storage (TaaS) model: your own Telegram account acts as the storage backend, while TeleVault provides the media library, bucket organization, vault, sync state, and local privacy controls.
+
+In practical terms:
+
+- The user signs in with their own Telegram account.
+- Private Telegram channels are used as backup buckets.
+- TeleVault keeps local metadata so it can track pending, uploading, synced, failed, vaulted, and deleted-local states.
+- TDLib/libtdjson powers Telegram integration.
+- TeleVault does not operate a backend server in this repository.
+- Telegram and TDLib still process account login, channel access, and uploaded files.
+- Normal non-vault media is not client-side encrypted by TeleVault in the current implementation.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Android Media Library] --> B[TeleVault Sync Engine]
+    B --> C[Local Drift/SQLite Metadata]
+    B --> D[TDLib/libtdjson]
+    D --> E[User-controlled Telegram Bucket Channels]
+    B --> F[Vault Flow]
+    F --> G[Encrypted Vault Media]
+```
+
+At a high level, TeleVault scans Android photos/videos, records metadata locally, and sends selected backup items to private Telegram bucket channels. Vault-selected media goes through the vault encryption flow before being stored as vaulted content.
+
+## Features
+
+- [x] Telegram login through TDLib/libtdjson
+- [x] Private channel buckets
+- [x] Photo/video scanning
+- [x] Local metadata database
+- [x] Library-first UI with albums, filters, selection, labels, and media previews
+- [x] Backup state indicators for queued, uploading, synced, failed, vaulted, and deleted-local items
+- [x] Bucket preferences for media type and sync behavior
+- [x] Vault lock/unlock support with a Vault PIN or password and device biometric authentication where supported
+- [x] Vault-protected media encryption
+- [x] Metadata export/import
+- [x] Safe Uninstall metadata flow
+- [ ] Full polished media restore UX
+- [ ] Android 14+ selected photos access review
+- [ ] TDLib 16 KB page-size verification
+- [ ] All-media client-side encryption
+
+## Privacy & Security
+
+> TeleVault does not include a TeleVault-operated backend server in this repository. Your media is sent to private Telegram channels controlled by your logged-in Telegram account.
+
+Important boundaries:
+
+- No external analytics or telemetry SDK is currently present.
+- Local diagnostics are stored locally.
+- Contributors must not add external telemetry without explicit user control, documentation, and review.
+- Telegram and TDLib still process Telegram login, channel access, and uploaded files.
+- Normal non-vault uploads are not client-side encrypted by TeleVault today.
+
+Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting guidance is in [`SECURITY.md`](SECURITY.md).
+
+## What is encrypted?
+
+| Data type | Current behavior |
+| --- | --- |
+| Vault-protected media | Encrypted by TeleVault as part of the vault flow. |
+| Metadata backup packages | Encrypted with a user passphrase and bound to the Telegram account recorded in the snapshot. |
+| Normal non-vault uploads | Not client-side encrypted by TeleVault in the current implementation. |
 
 If you need all-media client-side encryption, treat that as future work and do not assume it exists today.
 
-## Privacy model
+## Screenshots
 
-TeleVault stores app metadata locally using Drift/SQLite so it can track files, buckets, labels, sync status, retry state, vault state, and backup history. The app sends media to private Telegram channels controlled by the logged-in Telegram account.
+Screenshots and short demo GIFs are planned before the public launch. Use sanitized demo media only.
 
-TeleVault does not operate a backend server in this repository. Telegram and TDLib still process the Telegram account login, channel access, and uploaded files. Review Telegram's terms and privacy policy before using Telegram as a storage backend.
+| Library | Bucket Setup | Vault |
+| --- | --- | --- |
+| `docs/screenshots/library.png` coming soon | `docs/screenshots/bucket-setup.png` coming soon | `docs/screenshots/vault.png` coming soon |
 
-## Android permissions
+## Build from source
+
+Prerequisites:
+
+- Flutter stable SDK matching the `pubspec.yaml` SDK constraint.
+- Android Studio or Android command-line tools.
+- A Telegram API ID and API hash from Telegram's developer portal.
+- TDLib/libtdjson native binaries included under `third_party/libtdjson`.
+
+```bash
+flutter pub get
+flutter run \
+  --dart-define=TELEGRAM_API_ID=YOUR_TELEGRAM_API_ID \
+  --dart-define=TELEGRAM_API_HASH=YOUR_TELEGRAM_API_HASH
+```
+
+Do not commit real credentials, `.env` files, keystores, signing files, release APKs/AABs, local databases, Telegram sessions, or user backups.
+
+<details>
+<summary>Android permissions</summary>
 
 TeleVault currently requests these Android permissions:
 
@@ -51,18 +155,21 @@ TeleVault currently requests these Android permissions:
 
 Android 14+ selected-photos access (`READ_MEDIA_VISUAL_USER_SELECTED`) still needs a dedicated implementation review.
 
-## Supported platforms
+</details>
 
-Android is the current supported release target. Flutter-generated iOS, macOS, Linux, Windows, and web folders may exist in this repository, but they are not release-supported yet.
+<details>
+<summary>TDLib/libtdjson notes</summary>
 
-## Build from source
+TeleVault uses the vendored `third_party/libtdjson` Flutter plugin for TDLib JSON/FFI integration. The vendored plugin metadata points to `https://github.com/up9cloud/flutter_libtdjson` and includes an MIT license. Native `libtdjson.so` binaries are included for Android ABIs.
 
-Prerequisites:
+Before a Play Store production release, verify native binary provenance, TDLib licensing requirements, and Android 15+ 16 KB page-size compatibility.
 
-- Flutter stable SDK matching the `pubspec.yaml` SDK constraint.
-- Android Studio or Android command-line tools.
-- A Telegram API ID and API hash from Telegram's developer portal.
-- TDLib/libtdjson native binaries included under `third_party/libtdjson`.
+See [`NOTICE.md`](NOTICE.md) for third-party notes.
+
+</details>
+
+<details>
+<summary>Build commands</summary>
 
 Install dependencies:
 
@@ -70,7 +177,7 @@ Install dependencies:
 flutter pub get
 ```
 
-Run in debug mode with local Telegram credentials:
+Run in debug mode:
 
 ```bash
 flutter run \
@@ -86,39 +193,68 @@ flutter build apk --release \
   --dart-define=TELEGRAM_API_HASH=YOUR_TELEGRAM_API_HASH
 ```
 
-Do not commit real credentials, `.env` files, keystores, signing files, release APKs/AABs, local databases, Telegram sessions, or user backups.
+</details>
 
-## Release signing
+<details>
+<summary>Release-signing safety</summary>
 
 Use `android/key.properties.example` as a template for local signing setup. Keep the real `android/key.properties` and keystore file outside Git.
 
-## Third-party native dependency
+Never commit:
 
-TeleVault uses the vendored `third_party/libtdjson` Flutter plugin for TDLib JSON/FFI integration. The vendored plugin metadata points to `https://github.com/up9cloud/flutter_libtdjson` and includes an MIT license. Native `libtdjson.so` binaries are included for Android ABIs.
+- Telegram API credentials.
+- `.env` files.
+- Keystores or private keys.
+- APK/AAB release artifacts.
+- Local SQLite databases.
+- Telegram session files.
+- Real user media, logs, metadata exports, or backups.
 
-Before a Play Store production release, verify native binary provenance, TDLib licensing requirements, and Android 15+ 16 KB page-size compatibility.
+</details>
 
 ## Current limitations
 
 - Android is the only supported release target today.
-- Normal non-vault uploads are not encrypted by TeleVault before upload.
-- Full media restore UX is not yet presented as a completed, polished flow.
-- Google Drive backup code exists in the tree as an experimental prototype and should be documented or removed before broader release.
-- The project has not yet completed a Play Store compliance review.
+- Normal non-vault uploads are not client-side encrypted by TeleVault.
+- Full polished media restore UX is not complete.
+- Google Drive backup code exists as an experimental prototype and should be removed or documented.
+- Play Store compliance review is not complete.
+- TDLib native binary provenance and 16 KB compatibility need verification.
+
+<details>
+<summary>More limitation details</summary>
+
+Flutter-generated iOS, macOS, Linux, Windows, and web folders may exist in this repository, but they are not release-supported yet.
+
+The metadata Safe Uninstall restore path exists, but the full user-facing media restore experience still needs product and QA work.
+
+All-media encryption is not implemented. Vault-protected media encryption exists for vault flows only.
+
+</details>
+
+## Roadmap Preview
+
+Near-term release-readiness work is tracked in [`ROADMAP.md`](ROADMAP.md) and GitHub Issues.
+
+| Area | Status |
+| --- | --- |
+| TDLib native binary provenance | Needs verification |
+| Android 14+ selected photos access | Needs review |
+| Media permissions minimization | Needs review |
+| Full media restore UX | Planned |
+| Local DB-at-rest encryption evaluation | Planned |
+| Play Store release checklist | Planned |
 
 ## Contributing
 
-Read `CONTRIBUTING.md` before opening pull requests. Privacy, permissions, encryption, login, sync, and restore changes need careful review and Android testing.
+Contributions are welcome when they keep user privacy, data integrity, and Android reliability in mind.
+
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then open a focused issue or pull request. Changes touching privacy, permissions, encryption, Telegram login, sync, vault, or restore need careful review and Android testing.
 
 ## Security
 
-Read `SECURITY.md` for vulnerability reporting guidance. Do not open public issues containing secrets, credentials, personal metadata, or exploit details.
-
-## Roadmap
-
-See `ROADMAP.md` for planned work and known release-readiness items.
+Read [`SECURITY.md`](SECURITY.md) before reporting a vulnerability. Do not open public issues containing secrets, credentials, private metadata, personal media, or exploit details.
 
 ## License
 
-TeleVault is licensed under the MIT License. See `LICENSE`.
-
+TeleVault is licensed under the MIT License. See [`LICENSE`](LICENSE).
