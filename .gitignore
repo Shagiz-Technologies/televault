@@ -1,0 +1,94 @@
+﻿# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+*.tmp
+*.temp
+*.bak
+*.orig
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+captures/
+logs/
+tmp/
+temp/
+
+# IntelliJ / Android Studio / VS Code local state
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# Flutter / Dart / Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+coverage/
+build/
+/build/
+
+# Android / Gradle local output
+.gradle/
+**/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# Release artifacts and generated symbol files
+playstore_release/
+*.apk
+*.aab
+*.sha1
+app.*.symbols
+app.*.map.json
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+key.properties
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+
+# Local app data, backups, and user metadata
+backups/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.session
+telegram_sessions/
+tdlib_sessions/
+
+
+# Vendored plugin source only; skip sample apps and local build caches.
+/third_party/libtdjson/example/
+
+
+# Flutter generated platform files
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/Flutter/Flutter-Generated.xcconfig
+**/Flutter/ephemeral/
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+macos/Flutter/ephemeral/
+ios/Flutter/ephemeral/
