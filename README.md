@@ -18,11 +18,11 @@ This repository does not include a TeleVault backend server.
 - Library-first UI with albums, vault, settings, selection, labels, filters, and media previews.
 - Backup status indicators for queued, uploading, synced, failed, vaulted, and deleted-local states.
 - Bucket preferences for media type selection and sync behavior.
-- Vault lock/unlock support with app password/PIN and device biometric authentication where supported.
+- Vault lock/unlock support with a Vault PIN or password and device biometric authentication where supported.
 - Vault-protected media encryption flow for items moved into the vault.
 - Manual metadata export/import using encrypted `.tvmeta` packages.
 - Safe Uninstall flow that uploads pending media first and uploads encrypted metadata last to the active Telegram bucket.
-- Local operational diagnostics screens. No external analytics SDK was found during the open-source preparation audit.
+- Local operational diagnostics screens. No external analytics or telemetry SDK was found during the open-source preparation audit.
 
 ## What is encrypted
 
@@ -121,3 +121,4 @@ See `ROADMAP.md` for planned work and known release-readiness items.
 ## License
 
 TeleVault is licensed under the MIT License. See `LICENSE`.
+
