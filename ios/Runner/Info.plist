@@ -46,10 +46,10 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>TeleVault needs access to your photos and videos to back them up to your private Telegram bucket.</string>
+	<string>TeleVault needs access to your photos and videos so you can review, organize, vault, and choose what to back up to your own storage buckets.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>TeleVault may save restored media back to your photo library.</string>
+	<string>TeleVault may save restored or decrypted media back to your photo library only when you choose that action.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Use Face ID to unlock TeleVault and your private vault.</string>
+	<string>Use Face ID as phone security to unlock TeleVault and your private vault when enabled.</string>
 </dict>
 </plist>

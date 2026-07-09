@@ -339,6 +339,9 @@ class AuthController extends StateNotifier<AuthStatus> {
 
   String _friendlyAuthError(Object error) {
     final text = error.toString();
+    if (text.contains(TelegramService.iosTelegramUnavailableMessage)) {
+      return TelegramService.iosTelegramUnavailableMessage;
+    }
     if (text.contains('PHONE_NUMBER_INVALID')) {
       return 'That phone number is invalid. Use the full number with country code.';
     }

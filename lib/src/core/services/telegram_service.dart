@@ -22,6 +22,10 @@ final telegramServiceProvider = Provider<TelegramService>((ref) {
 });
 
 class TelegramService implements TelegramGateway {
+  static const iosTelegramUnavailableMessage =
+      'iOS Telegram engine is not available yet. Android backup is supported; '
+      'iOS local UI can be tested while TDLib/libtdjson integration is pending.';
+
   late final NativeClient _tdJson;
   late int _clientId;
 
@@ -37,12 +41,24 @@ class TelegramService implements TelegramGateway {
   bool _isDisposed = false;
   bool _tdlibParametersSent = false;
   bool _databaseEncryptionKeyChecked = false;
+  Object? _initializationError;
   Future<void>? _setParametersInFlight;
   Future<void>? _checkEncryptionKeyInFlight;
   Map<String, dynamic>? _currentAuthState;
 
   @override
   Stream<Map<String, dynamic>> get updates => _updatesController.stream;
+
+  bool get isAvailable => _isInitialized && !_isDisposed;
+
+  String? get unavailableReason {
+    if (isAvailable) return null;
+    if (Platform.isIOS) return iosTelegramUnavailableMessage;
+    if (_isDisposed) return 'Telegram service is disposed.';
+    final error = _initializationError;
+    if (error != null) return 'TDLib initialization failed: $error';
+    return 'TDLib is not initialized.';
+  }
 
   String? get currentAuthorizationStateType =>
       _currentAuthState?['@type']?.toString();
@@ -52,6 +68,12 @@ class TelegramService implements TelegramGateway {
   }
 
   void _init() {
+    if (Platform.isIOS) {
+      _initializationError = UnsupportedError(iosTelegramUnavailableMessage);
+      debugPrint(iosTelegramUnavailableMessage);
+      return;
+    }
+
     try {
       _tdJson = NativeClient();
       _clientId = _tdJson.td_create_client_id();
@@ -59,6 +81,7 @@ class TelegramService implements TelegramGateway {
       debugPrint('TDLib client initialized: $_clientId');
       _startEventLoop();
     } catch (e) {
+      _initializationError = e;
       debugPrint('TDLib initialization failed: $e');
     }
   }
@@ -132,7 +155,7 @@ class TelegramService implements TelegramGateway {
   @override
   void send(Map<String, dynamic> request) {
     if (!_isInitialized || _isDisposed) {
-      debugPrint('TDLib send skipped: service is not initialized');
+      debugPrint('TDLib send skipped: ${unavailableReason ?? 'unavailable'}');
       return;
     }
     final payload = Map<String, dynamic>.from(request);
@@ -151,9 +174,7 @@ class TelegramService implements TelegramGateway {
     Map<String, dynamic> request, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    if (!_isInitialized || _isDisposed) {
-      throw Exception('TDLib is not initialized');
-    }
+    _ensureInitialized();
     final now = DateTime.now();
     final elapsed = now.difference(_lastRequestAt);
     if (elapsed < _minRequestSpacing) {
@@ -167,6 +188,7 @@ class TelegramService implements TelegramGateway {
     Map<String, dynamic> request, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
+    _ensureInitialized();
     final extra = _uuid.v4();
     final payload = Map<String, dynamic>.from(request);
     payload['@extra'] = extra;
@@ -196,6 +218,7 @@ class TelegramService implements TelegramGateway {
     bool Function(Map<String, dynamic> update) predicate, {
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    _ensureInitialized();
     final completer = Completer<Map<String, dynamic>>();
     late final StreamSubscription sub;
     sub = updates.listen((update) {
@@ -215,6 +238,7 @@ class TelegramService implements TelegramGateway {
   }
 
   Future<void> setTdlibParameters() async {
+    _ensureInitialized();
     if (_tdlibParametersSent) return;
 
     final existing = _setParametersInFlight;
@@ -275,6 +299,7 @@ class TelegramService implements TelegramGateway {
   Future<Map<String, dynamic>> prepareAuthorization({
     Duration timeout = const Duration(seconds: 30),
   }) async {
+    _ensureInitialized();
     final deadline = DateTime.now().add(timeout);
     var authState = _currentAuthState;
 
@@ -321,9 +346,7 @@ class TelegramService implements TelegramGateway {
   Future<Map<String, dynamic>> resetAuthorization({
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    if (!_isInitialized || _isDisposed) {
-      throw Exception('TDLib is not initialized');
-    }
+    _ensureInitialized();
 
     try {
       await request({'@type': 'destroy'}, timeout: const Duration(seconds: 8));
@@ -371,6 +394,7 @@ class TelegramService implements TelegramGateway {
   }
 
   Future<void> checkDatabaseEncryptionKey() async {
+    _ensureInitialized();
     if (_databaseEncryptionKeyChecked) return;
 
     final existing = _checkEncryptionKeyInFlight;
@@ -458,6 +482,15 @@ class TelegramService implements TelegramGateway {
     final remaining = _remainingBefore(deadline);
     const short = Duration(seconds: 6);
     return remaining < short ? remaining : short;
+  }
+
+  void _ensureInitialized() {
+    if (_isInitialized && !_isDisposed) return;
+    final reason = unavailableReason ?? 'TDLib is not initialized.';
+    if (Platform.isIOS) {
+      throw UnsupportedError(reason);
+    }
+    throw StateError(reason);
   }
 
   String get _deviceModel {
