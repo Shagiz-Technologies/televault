@@ -206,6 +206,7 @@ Never commit:
 ## Current limitations
 
 - Android is the only supported release target today.
+- iOS is experimental for local feasibility testing only. See [`docs/IOS_FEASIBILITY.md`](docs/IOS_FEASIBILITY.md).
 - Normal non-vault uploads are not client-side encrypted by TeleVault.
 - Full polished media restore UX is not complete.
 - Google Drive backup code exists as an experimental prototype and should be removed or documented.
@@ -215,7 +216,7 @@ Never commit:
 <details>
 <summary>More limitation details</summary>
 
-Flutter-generated iOS, macOS, Linux, Windows, and web folders may exist in this repository, but they are not release-supported yet.
+Flutter-generated iOS, macOS, Linux, Windows, and web folders may exist in this repository, but they are not release-supported yet. iOS TDLib/libtdjson integration still needs validation before Telegram login, backup, or restore can be treated as working there.
 
 The metadata Safe Uninstall restore path exists, but the full user-facing media restore experience still needs product and QA work.
 
