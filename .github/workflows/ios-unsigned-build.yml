@@ -1,0 +1,58 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Install iOS pods
+        run: cd ios && pod install && cd ..
+
+      - name: Build iOS app without code signing
+        run: >-
+          flutter build ios --release --no-codesign
+          --dart-define=TELEGRAM_API_ID=0
+          --dart-define=TELEGRAM_API_HASH=placeholder
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d build/ios/iphoneos/Runner.app
+          rm -rf build/ios/ipa/Payload
+          mkdir -p build/ios/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          (
+            cd build/ios/ipa
+            /usr/bin/zip -qry TeleVault-unsigned.ipa Payload
+          )
+          test -s build/ios/ipa/TeleVault-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: TeleVault-unsigned-ipa
+          path: build/ios/ipa/TeleVault-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 1
+
