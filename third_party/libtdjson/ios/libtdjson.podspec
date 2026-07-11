@@ -17,6 +17,7 @@ A new flutter plugin project.
   s.dependency 'Flutter'
   s.dependency 'flutter_libtdjson', '1.8.65'
   s.platform = :ios, '13.0'
+  s.libraries = 'c++', 'z'
 
   s.ios.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
