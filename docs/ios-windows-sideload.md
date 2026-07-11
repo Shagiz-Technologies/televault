@@ -14,7 +14,12 @@ TeleVault-unsigned.ipa
 
 The GitHub Actions artifact is named `TeleVault-unsigned-ipa` and is retained for one day. It contains no Apple certificate, provisioning profile, or App Store Connect key.
 
-If the repository has `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` Actions secrets, the manual workflow uses them without printing their values. If either secret is absent, the workflow uses non-production placeholders; the app can be launch-tested, but Telegram login cannot work in that build.
+The workflow requires an explicit build profile:
+
+- `validation` always uses non-production placeholders. It proves that the app compiles, links TDLib, launches in a simulator, and can execute a safe native request. Telegram login cannot work in this build.
+- `device-test` requires valid `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` repository Actions secrets. The workflow fails instead of silently producing a placeholder build when either value is missing or malformed.
+
+Secret values and their Dart-define encodings are masked before the release build. They are not written to source files or uploaded as separate artifacts.
 
 The IPA is unsigned. It cannot be installed directly on an iPhone until a sideloading tool signs it for your device.
 
@@ -23,11 +28,14 @@ The IPA is unsigned. It cannot be installed directly on an iPhone until a sidelo
 1. Open the TeleVault repository on GitHub.
 2. Select **Actions**.
 3. Select **Build unsigned iOS IPA**.
-4. Choose **Run workflow** for the branch you want to test.
-5. Wait for the workflow to finish successfully.
-6. Open the completed workflow run.
-7. Download the `TeleVault-unsigned-ipa` artifact.
-8. Extract the downloaded ZIP to obtain `TeleVault-unsigned.ipa`.
+4. Choose the branch you want to test.
+5. Select `validation` for build verification or `device-test` for real Telegram login testing.
+6. Choose **Run workflow**.
+7. Wait for the workflow to finish successfully.
+8. Open the completed workflow run.
+9. Confirm the workflow summary shows the intended build profile.
+10. Download the `TeleVault-unsigned-ipa` artifact.
+11. Extract the downloaded ZIP to obtain `TeleVault-unsigned.ipa`.
 
 If the workflow fails, inspect the failing step. A failed run does not produce a usable IPA.
 
@@ -57,3 +65,4 @@ If you do not want to enter your primary Apple ID into third-party sideloading s
 - Store optional Telegram build credentials only as GitHub Actions secrets, never in source files or workflow YAML.
 
 See [iOS Feasibility Notes](IOS_FEASIBILITY.md) for the current platform status and known limitations.
+Use the [physical iPhone validation checklist](ios-device-validation.md) before changing TeleVault's documented iOS support status.

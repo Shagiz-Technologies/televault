@@ -75,12 +75,15 @@ class TelegramService implements TelegramGateway {
   void _init() {
     try {
       _tdJson = NativeClient();
+      if (Platform.isIOS) {
+        _configureIosNativeLogging();
+      }
       _clientId = _tdJson.td_create_client_id();
       if (Platform.isIOS) {
         _runIosNativeSmokeTest();
       }
       _isInitialized = true;
-      debugPrint('TDLib client initialized: $_clientId');
+      debugPrint('TDLib client initialized.');
       if (Platform.isIOS && _iosSmokeTest) {
         unawaited(_writeIosSmokeMarker());
       }
@@ -91,27 +94,45 @@ class TelegramService implements TelegramGateway {
     }
   }
 
+  void _configureIosNativeLogging() {
+    _executeIosNativeRequest(
+      const {'@type': 'setLogVerbosityLevel', 'new_verbosity_level': 0},
+      expectedType: 'ok',
+      operation: 'privacy logging configuration',
+    );
+  }
+
   void _runIosNativeSmokeTest() {
-    final request = jsonEncode({
-      '@type': 'getTextEntities',
-      'text': 'TeleVault',
-    }).toNativeUtf8();
+    _executeIosNativeRequest(
+      const {'@type': 'getTextEntities', 'text': 'TeleVault'},
+      expectedType: 'textEntities',
+      operation: 'startup smoke test',
+    );
+  }
+
+  Map<String, dynamic> _executeIosNativeRequest(
+    Map<String, dynamic> requestBody, {
+    required String expectedType,
+    required String operation,
+  }) {
+    final request = jsonEncode(requestBody).toNativeUtf8();
     try {
       final resultPointer = _tdJson.td_execute(request);
       if (resultPointer.address == 0) {
-        throw StateError('TDLib smoke request returned no response.');
+        throw StateError('TDLib $operation returned no response.');
       }
       final decoded = jsonDecode(resultPointer.toDartString());
       if (decoded is! Map<String, dynamic> ||
-          decoded['@type'] != 'textEntities') {
+          decoded['@type'] != expectedType) {
         final responseType = decoded is Map<String, dynamic>
             ? decoded['@type']?.toString() ?? 'unknown'
             : decoded.runtimeType.toString();
         throw StateError(
-          'TDLib smoke request returned an unexpected response: '
+          'TDLib $operation returned an unexpected response: '
           '$responseType.',
         );
       }
+      return decoded;
     } finally {
       malloc.free(request);
     }
