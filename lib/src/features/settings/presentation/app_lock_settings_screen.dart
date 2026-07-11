@@ -76,7 +76,7 @@ class _AppLockSettingsScreenState extends ConsumerState<AppLockSettingsScreen> {
                     ? 'Checking this device...'
                     : access?.phoneSecurityAvailable == true
                     ? 'Available: fingerprint, face unlock, phone PIN, pattern, or phone password.'
-                    : 'Not available. Set a phone screen lock in Android settings to use it here.',
+                    : 'Not available. Set a device passcode or biometric in system settings to use it here.',
                 statusLabel: access?.phoneSecurityAvailable == true
                     ? 'Ready'
                     : 'Unavailable',

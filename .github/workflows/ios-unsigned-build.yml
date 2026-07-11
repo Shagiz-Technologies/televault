@@ -1,7 +1,17 @@
 name: Build unsigned iOS IPA
+run-name: Build unsigned iOS IPA (${{ inputs.build_profile }})
 
 on:
   workflow_dispatch:
+    inputs:
+      build_profile:
+        description: Select validation for CI checks or device-test for Telegram login testing.
+        required: true
+        default: validation
+        type: choice
+        options:
+          - validation
+          - device-test
 
 permissions:
   contents: read
@@ -11,6 +21,9 @@ jobs:
     name: Build unsigned IPA
     runs-on: macos-latest
     timeout-minutes: 45
+    env:
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
     steps:
       - name: Checkout
@@ -28,42 +41,60 @@ jobs:
       - name: Install iOS pods
         run: cd ios && pod install && cd ..
 
-      - name: Build iOS app without code signing
-        run: >-
-          flutter build ios --release --no-codesign
-          --dart-define=TELEGRAM_API_ID=0
-          --dart-define=TELEGRAM_API_HASH=placeholder
-
-      - name: Validate bundled native dependencies
+      - name: Prepare protected build configuration
         shell: bash
         run: |
           set -euo pipefail
-          app="build/ios/iphoneos/Runner.app"
-          dependencies_file="$(mktemp)"
 
-          {
-            /usr/bin/otool -L "$app/Runner"
-            for framework in "$app"/Frameworks/*.framework; do
-              binary="$framework/$(basename "$framework" .framework)"
-              if [[ -f "$binary" ]]; then
-                /usr/bin/otool -L "$binary"
-              fi
-            done
-          } | /usr/bin/awk '$1 ~ /^@rpath\// { print $1 }' | /usr/bin/sort -u > "$dependencies_file"
-
-          missing=0
-          while IFS= read -r dependency; do
-            relative_path="${dependency#@rpath/}"
-            if [[ ! -e "$app/Frameworks/$relative_path" && ! -e "$app/$relative_path" ]]; then
-              echo "Missing bundled dependency: $dependency" >&2
-              missing=1
+          if [[ "${{ inputs.build_profile }}" == "device-test" ]]; then
+            api_id="${TELEGRAM_API_ID:-}"
+            api_hash="${TELEGRAM_API_HASH:-}"
+            if [[ ! "$api_id" =~ ^[1-9][0-9]+$ || ! "$api_hash" =~ ^[A-Fa-f0-9]{32}$ ]]; then
+              echo 'The device-test profile requires valid TELEGRAM_API_ID and TELEGRAM_API_HASH repository secrets.' >&2
+              exit 1
             fi
-          done < "$dependencies_file"
 
-          rm -f "$dependencies_file"
-          if [[ "$missing" -ne 0 ]]; then
-            exit 1
+            echo "::add-mask::$api_id"
+            echo "::add-mask::$api_hash"
+            echo "::add-mask::$(printf '%s' "TELEGRAM_API_ID=$api_id" | base64 | tr -d '\n')"
+            echo "::add-mask::$(printf '%s' "TELEGRAM_API_HASH=$api_hash" | base64 | tr -d '\n')"
+          else
+            api_id=0
+            api_hash=placeholder
           fi
+
+          printf 'BUILD_API_ID=%s\n' "$api_id" >> "$GITHUB_ENV"
+          printf 'BUILD_API_HASH=%s\n' "$api_hash" >> "$GITHUB_ENV"
+          echo "Build profile: ${{ inputs.build_profile }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build iOS simulator app
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build ios --debug --simulator \
+            --dart-define=TELEGRAM_API_ID=0 \
+            --dart-define=TELEGRAM_API_HASH=placeholder \
+            --dart-define=TELEVAULT_IOS_SMOKE_TEST=true
+
+      - name: Validate simulator native dependencies
+        run: ./tool/validate_ios_bundle.sh build/ios/iphonesimulator/Runner.app
+
+      - name: Smoke test simulator launch
+        run: >-
+          ./tool/smoke_test_ios_simulator.sh
+          build/ios/iphonesimulator/Runner.app
+          et.shagiz.televault
+
+      - name: Build iOS app without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build ios --release --no-codesign \
+            --dart-define="TELEGRAM_API_ID=$BUILD_API_ID" \
+            --dart-define="TELEGRAM_API_HASH=$BUILD_API_HASH"
+
+      - name: Validate bundled native dependencies
+        run: ./tool/validate_ios_bundle.sh build/ios/iphoneos/Runner.app
 
       - name: Package unsigned IPA
         shell: bash

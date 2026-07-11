@@ -3,6 +3,7 @@ import 'dart:io' as io;
 
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:photo_manager/photo_manager.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
@@ -36,6 +37,7 @@ class FileUploader {
 
   final _progressController = StreamController<Map<String, double>>.broadcast();
   final Map<String, double> _currentProgress = {};
+  final Map<String, String> _uploadProgressAliases = {};
 
   StreamSubscription? _progressSub;
   StreamSubscription? _pendingSub;
@@ -69,6 +71,7 @@ class FileUploader {
       final localPath = file['local']?['path'] as String?;
       final remote = file['remote'] as Map<String, dynamic>?;
       if (localPath == null || remote == null) return;
+      final progressKey = _uploadProgressAliases[localPath] ?? localPath;
 
       final isUploading = remote['is_uploading_active'] == true;
       final uploadedSize = _extractInt(remote['uploaded_size']) ?? 0;
@@ -81,10 +84,10 @@ class FileUploader {
         final percent = (uploadedSize / expectedSize)
             .clamp(0.0, 1.0)
             .toDouble();
-        _currentProgress[localPath] = percent;
+        _currentProgress[progressKey] = percent;
         _progressController.add(Map.from(_currentProgress));
       } else if (remote['is_uploading_completed'] == true) {
-        _currentProgress.remove(localPath);
+        _currentProgress.remove(progressKey);
         _progressController.add(Map.from(_currentProgress));
       }
     });
@@ -404,11 +407,36 @@ class FileUploader {
   }
 
   Future<int> _uploadFile(File file, BigInt chatId) async {
-    final localFile = io.File(file.localPath);
-    if (!await localFile.exists()) {
-      throw Exception('Local file missing: ${file.localPath}');
+    final localFile = await _resolveUploadFile(file);
+    final uploadPath = localFile.absolute.path;
+    _uploadProgressAliases[uploadPath] = file.localPath;
+
+    try {
+      return await _sendFile(file, chatId, uploadPath);
+    } finally {
+      _uploadProgressAliases.remove(uploadPath);
+    }
+  }
+
+  Future<io.File> _resolveUploadFile(File file) async {
+    final storedFile = io.File(file.localPath);
+    if (await storedFile.exists()) return storedFile;
+
+    // Encrypted vault paths must never fall back to the original gallery item.
+    final assetId = file.assetId;
+    if (file.isEncrypted || assetId == null || assetId.isEmpty) {
+      throw Exception('The local media file is no longer available.');
     }
 
+    final asset = await AssetEntity.fromId(assetId);
+    final resolved = await asset?.originFile ?? await asset?.file;
+    if (resolved == null || !await resolved.exists()) {
+      throw Exception('The gallery item is no longer available.');
+    }
+    return resolved;
+  }
+
+  Future<int> _sendFile(File file, BigInt chatId, String uploadPath) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) {
       throw Exception('Invalid Telegram chat id');
@@ -425,7 +453,11 @@ class FileUploader {
     final preferences = await _settingsService.getSyncPreferences(
       bucketId: file.bucketId,
     );
-    final content = _buildInputMessageContent(file, preferences.uploadFormat);
+    final content = _buildInputMessageContent(
+      file,
+      preferences.uploadFormat,
+      uploadPath,
+    );
 
     final response = await _telegramService.request({
       '@type': 'sendMessage',
@@ -477,6 +509,7 @@ class FileUploader {
   Map<String, dynamic> _buildInputMessageContent(
     File file,
     SyncUploadFormat uploadFormat,
+    String uploadPath,
   ) {
     final caption = {
       '@type': 'formattedText',
@@ -486,11 +519,11 @@ class FileUploader {
           ? 'Backed up by TeleVault (compressed media)'
           : 'Backed up by TeleVault',
     };
-    final inputFile = {'@type': 'inputFileLocal', 'path': file.localPath};
+    final inputFile = {'@type': 'inputFileLocal', 'path': uploadPath};
 
     if (uploadFormat == SyncUploadFormat.compressedMedia &&
         _isCompressibleMedia(file)) {
-      if (_isImagePath(file.localPath)) {
+      if (_isImagePath(uploadPath)) {
         return {
           '@type': 'inputMessagePhoto',
           'photo': inputFile,
@@ -501,7 +534,7 @@ class FileUploader {
           'caption': caption,
         };
       }
-      if (_isVideoPath(file.localPath)) {
+      if (_isVideoPath(uploadPath)) {
         return {
           '@type': 'inputMessageVideo',
           'video': inputFile,

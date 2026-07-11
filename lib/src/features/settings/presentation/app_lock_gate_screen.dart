@@ -379,7 +379,7 @@ class _LockCard extends StatelessWidget {
                 const _TrustHint(
                   icon: Icons.phonelink_erase_rounded,
                   text:
-                      'Phone security is not available. Set up a phone screen lock in Android settings to use it here.',
+                      'Phone security is not available. Set up a device passcode or biometric in system settings to use it here.',
                 ),
               ],
               if (passwordConfigured) ...[

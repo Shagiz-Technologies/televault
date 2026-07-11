@@ -166,7 +166,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                               setState(() {
                                 _biometricsAvailable = false;
                                 _error =
-                                    'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.';
+                                    'Phone security is not available. Add a device passcode, fingerprint, or face unlock in system settings first.';
                               });
                               return;
                             }
@@ -230,7 +230,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                         child: Text(
                           _biometricsAvailable
                               ? 'Phone Security uses your device screen lock, fingerprint, or face unlock. A Vault password is still required for encrypted file recovery and security changes.'
-                              : 'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.',
+                              : 'Phone security is not available. Add a device passcode, fingerprint, or face unlock in system settings first.',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 12,
@@ -436,7 +436,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
     if (_method == VaultAuthMethod.biometric && !_biometricsAvailable) {
       setState(() {
         _error =
-            'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.';
+            'Phone security is not available. Add a device passcode, fingerprint, or face unlock in system settings first.';
       });
       return;
     }

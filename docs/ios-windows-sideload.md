@@ -1,6 +1,6 @@
 # Experimental iOS Sideload Testing from Windows
 
-TeleVault's iOS build is experimental. Android remains the supported release target, and Telegram login, upload, and restore must not be treated as working on iOS until TDLib/libtdjson support has been validated end to end.
+TeleVault's iOS build is experimental. Android remains the supported release target. The iOS workflow compiles and initializes TDLib on a simulator, but Telegram login, upload, and restore still require validation on physical iPhones before they can be treated as production-ready.
 
 The `Build unsigned iOS IPA` GitHub Actions workflow provides a remote macOS build machine for developers who use Windows. A Mac is still required somewhere in the build process because Apple's iOS toolchain only runs on macOS; GitHub Actions supplies that Mac remotely.
 
@@ -12,7 +12,14 @@ The workflow builds `Runner.app` without Apple code signing and packages it as:
 TeleVault-unsigned.ipa
 ```
 
-The GitHub Actions artifact is named `TeleVault-unsigned-ipa` and is retained for one day. It contains no Apple certificate, provisioning profile, App Store Connect key, or production Telegram credentials.
+The GitHub Actions artifact is named `TeleVault-unsigned-ipa` and is retained for one day. It contains no Apple certificate, provisioning profile, or App Store Connect key.
+
+The workflow requires an explicit build profile:
+
+- `validation` always uses non-production placeholders. It proves that the app compiles, links TDLib, launches in a simulator, and can execute a safe native request. Telegram login cannot work in this build.
+- `device-test` requires valid `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` repository Actions secrets. The workflow fails instead of silently producing a placeholder build when either value is missing or malformed.
+
+Secret values and their Dart-define encodings are masked before the release build. They are not written to source files or uploaded as separate artifacts.
 
 The IPA is unsigned. It cannot be installed directly on an iPhone until a sideloading tool signs it for your device.
 
@@ -21,11 +28,14 @@ The IPA is unsigned. It cannot be installed directly on an iPhone until a sidelo
 1. Open the TeleVault repository on GitHub.
 2. Select **Actions**.
 3. Select **Build unsigned iOS IPA**.
-4. Choose **Run workflow** for the branch you want to test.
-5. Wait for the workflow to finish successfully.
-6. Open the completed workflow run.
-7. Download the `TeleVault-unsigned-ipa` artifact.
-8. Extract the downloaded ZIP to obtain `TeleVault-unsigned.ipa`.
+4. Choose the branch you want to test.
+5. Select `validation` for build verification or `device-test` for real Telegram login testing.
+6. Choose **Run workflow**.
+7. Wait for the workflow to finish successfully.
+8. Open the completed workflow run.
+9. Confirm the workflow summary shows the intended build profile.
+10. Download the `TeleVault-unsigned-ipa` artifact.
+11. Extract the downloaded ZIP to obtain `TeleVault-unsigned.ipa`.
 
 If the workflow fails, inspect the failing step. A failed run does not produce a usable IPA.
 
@@ -52,6 +62,7 @@ If you do not want to enter your primary Apple ID into third-party sideloading s
 - Do not treat this workflow as App Store or TestFlight distribution.
 - Do not add Apple credentials, certificates, provisioning profiles, or signing secrets to the repository.
 - Do not assume that producing an IPA means Telegram-backed features work on iOS.
-- The workflow uses placeholder Telegram API values, so it is intended to verify compilation and packaging, not production login.
+- Store optional Telegram build credentials only as GitHub Actions secrets, never in source files or workflow YAML.
 
 See [iOS Feasibility Notes](IOS_FEASIBILITY.md) for the current platform status and known limitations.
+Use the [physical iPhone validation checklist](ios-device-validation.md) before changing TeleVault's documented iOS support status.

@@ -36,6 +36,8 @@ flutter:
       android:
         package: io.github.up9cloud.libtdjson
         pluginClass: LibtdjsonPlugin
+      ios:
+        pluginClass: LibtdjsonPlugin
       macos:
         pluginClass: LibtdjsonPlugin
       # web:

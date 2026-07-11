@@ -9,6 +9,10 @@ Upstream metadata from the plugin package:
 - Repository: `https://github.com/up9cloud/flutter_libtdjson`
 - License: MIT, included in `LICENSE`
 
-TeleVault keeps this vendored copy so Android builds can resolve the TDLib binding from a stable local path. Native Android `libtdjson.so` binaries are stored under `android/src/main/jniLibs`.
+TeleVault keeps this vendored copy so platform builds resolve the TDLib binding from a stable local path.
 
-Before production distribution, verify native binary provenance, TDLib licensing requirements, and Android 15+ 16 KB page-size compatibility.
+- Android `libtdjson.so` binaries are stored under `android/src/main/jniLibs`.
+- iOS resolves `flutter_libtdjson` `1.8.65` through CocoaPods and links its static XCFramework into the Flutter plugin. Dart accesses those symbols through `DynamicLibrary.process()`.
+- The manual iOS workflow rejects missing runtime dependencies, verifies TDLib FFI symbols, and launches the app on an iPhone simulator before packaging an IPA.
+
+Before production distribution, verify native binary provenance, TDLib licensing requirements, Android 15+ 16 KB page-size compatibility, and Telegram login/upload behavior on physical iOS devices.

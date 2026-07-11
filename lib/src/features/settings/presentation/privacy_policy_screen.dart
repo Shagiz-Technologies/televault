@@ -56,7 +56,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
             _buildSection(
               'Your Control',
-              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, Android may remove local app data, because Android does not care about our feelings.',
+              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, your operating system may remove local app data, because operating systems do not care about our feelings.',
             ),
 
             const SizedBox(height: 40),

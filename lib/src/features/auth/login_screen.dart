@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 
 import '../../core/presentation/responsive_layout.dart';
 import '../../core/presentation/televault_logo_mark.dart';
+import '../../core/services/telegram_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'auth_controller.dart';
 
@@ -38,6 +39,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final status = ref.watch(authControllerProvider);
     final authError = ref.watch(authErrorMessageProvider);
+    final telegramAvailable = ref.watch(telegramServiceProvider).isAvailable;
     final isLoading =
         status == AuthStatus.loading || ref.watch(authBusyProvider);
     final logoSize = AppResponsive.iconSize(context, regular: 92, compact: 58);
@@ -85,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               width: double.infinity,
               height: AppResponsive.buttonHeight(context),
               child: ElevatedButton(
-                onPressed: isLoading
+                onPressed: isLoading || !telegramAvailable
                     ? null
                     : () async {
                         if (_phoneCtrl.text.isNotEmpty) {
