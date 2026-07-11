@@ -39,7 +39,8 @@ jobs:
           api_hash="${TELEGRAM_API_HASH:-placeholder}"
           flutter build ios --debug --simulator \
             --dart-define="TELEGRAM_API_ID=$api_id" \
-            --dart-define="TELEGRAM_API_HASH=$api_hash"
+            --dart-define="TELEGRAM_API_HASH=$api_hash" \
+            --dart-define=TELEVAULT_IOS_SMOKE_TEST=true
 
       - name: Validate simulator native dependencies
         run: ./tool/validate_ios_bundle.sh build/ios/iphonesimulator/Runner.app

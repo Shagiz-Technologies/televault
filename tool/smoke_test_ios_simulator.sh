@@ -43,7 +43,16 @@ if ! /bin/kill -0 "$console_pid" >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! /usr/bin/grep -q 'TDLib client initialized' "$console_log"; then
+data_container="$(xcrun simctl get_app_container "$device_id" "$bundle_id" data)"
+ready_marker="$(
+  /usr/bin/find "$data_container" \
+    -type f \
+    -name televault_tdlib_ready \
+    -print \
+    -quit
+)"
+
+if [[ -z "$ready_marker" ]]; then
   echo 'TeleVault launched, but TDLib did not initialize successfully.' >&2
   exit 1
 fi

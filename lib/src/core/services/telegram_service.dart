@@ -22,6 +22,8 @@ final telegramServiceProvider = Provider<TelegramService>((ref) {
 });
 
 class TelegramService implements TelegramGateway {
+  static const _iosSmokeTest = bool.fromEnvironment('TELEVAULT_IOS_SMOKE_TEST');
+
   late final NativeClient _tdJson;
   late int _clientId;
 
@@ -68,10 +70,24 @@ class TelegramService implements TelegramGateway {
       _clientId = _tdJson.td_create_client_id();
       _isInitialized = true;
       debugPrint('TDLib client initialized: $_clientId');
+      if (Platform.isIOS && _iosSmokeTest) {
+        unawaited(_writeIosSmokeMarker());
+      }
       _startEventLoop();
     } catch (e) {
       _initializationError = e;
       debugPrint('TDLib initialization failed: $e');
+    }
+  }
+
+  Future<void> _writeIosSmokeMarker() async {
+    try {
+      final directory = await getTemporaryDirectory();
+      await File(
+        p.join(directory.path, 'televault_tdlib_ready'),
+      ).writeAsString('ready', flush: true);
+    } catch (error) {
+      debugPrint('Unable to write iOS smoke marker: $error');
     }
   }
 
