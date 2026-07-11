@@ -43,10 +43,19 @@ if /usr/bin/grep -q '^@rpath/libtdjson\.dylib$' "$dependencies_file"; then
   missing=1
 fi
 
-if ! /usr/bin/grep -Eq '[[:space:]]_td_create_client_id$' "$symbols_file"; then
-  echo 'TDLib FFI symbols are missing from the iOS app binaries.' >&2
-  missing=1
-fi
+required_symbols=(
+  td_create_client_id
+  td_send
+  td_receive
+  td_execute
+  td_json_client_create
+)
+for symbol in "${required_symbols[@]}"; do
+  if ! /usr/bin/grep -Eq "[[:space:]]_${symbol}$" "$symbols_file"; then
+    echo "TDLib FFI symbol is missing from the iOS app binaries: $symbol" >&2
+    missing=1
+  fi
+done
 
 if [[ "$missing" -ne 0 ]]; then
   exit 1

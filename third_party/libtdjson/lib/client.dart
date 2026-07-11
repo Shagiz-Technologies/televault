@@ -52,7 +52,24 @@ class NativeClient {
   static DynamicLibrary loadLibrary({String? dir, String? file}) {
     if (Platform.isIOS && dir == null && file == null) {
       // iOS links TDLib statically; its exported symbols live in the process.
-      return DynamicLibrary.process();
+      final process = DynamicLibrary.process();
+      const requiredSymbols = <String>[
+        'td_create_client_id',
+        'td_send',
+        'td_receive',
+        'td_execute',
+        'td_json_client_create',
+      ];
+      final missing = requiredSymbols
+          .where((symbol) => !process.providesSymbol(symbol))
+          .toList(growable: false);
+      if (missing.isNotEmpty) {
+        throw UnsupportedError(
+          'TDLib symbols were not linked into the iOS application. '
+          'Missing: ${missing.join(', ')}',
+        );
+      }
+      return process;
     }
 
     if (file == null) {

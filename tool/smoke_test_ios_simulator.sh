@@ -40,6 +40,7 @@ console_pid=$!
 sleep 12
 if ! /bin/kill -0 "$console_pid" >/dev/null 2>&1; then
   echo 'TeleVault exited during the simulator launch smoke test.' >&2
+  /bin/cat "$console_log" >&2
   exit 1
 fi
 
@@ -54,6 +55,7 @@ ready_marker="$(
 
 if [[ -z "$ready_marker" ]]; then
   echo 'TeleVault launched, but TDLib did not initialize successfully.' >&2
+  /bin/cat "$console_log" >&2
   exit 1
 fi
 

@@ -4,6 +4,7 @@ TeleVault is Android-first. The iOS project is kept for local development and fe
 
 ## Current Status
 
+- Status: **iOS experimental: TDLib integration in progress**.
 - Android remains the supported release target.
 - iOS is experimental and not production-ready.
 - The declared iOS deployment target is iOS 13.0 or newer.
@@ -27,7 +28,7 @@ These areas should be feasible to validate on iOS once the Flutter iOS toolchain
 
 The iOS plugin resolves `flutter_libtdjson` `1.8.65` through CocoaPods and statically links TDLib into the plugin. Dart accesses its exported symbols through `DynamicLibrary.process()`, avoiding the standalone dylib launch failure found in the first experimental IPA.
 
-The workflow proves that TDLib initializes on the available GitHub-hosted iPhone simulator. These Telegram-backed flows still require end-to-end physical-device validation:
+The workflow verifies required native symbols, creates a TDLib client, executes a safe `getTextEntities` request, and keeps the app alive on the available GitHub-hosted iPhone simulator. These Telegram-backed flows still require end-to-end physical-device validation:
 
 - Telegram login.
 - Bucket creation and switching.
@@ -37,6 +38,8 @@ The workflow proves that TDLib initializes on the available GitHub-hosted iPhone
 - Production-grade metadata restore from Telegram channels.
 
 The iOS TDLib native binary is downloaded from the upstream CocoaPod during the macOS build and is not vendored in this repository. Treat iOS as experimental until the physical-device checks above pass across the supported OS range.
+
+On iOS, TDLib database and downloaded-file directories live under the app's private Application Support container. The database encryption key is generated with a secure random source and stored in iOS Keychain using `flutter_secure_storage`; the key is not logged or included in metadata exports.
 
 ## Local macOS Commands
 

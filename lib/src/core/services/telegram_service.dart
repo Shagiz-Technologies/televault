@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:libtdjson/libtdjson.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -23,6 +25,12 @@ final telegramServiceProvider = Provider<TelegramService>((ref) {
 
 class TelegramService implements TelegramGateway {
   static const _iosSmokeTest = bool.fromEnvironment('TELEVAULT_IOS_SMOKE_TEST');
+  static const _iosDatabaseKeyName = 'telegram_tdlib_database_key_v1';
+  static const _secureStorage = FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.unlocked_this_device,
+    ),
+  );
 
   late final NativeClient _tdJson;
   late int _clientId;
@@ -68,6 +76,9 @@ class TelegramService implements TelegramGateway {
     try {
       _tdJson = NativeClient();
       _clientId = _tdJson.td_create_client_id();
+      if (Platform.isIOS) {
+        _runIosNativeSmokeTest();
+      }
       _isInitialized = true;
       debugPrint('TDLib client initialized: $_clientId');
       if (Platform.isIOS && _iosSmokeTest) {
@@ -80,11 +91,36 @@ class TelegramService implements TelegramGateway {
     }
   }
 
+  void _runIosNativeSmokeTest() {
+    final request = jsonEncode({
+      '@type': 'getTextEntities',
+      'text': 'TeleVault',
+    }).toNativeUtf8();
+    try {
+      final resultPointer = _tdJson.td_execute(request);
+      if (resultPointer.address == 0) {
+        throw StateError('TDLib smoke request returned no response.');
+      }
+      final decoded = jsonDecode(resultPointer.toDartString());
+      if (decoded is! Map<String, dynamic> ||
+          decoded['@type'] != 'textEntities') {
+        final responseType = decoded is Map<String, dynamic>
+            ? decoded['@type']?.toString() ?? 'unknown'
+            : decoded.runtimeType.toString();
+        throw StateError(
+          'TDLib smoke request returned an unexpected response: '
+          '$responseType.',
+        );
+      }
+    } finally {
+      malloc.free(request);
+    }
+  }
+
   Future<void> _writeIosSmokeMarker() async {
     try {
-      final directory = await getTemporaryDirectory();
       await File(
-        p.join(directory.path, 'televault_tdlib_ready'),
+        p.join(Directory.systemTemp.path, 'televault_tdlib_ready'),
       ).writeAsString('ready', flush: true);
     } catch (error) {
       debugPrint('Unable to write iOS smoke marker: $error');
@@ -260,8 +296,12 @@ class TelegramService implements TelegramGateway {
   }
 
   Future<void> _setTdlibParameters() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final dbPath = p.join(dir.path, 'tdlib');
+    final storageRoot = Platform.isIOS
+        ? await getApplicationSupportDirectory()
+        : await getApplicationDocumentsDirectory();
+    final tdlibRoot = p.join(storageRoot.path, 'tdlib');
+    final dbPath = Platform.isIOS ? p.join(tdlibRoot, 'database') : tdlibRoot;
+    final filesPath = Platform.isIOS ? p.join(tdlibRoot, 'files') : tdlibRoot;
 
     const apiIdDefine = String.fromEnvironment('TELEGRAM_API_ID');
     const apiHashDefine = String.fromEnvironment('TELEGRAM_API_HASH');
@@ -274,12 +314,13 @@ class TelegramService implements TelegramGateway {
     }
 
     await Directory(dbPath).create(recursive: true);
+    await Directory(filesPath).create(recursive: true);
 
     final response = await request({
       '@type': 'setTdlibParameters',
       'use_test_dc': false,
       'database_directory': dbPath,
-      'files_directory': dbPath,
+      'files_directory': filesPath,
       'use_file_database': true,
       'use_chat_info_database': true,
       'use_message_database': true,
@@ -416,9 +457,10 @@ class TelegramService implements TelegramGateway {
   }
 
   Future<void> _checkDatabaseEncryptionKey() async {
+    final encryptionKey = await _databaseEncryptionKey();
     final response = await request({
       '@type': 'checkDatabaseEncryptionKey',
-      'encryption_key': '',
+      'encryption_key': encryptionKey,
     }, timeout: const Duration(seconds: 20));
 
     if (response['@type'] == 'error') {
@@ -428,6 +470,20 @@ class TelegramService implements TelegramGateway {
     }
 
     _databaseEncryptionKeyChecked = true;
+  }
+
+  Future<String> _databaseEncryptionKey() async {
+    if (!Platform.isIOS) return '';
+
+    final existing = await _secureStorage.read(key: _iosDatabaseKeyName);
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final random = Random.secure();
+    final generated = base64UrlEncode(
+      List<int>.generate(32, (_) => random.nextInt(256)),
+    );
+    await _secureStorage.write(key: _iosDatabaseKeyName, value: generated);
+    return generated;
   }
 
   Future<Map<String, dynamic>> _waitForAuthorizationState(
