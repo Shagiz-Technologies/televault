@@ -5,24 +5,22 @@
 Pod::Spec.new do |s|
   s.name             = 'libtdjson'
   s.version          = '0.0.1'
-  s.summary          = 'A new flutter plugin project.'
+  s.summary          = 'TDLib JSON FFI integration for Flutter.'
   s.description      = <<-DESC
 A new flutter plugin project.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/up9cloud/flutter_libtdjson'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'up9cloud' => '8325632+up9cloud@users.noreply.github.com' }
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'flutter_libtdjson', '0.4.3'
-  s.platform = :ios, '9.0'
+  s.dependency 'flutter_libtdjson', '1.8.65'
+  s.platform = :ios, '13.0'
 
   s.ios.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => '-l"tdjson"',
-    'LIBRARY_SEARCH_PATHS' => '$(inherited) "${PODS_XCFRAMEWORKS_BUILD_DIR}/flutter_libtdjson"',
-    'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) "${PODS_XCFRAMEWORKS_BUILD_DIR}/flutter_libtdjson"',
+    'OTHER_LDFLAGS' => '$(inherited) -force_load "${PODS_XCFRAMEWORKS_BUILD_DIR}/flutter_libtdjson/libtdjson.a"',
   }
   s.swift_version = '5.0'
 end

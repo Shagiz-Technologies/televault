@@ -22,10 +22,6 @@ final telegramServiceProvider = Provider<TelegramService>((ref) {
 });
 
 class TelegramService implements TelegramGateway {
-  static const iosTelegramUnavailableMessage =
-      'iOS Telegram engine is not available yet. Android backup is supported; '
-      'iOS local UI can be tested while TDLib/libtdjson integration is pending.';
-
   late final NativeClient _tdJson;
   late int _clientId;
 
@@ -53,7 +49,6 @@ class TelegramService implements TelegramGateway {
 
   String? get unavailableReason {
     if (isAvailable) return null;
-    if (Platform.isIOS) return iosTelegramUnavailableMessage;
     if (_isDisposed) return 'Telegram service is disposed.';
     final error = _initializationError;
     if (error != null) return 'TDLib initialization failed: $error';
@@ -68,12 +63,6 @@ class TelegramService implements TelegramGateway {
   }
 
   void _init() {
-    if (Platform.isIOS) {
-      _initializationError = UnsupportedError(iosTelegramUnavailableMessage);
-      debugPrint(iosTelegramUnavailableMessage);
-      return;
-    }
-
     try {
       _tdJson = NativeClient();
       _clientId = _tdJson.td_create_client_id();
@@ -487,9 +476,6 @@ class TelegramService implements TelegramGateway {
   void _ensureInitialized() {
     if (_isInitialized && !_isDisposed) return;
     final reason = unavailableReason ?? 'TDLib is not initialized.';
-    if (Platform.isIOS) {
-      throw UnsupportedError(reason);
-    }
     throw StateError(reason);
   }
 

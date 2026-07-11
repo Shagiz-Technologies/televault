@@ -22,3 +22,5 @@ The vendored plugin metadata references:
 - License: MIT, included at `third_party/libtdjson/LICENSE`
 
 Native Android `libtdjson.so` binaries are included under `third_party/libtdjson/android/src/main/jniLibs`. Their exact build provenance and 16 KB page-size compatibility should be verified before production distribution.
+
+iOS builds resolve the upstream `flutter_libtdjson` `1.8.65` CocoaPod, which provides the TDLib `1.8.65` static XCFramework. The native binary is downloaded by CocoaPods during the macOS build and is not committed to this repository. Physical-device Telegram login, upload, and restore still require release validation before iOS can be declared production-supported.

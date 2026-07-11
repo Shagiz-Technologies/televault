@@ -11,6 +11,9 @@ jobs:
     name: Build unsigned IPA
     runs-on: macos-latest
     timeout-minutes: 45
+    env:
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
     steps:
       - name: Checkout
@@ -28,42 +31,37 @@ jobs:
       - name: Install iOS pods
         run: cd ios && pod install && cd ..
 
-      - name: Build iOS app without code signing
-        run: >-
-          flutter build ios --release --no-codesign
-          --dart-define=TELEGRAM_API_ID=0
-          --dart-define=TELEGRAM_API_HASH=placeholder
-
-      - name: Validate bundled native dependencies
+      - name: Build iOS simulator app
         shell: bash
         run: |
           set -euo pipefail
-          app="build/ios/iphoneos/Runner.app"
-          dependencies_file="$(mktemp)"
+          api_id="${TELEGRAM_API_ID:-0}"
+          api_hash="${TELEGRAM_API_HASH:-placeholder}"
+          flutter build ios --debug --simulator \
+            --dart-define="TELEGRAM_API_ID=$api_id" \
+            --dart-define="TELEGRAM_API_HASH=$api_hash"
 
-          {
-            /usr/bin/otool -L "$app/Runner"
-            for framework in "$app"/Frameworks/*.framework; do
-              binary="$framework/$(basename "$framework" .framework)"
-              if [[ -f "$binary" ]]; then
-                /usr/bin/otool -L "$binary"
-              fi
-            done
-          } | /usr/bin/awk '$1 ~ /^@rpath\// { print $1 }' | /usr/bin/sort -u > "$dependencies_file"
+      - name: Validate simulator native dependencies
+        run: ./tool/validate_ios_bundle.sh build/ios/iphonesimulator/Runner.app
 
-          missing=0
-          while IFS= read -r dependency; do
-            relative_path="${dependency#@rpath/}"
-            if [[ ! -e "$app/Frameworks/$relative_path" && ! -e "$app/$relative_path" ]]; then
-              echo "Missing bundled dependency: $dependency" >&2
-              missing=1
-            fi
-          done < "$dependencies_file"
+      - name: Smoke test simulator launch
+        run: >-
+          ./tool/smoke_test_ios_simulator.sh
+          build/ios/iphonesimulator/Runner.app
+          et.shagiz.televault
 
-          rm -f "$dependencies_file"
-          if [[ "$missing" -ne 0 ]]; then
-            exit 1
-          fi
+      - name: Build iOS app without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_id="${TELEGRAM_API_ID:-0}"
+          api_hash="${TELEGRAM_API_HASH:-placeholder}"
+          flutter build ios --release --no-codesign \
+            --dart-define="TELEGRAM_API_ID=$api_id" \
+            --dart-define="TELEGRAM_API_HASH=$api_hash"
+
+      - name: Validate bundled native dependencies
+        run: ./tool/validate_ios_bundle.sh build/ios/iphoneos/Runner.app
 
       - name: Package unsigned IPA
         shell: bash

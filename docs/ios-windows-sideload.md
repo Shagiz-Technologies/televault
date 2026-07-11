@@ -1,6 +1,6 @@
 # Experimental iOS Sideload Testing from Windows
 
-TeleVault's iOS build is experimental. Android remains the supported release target, and Telegram login, upload, and restore must not be treated as working on iOS until TDLib/libtdjson support has been validated end to end.
+TeleVault's iOS build is experimental. Android remains the supported release target. The iOS workflow compiles and initializes TDLib on a simulator, but Telegram login, upload, and restore still require validation on physical iPhones before they can be treated as production-ready.
 
 The `Build unsigned iOS IPA` GitHub Actions workflow provides a remote macOS build machine for developers who use Windows. A Mac is still required somewhere in the build process because Apple's iOS toolchain only runs on macOS; GitHub Actions supplies that Mac remotely.
 
@@ -12,7 +12,9 @@ The workflow builds `Runner.app` without Apple code signing and packages it as:
 TeleVault-unsigned.ipa
 ```
 
-The GitHub Actions artifact is named `TeleVault-unsigned-ipa` and is retained for one day. It contains no Apple certificate, provisioning profile, App Store Connect key, or production Telegram credentials.
+The GitHub Actions artifact is named `TeleVault-unsigned-ipa` and is retained for one day. It contains no Apple certificate, provisioning profile, or App Store Connect key.
+
+If the repository has `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` Actions secrets, the manual workflow uses them without printing their values. If either secret is absent, the workflow uses non-production placeholders; the app can be launch-tested, but Telegram login cannot work in that build.
 
 The IPA is unsigned. It cannot be installed directly on an iPhone until a sideloading tool signs it for your device.
 
@@ -52,6 +54,6 @@ If you do not want to enter your primary Apple ID into third-party sideloading s
 - Do not treat this workflow as App Store or TestFlight distribution.
 - Do not add Apple credentials, certificates, provisioning profiles, or signing secrets to the repository.
 - Do not assume that producing an IPA means Telegram-backed features work on iOS.
-- The workflow uses placeholder Telegram API values, so it is intended to verify compilation and packaging, not production login.
+- Store optional Telegram build credentials only as GitHub Actions secrets, never in source files or workflow YAML.
 
 See [iOS Feasibility Notes](IOS_FEASIBILITY.md) for the current platform status and known limitations.
