@@ -20,7 +20,8 @@ A new flutter plugin project.
 
   s.ios.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => '$(inherited) -force_load "${PODS_XCFRAMEWORKS_BUILD_DIR}/flutter_libtdjson/libtdjson.a"',
+    'OTHER_LDFLAGS[sdk=iphoneos*]' => '$(inherited) -force_load "${PODS_ROOT}/flutter_libtdjson/libtdjson-static.xcframework/ios-arm64/libtdjson.a"',
+    'OTHER_LDFLAGS[sdk=iphonesimulator*]' => '$(inherited) -force_load "${PODS_ROOT}/flutter_libtdjson/libtdjson-static.xcframework/ios-arm64_x86_64-simulator/libtdjson.a"',
   }
   s.swift_version = '5.0'
 end
