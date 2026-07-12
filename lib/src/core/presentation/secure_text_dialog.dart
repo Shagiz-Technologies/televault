@@ -95,6 +95,7 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
       backgroundColor: AppTheme.surface,
       surfaceTintColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      scrollable: true,
       title: Text(widget.title),
       content: SingleChildScrollView(
         child: ConstrainedBox(

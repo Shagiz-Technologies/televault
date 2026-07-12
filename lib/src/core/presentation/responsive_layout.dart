@@ -44,6 +44,24 @@ class AppResponsive {
       vertical: compact ? 12 : 24,
     );
   }
+
+  static double bottomSafeGap(BuildContext context, {double extra = 16}) {
+    return MediaQuery.paddingOf(context).bottom + extra;
+  }
+
+  static EdgeInsets pagePaddingWithBottomSafe(
+    BuildContext context, {
+    double horizontal = 16,
+    double top = 16,
+    double bottomExtra = 16,
+  }) {
+    return EdgeInsets.fromLTRB(
+      horizontal,
+      top,
+      horizontal,
+      bottomSafeGap(context, extra: bottomExtra),
+    );
+  }
 }
 
 class ResponsivePage extends StatelessWidget {

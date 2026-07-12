@@ -16,6 +16,7 @@ class LibraryState {
   final bool isLoading;
   final bool hasPermission;
   final AssetPathEntity? currentAlbum;
+  final bool isAllPhotos;
   final List<AssetEntity> assets;
   final int currentPage;
   final bool hasMore;
@@ -28,6 +29,7 @@ class LibraryState {
     this.isLoading = true,
     this.hasPermission = false,
     this.currentAlbum,
+    this.isAllPhotos = true,
     this.assets = const [],
     this.currentPage = 0,
     this.hasMore = true,
@@ -41,6 +43,7 @@ class LibraryState {
     bool? isLoading,
     bool? hasPermission,
     AssetPathEntity? currentAlbum,
+    bool? isAllPhotos,
     List<AssetEntity>? assets,
     int? currentPage,
     bool? hasMore,
@@ -53,6 +56,7 @@ class LibraryState {
       isLoading: isLoading ?? this.isLoading,
       hasPermission: hasPermission ?? this.hasPermission,
       currentAlbum: currentAlbum ?? this.currentAlbum,
+      isAllPhotos: isAllPhotos ?? this.isAllPhotos,
       assets: assets ?? this.assets,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
@@ -240,6 +244,7 @@ class LibraryController extends StateNotifier<LibraryState> {
 
     state = state.copyWith(
       currentAlbum: album,
+      isAllPhotos: false,
       isLoading: true,
       assets: [],
       currentPage: 0,
@@ -254,6 +259,7 @@ class LibraryController extends StateNotifier<LibraryState> {
 
     state = state.copyWith(
       currentAlbum: null,
+      isAllPhotos: true,
       isLoading: true,
       assets: [],
       currentPage: 0,

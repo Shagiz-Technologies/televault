@@ -3,6 +3,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/app_database.dart';
@@ -22,6 +23,9 @@ class VaultGalleryScreen extends ConsumerStatefulWidget {
 
 class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
   int? _busyFileId;
+  bool _isSelecting = false;
+  bool _bulkBusy = false;
+  final Set<int> _selectedIds = {};
   final Map<int, Future<io.File?>> _previewFutures = {};
 
   @override
@@ -31,9 +35,22 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Vault'),
+        title: Text(_isSelecting ? '${_selectedIds.length} selected' : 'Vault'),
         backgroundColor: Colors.black,
-        leading: const BackButton(),
+        leading: _isSelecting
+            ? IconButton(
+                onPressed: _exitSelectionMode,
+                icon: const Icon(Icons.close_rounded),
+              )
+            : const BackButton(),
+        actions: [
+          if (!_isSelecting)
+            IconButton(
+              tooltip: 'Select',
+              onPressed: () => setState(() => _isSelecting = true),
+              icon: const Icon(Icons.checklist_rtl_rounded),
+            ),
+        ],
       ),
       body: StreamBuilder<List<File>>(
         stream:
@@ -123,8 +140,26 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                   final isEncrypted = file.isEncrypted;
                   final busy = _busyFileId == file.id;
 
+                  final selected = _selectedIds.contains(file.id);
+
                   return InkWell(
-                    onTap: busy ? null : () => _showItemActions(file),
+                    onTap: busy
+                        ? null
+                        : () {
+                            if (_isSelecting) {
+                              _toggleSelection(file);
+                            } else {
+                              _showItemActions(file);
+                            }
+                          },
+                    onLongPress: busy
+                        ? null
+                        : () {
+                            if (!_isSelecting) {
+                              setState(() => _isSelecting = true);
+                            }
+                            _toggleSelection(file);
+                          },
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
                       decoration: BoxDecoration(
@@ -138,6 +173,34 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                             borderRadius: BorderRadius.circular(14),
                             child: _buildVaultPreview(file),
                           ),
+                          if (selected)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.28,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: AppTheme.primary,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (_isSelecting)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Icon(
+                                selected
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
+                                color: selected
+                                    ? AppTheme.primary
+                                    : Colors.white70,
+                              ),
+                            ),
                           if (isVideo)
                             const Center(
                               child: Icon(
@@ -200,6 +263,67 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
           );
         },
       ),
+      floatingActionButton: _isSelecting && _selectedIds.isNotEmpty
+          ? _buildSelectionBar()
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  Widget _buildSelectionBar() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: _bulkBusy
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _selectionAction(Icons.share_outlined, 'Share', _shareSelected),
+                const Gap(16),
+                _selectionAction(
+                  Icons.lock_open_rounded,
+                  'Restore',
+                  _restoreSelected,
+                ),
+                const Gap(16),
+                _selectionAction(
+                  Icons.delete_outline,
+                  'Delete',
+                  _deleteSelected,
+                  danger: true,
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _selectionAction(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool danger = false,
+  }) {
+    final color = danger ? Colors.redAccent : Colors.white;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const Gap(4),
+          Text(label, style: TextStyle(color: color, fontSize: 11)),
+        ],
+      ),
     );
   }
 
@@ -217,6 +341,15 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
               onTap: () {
                 Navigator.pop(context);
                 _shareDecrypted(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lock_open_rounded),
+              title: const Text('Restore from Vault'),
+              subtitle: const Text('Shows it in your Library again'),
+              onTap: () {
+                Navigator.pop(context);
+                _restoreVaultItems([file]);
               },
             ),
             ListTile(
@@ -238,6 +371,51 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
         ),
       ),
     );
+  }
+
+  void _toggleSelection(File file) {
+    setState(() {
+      if (_selectedIds.contains(file.id)) {
+        _selectedIds.remove(file.id);
+      } else {
+        _selectedIds.add(file.id);
+      }
+      if (_selectedIds.isEmpty) {
+        _isSelecting = false;
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelecting = false;
+      _selectedIds.clear();
+    });
+  }
+
+  Future<List<File>> _selectedRows() async {
+    final db = ref.read(databaseProvider);
+    final ids = _selectedIds.toList(growable: false);
+    if (ids.isEmpty) return const [];
+    return (db.select(db.files)..where((t) => t.id.isIn(ids))).get();
+  }
+
+  Future<void> _shareSelected() async {
+    final rows = await _selectedRows();
+    if (rows.isEmpty) return;
+    await _shareVaultItems(rows);
+  }
+
+  Future<void> _restoreSelected() async {
+    final rows = await _selectedRows();
+    if (rows.isEmpty) return;
+    await _restoreVaultItems(rows);
+  }
+
+  Future<void> _deleteSelected() async {
+    final rows = await _selectedRows();
+    if (rows.isEmpty) return;
+    await _deleteVaultItems(rows);
   }
 
   Widget _buildVaultPreview(File row) {
@@ -324,27 +502,44 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
   }
 
   Future<void> _shareDecrypted(File row) async {
+    await _shareVaultItems([row]);
+  }
+
+  Future<void> _shareVaultItems(List<File> rows) async {
     final pin = await _resolvePinForDecrypt();
     if (pin == null || pin.isEmpty) return;
 
-    setState(() => _busyFileId = row.id);
+    setState(() {
+      _busyFileId = rows.length == 1 ? rows.first.id : null;
+      _bulkBusy = rows.length > 1;
+    });
     try {
       final service = ref.read(vaultServiceProvider);
-      final source = io.File(row.localPath);
-      if (!source.existsSync()) {
-        throw Exception('Encrypted file not found');
+      final files = <XFile>[];
+      for (final row in rows) {
+        final source = io.File(row.localPath);
+        if (!source.existsSync()) continue;
+        final decrypted = row.isEncrypted
+            ? await service.decryptFile(source, pin)
+            : source;
+        files.add(XFile(decrypted.path));
       }
-      final decrypted = await service.decryptFile(source, pin);
-      await Share.shareXFiles([
-        XFile(decrypted.path),
-      ], text: 'Shared via TeleVault');
+      if (files.isEmpty) {
+        throw Exception('No local vault files were available');
+      }
+      await Share.shareXFiles(files, text: 'Shared via TeleVault');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to decrypt/share: $e')));
     } finally {
-      if (mounted) setState(() => _busyFileId = null);
+      if (mounted) {
+        setState(() {
+          _busyFileId = null;
+          _bulkBusy = false;
+        });
+      }
     }
   }
 
@@ -375,26 +570,142 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
 
     if (confirmed != true) return;
 
-    setState(() => _busyFileId = row.id);
+    await _deleteVaultItems([row]);
+  }
+
+  Future<void> _deleteVaultItems(List<File> rows) async {
+    if (rows.isEmpty) return;
+    final confirmed = rows.length == 1
+        ? true
+        : await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: AppTheme.surface,
+              title: const Text('Delete from Vault?'),
+              content: Text(
+                'Delete ${rows.length} item(s) from Vault metadata?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+              ],
+            ),
+          );
+    if (confirmed != true) return;
+
+    setState(() {
+      _busyFileId = rows.length == 1 ? rows.first.id : null;
+      _bulkBusy = rows.length > 1;
+    });
     try {
       final db = ref.read(databaseProvider);
-      final encryptedFile = io.File(row.localPath);
-      if (encryptedFile.existsSync()) {
-        await encryptedFile.delete();
+      for (final row in rows) {
+        final encryptedFile = io.File(row.localPath);
+        if (encryptedFile.existsSync()) {
+          await encryptedFile.delete();
+        }
+        await (db.delete(db.files)..where((t) => t.id.equals(row.id))).go();
+        _previewFutures.remove(row.id);
       }
-      await (db.delete(db.files)..where((t) => t.id.equals(row.id))).go();
-      _previewFutures.remove(row.id);
       if (!mounted) return;
+      _exitSelectionMode();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Removed from vault')));
+      ).showSnackBar(SnackBar(content: Text('Removed ${rows.length} item(s)')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     } finally {
-      if (mounted) setState(() => _busyFileId = null);
+      if (mounted) {
+        setState(() {
+          _busyFileId = null;
+          _bulkBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _restoreVaultItems(List<File> rows) async {
+    if (rows.isEmpty) return;
+
+    final pin = await _resolvePinForDecrypt();
+    if (pin == null || pin.isEmpty) return;
+
+    setState(() {
+      _busyFileId = rows.length == 1 ? rows.first.id : null;
+      _bulkBusy = rows.length > 1;
+    });
+
+    var restored = 0;
+    try {
+      final db = ref.read(databaseProvider);
+      for (final row in rows) {
+        final assetId = row.assetId;
+        if (assetId == null || assetId.isEmpty) continue;
+
+        final asset = await AssetEntity.fromId(assetId);
+        final original = await asset?.file;
+        if (original == null || !original.existsSync()) continue;
+
+        final encryptedFile = io.File(row.localPath);
+        final originalSize = await original.length();
+        await (db.update(db.files)..where((t) => t.id.equals(row.id))).write(
+          FilesCompanion(
+            localPath: Value(original.path),
+            size: Value(originalSize),
+            status: const Value(0),
+            telegramMessageId: const Value(null),
+            telegramFileId: const Value(null),
+            retryCount: const Value(0),
+            nextRetryAt: const Value(null),
+            isVaulted: const Value(false),
+            isEncrypted: const Value(false),
+            encryptionVersion: const Value(null),
+            ivB64: const Value(null),
+            lastError: const Value(null),
+          ),
+        );
+        if (encryptedFile.existsSync()) {
+          await encryptedFile.delete();
+        }
+        _previewFutures.remove(row.id);
+        restored++;
+      }
+
+      if (!mounted) return;
+      _exitSelectionMode();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            restored == rows.length
+                ? 'Restored $restored item(s) from Vault'
+                : 'Restored $restored of ${rows.length}; missing originals stay vaulted',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyFileId = null;
+          _bulkBusy = false;
+        });
+      }
     }
   }
 

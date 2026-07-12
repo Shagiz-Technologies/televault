@@ -47,6 +47,11 @@ jobs:
           set -euo pipefail
 
           if [[ "${{ inputs.build_profile }}" == "device-test" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo 'Credentialed device-test IPAs must be built from the main branch.' >&2
+              exit 1
+            fi
+
             api_id="${TELEGRAM_API_ID:-}"
             api_hash="${TELEGRAM_API_HASH:-}"
             if [[ ! "$api_id" =~ ^[1-9][0-9]+$ || ! "$api_hash" =~ ^[A-Fa-f0-9]{32}$ ]]; then
@@ -113,7 +118,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: TeleVault-unsigned-ipa
+          name: TeleVault-${{ inputs.build_profile }}-${{ github.ref_name }}-${{ github.sha }}
           path: build/ios/ipa/TeleVault-unsigned.ipa
           if-no-files-found: error
           retention-days: 1

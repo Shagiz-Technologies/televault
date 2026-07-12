@@ -80,7 +80,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 icon: const Icon(Icons.close),
               )
             : null,
-        title: Text(state.currentAlbum?.name ?? 'Library'),
+        title: Text(
+          state.isAllPhotos ? 'Library' : state.currentAlbum?.name ?? 'Library',
+        ),
         actions: [
           if (state.isSelecting)
             Center(
@@ -138,31 +140,49 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             if (_hasActiveFilters)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface.withValues(alpha: 0.78),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white10),
+                    ),
                     child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         if (_searchQuery.isNotEmpty)
-                          _activeChip('Search: "$_searchQuery"'),
+                          _activeFilterPill(
+                            label: 'Search: "$_searchQuery"',
+                            icon: Icons.search,
+                            onDeleted: () => setState(() => _searchQuery = ''),
+                          ),
                         if (_statusFilter != _LibraryStatusFilter.all)
-                          _activeChip(_statusFilter.label),
+                          _activeFilterPill(
+                            label: _statusFilter.label,
+                            icon: Icons.cloud_done_outlined,
+                            onDeleted: () => setState(
+                              () => _statusFilter = _LibraryStatusFilter.all,
+                            ),
+                          ),
                         if (_mediaFilter != _LibraryMediaFilter.all)
-                          _activeChip(_mediaFilter.label),
-                        if (_labelFilterId != null) _activeChip('Label'),
-                        ActionChip(
-                          label: const Text('Clear'),
-                          onPressed: () {
-                            setState(() {
-                              _searchQuery = '';
-                              _statusFilter = _LibraryStatusFilter.all;
-                              _mediaFilter = _LibraryMediaFilter.all;
-                              _labelFilterId = null;
-                            });
-                          },
-                        ),
+                          _activeFilterPill(
+                            label: _mediaFilter.label,
+                            icon: Icons.photo_library_outlined,
+                            onDeleted: () => setState(
+                              () => _mediaFilter = _LibraryMediaFilter.all,
+                            ),
+                          ),
+                        if (_labelFilterId != null)
+                          _activeFilterPill(
+                            label: 'Label',
+                            icon: Icons.label_outline,
+                            onDeleted: () =>
+                                setState(() => _labelFilterId = null),
+                          ),
+                        _clearFiltersPill(),
                       ],
                     ),
                   ),
@@ -276,18 +296,52 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         _labelFilterId != null;
   }
 
-  Widget _activeChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 11, color: Colors.white70),
+  Widget _activeFilterPill({
+    required String label,
+    required IconData icon,
+    required VoidCallback onDeleted,
+  }) {
+    return InputChip(
+      avatar: Icon(icon, size: 15, color: AppTheme.primary),
+      label: Text(label, overflow: TextOverflow.ellipsis),
+      onDeleted: onDeleted,
+      deleteIcon: const Icon(Icons.close_rounded, size: 16),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.34)),
+      backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
+      labelStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
       ),
     );
+  }
+
+  Widget _clearFiltersPill() {
+    return ActionChip(
+      avatar: const Icon(Icons.filter_alt_off_rounded, size: 15),
+      label: const Text('Clear filters'),
+      onPressed: _clearFilters,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+      backgroundColor: Colors.white.withValues(alpha: 0.08),
+      labelStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _searchQuery = '';
+      _statusFilter = _LibraryStatusFilter.all;
+      _mediaFilter = _LibraryMediaFilter.all;
+      _labelFilterId = null;
+    });
   }
 
   Widget _monthHeader(
@@ -749,7 +803,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           MaterialPageRoute(
             builder: (pinContext) => VaultPinScreen(
               mode: VaultPinMode.unlock,
-              forceSecretEntry: true,
               onUnlock: (pin) {
                 unlockedPin = pin;
                 Navigator.pop(pinContext);

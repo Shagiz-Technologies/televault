@@ -23,10 +23,12 @@ final metadataBackupServiceProvider = Provider<MetadataBackupService>((ref) {
 
 abstract interface class MetadataBackupService {
   Future<io.File> exportEncryptedSnapshot({required String passphrase});
+  Future<io.File> exportAccountBoundSnapshot();
   Future<void> importEncryptedSnapshot(
     io.File snapshot, {
     required String passphrase,
   });
+  Future<void> importAccountBoundSnapshot(io.File snapshot);
 }
 
 class DriftMetadataBackupService implements MetadataBackupService {
@@ -36,6 +38,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
   static const _formatVersionV1 = 1;
   static const _formatVersionV2 = 2;
   static const _formatVersionV3 = 3;
+  static const _formatVersionV4 = 4;
   static const _saltLength = 16;
   static const _ivLength = 12;
   static const _pbkdf2Iterations = 120000;
@@ -48,6 +51,38 @@ class DriftMetadataBackupService implements MetadataBackupService {
       throw Exception('Passphrase is required for metadata export');
     }
     final accountFingerprint = await _currentAccountFingerprint();
+    final payload = await _buildPayload(accountFingerprint);
+    final salt = _randomBytes(_saltLength);
+    return _writeEncryptedSnapshot(
+      payload: payload,
+      accountFingerprint: accountFingerprint,
+      formatVersion: _formatVersionV3,
+      protection: 'passphrase',
+      salt: salt,
+      key: _deriveAccountBoundPassphraseKey(
+        passphrase,
+        salt,
+        accountFingerprint,
+      ),
+    );
+  }
+
+  @override
+  Future<io.File> exportAccountBoundSnapshot() async {
+    final accountFingerprint = await _currentAccountFingerprint();
+    final payload = await _buildPayload(accountFingerprint);
+    final salt = _randomBytes(_saltLength);
+    return _writeEncryptedSnapshot(
+      payload: payload,
+      accountFingerprint: accountFingerprint,
+      formatVersion: _formatVersionV4,
+      protection: 'telegram-account',
+      salt: salt,
+      key: _deriveAccountOnlyKey(salt, accountFingerprint),
+    );
+  }
+
+  Future<Map<String, dynamic>> _buildPayload(String accountFingerprint) async {
     final buckets = await _db.select(_db.buckets).get();
     final files = await _db.select(_db.files).get();
     final labels = await _db.select(_db.labels).get();
@@ -55,7 +90,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
         .where((setting) => MetadataSettingPolicy.isSafeSettingKey(setting.key))
         .toList();
 
-    final payload = {
+    return {
       'schema_version': _formatVersionV3,
       'exported_at': DateTime.now().toIso8601String(),
       'account_fingerprint': accountFingerprint,
@@ -112,21 +147,25 @@ class DriftMetadataBackupService implements MetadataBackupService {
           .map((s) => {'key': s.key, 'value': s.value})
           .toList(),
     };
+  }
 
+  Future<io.File> _writeEncryptedSnapshot({
+    required Map<String, dynamic> payload,
+    required String accountFingerprint,
+    required int formatVersion,
+    required String protection,
+    required Uint8List salt,
+    required enc.Key key,
+  }) async {
     final plaintext = utf8.encode(jsonEncode(payload));
-    final salt = _randomBytes(_saltLength);
-    final key = _deriveAccountBoundPassphraseKey(
-      passphrase,
-      salt,
-      accountFingerprint,
-    );
     final iv = enc.IV.fromSecureRandom(_ivLength);
     final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
     final encrypted = encrypter.encryptBytes(plaintext, iv: iv);
     final headerBytes = utf8.encode(
       jsonEncode({
-        'format_version': _formatVersionV3,
+        'format_version': formatVersion,
         'account_fingerprint': accountFingerprint,
+        'protection': protection,
         'kdf': 'PBKDF2-HMAC-SHA256',
         'iterations': _pbkdf2Iterations,
       }),
@@ -136,7 +175,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
     }
 
     final bytes = BytesBuilder()
-      ..addByte(_formatVersionV3)
+      ..addByte(formatVersion)
       ..add(_uint16BigEndian(headerBytes.length))
       ..add(headerBytes)
       ..add(salt)
@@ -166,6 +205,10 @@ class DriftMetadataBackupService implements MetadataBackupService {
     if (version == _formatVersionV3) {
       final accountFingerprint = await _currentAccountFingerprint();
       map = _decodeV3Payload(raw, passphrase, accountFingerprint);
+    } else if (version == _formatVersionV4) {
+      throw Exception(
+        'This metadata snapshot is automatic and account-bound. Use automatic TeleVault restore instead of passphrase import.',
+      );
     } else if (version == _formatVersionV1) {
       throw Exception(
         'This metadata snapshot is from an older unbound format. Export a new snapshot from the same Telegram account.',
@@ -178,6 +221,27 @@ class DriftMetadataBackupService implements MetadataBackupService {
       throw Exception('Unsupported metadata snapshot version: $version');
     }
 
+    await _importPayload(map);
+  }
+
+  @override
+  Future<void> importAccountBoundSnapshot(io.File snapshot) async {
+    final raw = await snapshot.readAsBytes();
+    if (raw.isEmpty) {
+      throw Exception('Invalid metadata snapshot');
+    }
+
+    final version = raw.first;
+    if (version != _formatVersionV4) {
+      throw Exception('This is not an automatic TeleVault metadata snapshot.');
+    }
+
+    final accountFingerprint = await _currentAccountFingerprint();
+    final map = _decodeV4Payload(raw, accountFingerprint);
+    await _importPayload(map);
+  }
+
+  Future<void> _importPayload(Map<String, dynamic> map) async {
     final bucketRows = (map['buckets'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>();
     final labelRows = (map['labels'] as List<dynamic>? ?? const [])
@@ -303,6 +367,18 @@ class DriftMetadataBackupService implements MetadataBackupService {
     });
   }
 
+  Map<String, dynamic> _decodeV4Payload(
+    List<int> raw,
+    String currentAccountFingerprint,
+  ) {
+    final decoded = _decodeEncryptedPayload(
+      raw,
+      currentAccountFingerprint,
+      (salt) => _deriveAccountOnlyKey(salt, currentAccountFingerprint),
+    );
+    return decoded;
+  }
+
   Map<String, dynamic> _decodeV3Payload(
     List<int> raw,
     String passphrase,
@@ -311,6 +387,22 @@ class DriftMetadataBackupService implements MetadataBackupService {
     if (passphrase.trim().isEmpty) {
       throw Exception('Passphrase is required to import metadata');
     }
+    return _decodeEncryptedPayload(
+      raw,
+      currentAccountFingerprint,
+      (salt) => _deriveAccountBoundPassphraseKey(
+        passphrase,
+        salt,
+        currentAccountFingerprint,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _decodeEncryptedPayload(
+    List<int> raw,
+    String currentAccountFingerprint,
+    enc.Key Function(Uint8List salt) keyBuilder,
+  ) {
     if (raw.length < 3 + _saltLength + _ivLength + 1) {
       throw Exception('Invalid metadata snapshot payload');
     }
@@ -343,11 +435,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
     final salt = Uint8List.fromList(raw.sublist(saltStart, ivStart));
     final iv = enc.IV(Uint8List.fromList(raw.sublist(ivStart, cipherStart)));
     final cipher = enc.Encrypted(Uint8List.fromList(raw.sublist(cipherStart)));
-    final key = _deriveAccountBoundPassphraseKey(
-      passphrase,
-      salt,
-      currentAccountFingerprint,
-    );
+    final key = keyBuilder(salt);
     final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
 
     try {
@@ -389,6 +477,13 @@ class DriftMetadataBackupService implements MetadataBackupService {
     String accountFingerprint,
   ) {
     return _derivePassphraseKey('$passphrase\n$accountFingerprint', salt);
+  }
+
+  enc.Key _deriveAccountOnlyKey(Uint8List salt, String accountFingerprint) {
+    return _derivePassphraseKey(
+      'televault.account.metadata.v1\n$accountFingerprint',
+      salt,
+    );
   }
 
   Uint8List _pbkdf2({
@@ -464,6 +559,7 @@ class MetadataSettingPolicy {
     'sync_album_ids',
     'sync_max_file_size_mb',
     'sync_upload_format',
+    'metadata_backup_every_files',
     'diagnostics_enabled',
   };
 

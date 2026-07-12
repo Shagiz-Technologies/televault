@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../../../core/database/app_database.dart' show Bucket;
+import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../buckets/services/bucket_service.dart';
@@ -106,7 +107,12 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(title: const Text('Sync Preferences')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: AppResponsive.pagePaddingWithBottomSafe(
+          context,
+          horizontal: 16,
+          top: 16,
+          bottomExtra: 18,
+        ),
         children: [
           if (_activeBucket != null) ...[
             Container(
@@ -230,7 +236,7 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
             icon: const Icon(Icons.save_outlined),
             label: Text(_saving ? 'Saving...' : 'Save Preferences'),
           ),
-          const Gap(40),
+          const Gap(8),
         ],
       ),
     );

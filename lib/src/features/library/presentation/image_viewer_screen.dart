@@ -307,7 +307,6 @@ class _ImageViewerScreenState extends ConsumerState<ImageViewerScreen> {
       MaterialPageRoute(
         builder: (pinContext) => VaultPinScreen(
           mode: VaultPinMode.unlock,
-          forceSecretEntry: true,
           onUnlock: (secret) {
             unlockedSecret = secret;
             Navigator.pop(pinContext);

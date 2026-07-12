@@ -11,6 +11,7 @@ import '../../../core/database/file_sync_status.dart';
 import '../../../core/services/diagnostics_service.dart';
 import '../../../core/services/telegram_gateway.dart';
 import '../../../core/services/telegram_service.dart';
+import '../../backup/services/auto_metadata_backup_service.dart';
 import '../../settings/services/settings_service.dart';
 import 'sync_constraints_service.dart';
 
@@ -21,6 +22,7 @@ final fileUploaderProvider = Provider<FileUploader>((ref) {
     ref.watch(settingsServiceProvider),
     ref.watch(diagnosticsServiceProvider),
     ref.watch(syncConstraintsServiceProvider),
+    ref.watch(autoMetadataBackupServiceProvider),
   );
   ref.onDispose(() {
     uploader.dispose();
@@ -34,6 +36,7 @@ class FileUploader {
   final SettingsService _settingsService;
   final DiagnosticsService _diagnosticsService;
   final SyncConstraintsService _constraintsService;
+  final AutoMetadataBackupService? _autoMetadataBackupService;
 
   final _progressController = StreamController<Map<String, double>>.broadcast();
   final Map<String, double> _currentProgress = {};
@@ -54,8 +57,9 @@ class FileUploader {
     this._telegramService,
     this._settingsService,
     this._diagnosticsService,
-    this._constraintsService,
-  ) {
+    this._constraintsService, [
+    this._autoMetadataBackupService,
+  ]) {
     _initProgressListener();
   }
 
@@ -100,6 +104,9 @@ class FileUploader {
     }
     _started = true;
 
+    await _recoverInterruptedUploads();
+    await _retryLegacyInputFileFailures();
+
     _pendingSub =
         (_db.select(_db.files)..where(
               (t) => t.status.isIn([
@@ -118,6 +125,33 @@ class FileUploader {
     });
 
     wake();
+  }
+
+  Future<void> _recoverInterruptedUploads() async {
+    await (_db.update(
+      _db.files,
+    )..where((t) => t.status.equals(FileSyncStatus.uploading.dbValue))).write(
+      FilesCompanion(
+        status: Value(FileSyncStatus.pending.dbValue),
+        lastError: const Value('Upload interrupted before completion'),
+        nextRetryAt: const Value(null),
+      ),
+    );
+  }
+
+  Future<void> _retryLegacyInputFileFailures() async {
+    await (_db.update(_db.files)..where(
+          (t) =>
+              t.status.equals(FileSyncStatus.failed.dbValue) &
+              t.lastError.contains('InputFile is not specified'),
+        ))
+        .write(
+          FilesCompanion(
+            status: Value(FileSyncStatus.pending.dbValue),
+            nextRetryAt: const Value(null),
+            lastError: const Value(null),
+          ),
+        );
   }
 
   void wake({bool ignoreConstraints = false, int? bucketId}) {
@@ -145,7 +179,7 @@ class FileUploader {
   void resumeBackgroundWakes() {
     if (!_backgroundWakesSuspended) return;
     _backgroundWakesSuspended = false;
-    wake(ignoreConstraints: true);
+    wake();
   }
 
   _UploadWakeRequest _mergeQueuedWake(
@@ -175,6 +209,18 @@ class FileUploader {
       ignoreConstraints: ignoreConstraints,
       bucketId: bucketId,
     );
+  }
+
+  Future<void> waitForCurrentUploadToFinish({
+    Duration timeout = const Duration(minutes: 45),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (_isUploading && !_disposed) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException('Timed out waiting for the current upload.');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+    }
   }
 
   Future<void> _waitThenDrainQueue({
@@ -249,11 +295,23 @@ class FileUploader {
           unawaited(
             _diagnosticsService.increment(DiagnosticsService.uploadSuccessKey),
           );
+          final autoMetadataBackupService = _autoMetadataBackupService;
+          if (autoMetadataBackupService != null) {
+            unawaited(autoMetadataBackupService.noteMediaUploadCompleted());
+          }
         } catch (e) {
-          await _markFailed(nextFile, e.toString());
+          final error = e.toString();
+          await _markFailed(nextFile, error);
+          if (!_shouldRetryAutomatically(error)) {
+            break;
+          }
         } finally {
           _currentProgress.remove(nextFile.localPath);
           _progressController.add(Map.from(_currentProgress));
+        }
+
+        if (_backgroundWakesSuspended) {
+          break;
         }
       }
     } finally {
@@ -307,7 +365,7 @@ class FileUploader {
       ),
     );
 
-    wake(ignoreConstraints: true, bucketId: bucketId);
+    wake(bucketId: bucketId);
     return ids.length;
   }
 
@@ -347,8 +405,8 @@ class FileUploader {
                     (bucketId == null
                         ? const Constant(true)
                         : t.bucketId.equals(bucketId)) &
-                    (t.nextRetryAt.isNull() |
-                        t.nextRetryAt.isSmallerOrEqualValue(now)),
+                    t.nextRetryAt.isNotNull() &
+                    t.nextRetryAt.isSmallerOrEqualValue(now),
               )
               ..orderBy([
                 (t) => OrderingTerm(
@@ -391,7 +449,9 @@ class FileUploader {
     final retry = file.retryCount + 1;
     final normalizedRetry = retry < 1 ? 1 : (retry > 6 ? 6 : retry);
     final backoffSeconds = (15 * (1 << (normalizedRetry - 1))).clamp(15, 900);
-    final retryAt = DateTime.now().add(Duration(seconds: backoffSeconds));
+    final retryAt = _shouldRetryAutomatically(error)
+        ? DateTime.now().add(Duration(seconds: backoffSeconds))
+        : null;
 
     await (_db.update(_db.files)..where((t) => t.id.equals(file.id))).write(
       FilesCompanion(
@@ -404,6 +464,15 @@ class FileUploader {
     unawaited(
       _diagnosticsService.increment(DiagnosticsService.uploadFailureKey),
     );
+  }
+
+  bool _shouldRetryAutomatically(String error) {
+    final normalized = error.toLowerCase();
+    return !normalized.contains('inputfile is not specified') &&
+        !normalized.contains('local media file is no longer available') &&
+        !normalized.contains('gallery item is no longer available') &&
+        !normalized.contains('invalid telegram chat id') &&
+        !normalized.contains('active bucket no longer exists');
   }
 
   Future<int> _uploadFile(File file, BigInt chatId) async {
@@ -453,10 +522,16 @@ class FileUploader {
     final preferences = await _settingsService.getSyncPreferences(
       bucketId: file.bucketId,
     );
+    final uploadedFile = await _preliminaryUpload(
+      file,
+      preferences.uploadFormat,
+      uploadPath,
+    );
     final content = _buildInputMessageContent(
       file,
       preferences.uploadFormat,
       uploadPath,
+      uploadedFile,
     );
 
     final response = await _telegramService.request({
@@ -506,10 +581,50 @@ class FileUploader {
     return _extractInt(sendUpdate['message']?['id']) ?? tempMessageId;
   }
 
+  Future<Map<String, dynamic>> _preliminaryUpload(
+    File file,
+    SyncUploadFormat uploadFormat,
+    String uploadPath,
+  ) async {
+    final response = await _telegramService.request({
+      '@type': 'preliminaryUploadFile',
+      'file': {'@type': 'inputFileLocal', 'path': uploadPath},
+      'file_type': {'@type': _tdFileType(file, uploadFormat, uploadPath)},
+      'priority': 1,
+    }, timeout: const Duration(seconds: 90));
+
+    if (response['@type'] == 'error') {
+      throw Exception(response['message'] ?? 'Telegram upload failed');
+    }
+    if (response['@type'] != 'file') {
+      throw Exception('Unexpected upload response: ${response['@type']}');
+    }
+
+    final fileId = _extractInt(response['id']);
+    if (fileId == null || fileId <= 0) {
+      throw Exception('Telegram upload file id missing');
+    }
+    return {'@type': 'inputFileId', 'id': fileId};
+  }
+
+  String _tdFileType(
+    File file,
+    SyncUploadFormat uploadFormat,
+    String uploadPath,
+  ) {
+    if (uploadFormat == SyncUploadFormat.compressedMedia &&
+        _isCompressibleMedia(file)) {
+      if (_isImagePath(uploadPath)) return 'fileTypePhoto';
+      if (_isVideoPath(uploadPath)) return 'fileTypeVideo';
+    }
+    return 'fileTypeDocument';
+  }
+
   Map<String, dynamic> _buildInputMessageContent(
     File file,
     SyncUploadFormat uploadFormat,
     String uploadPath,
+    Map<String, dynamic> inputFile,
   ) {
     final caption = {
       '@type': 'formattedText',
@@ -519,8 +634,6 @@ class FileUploader {
           ? 'Backed up by TeleVault (compressed media)'
           : 'Backed up by TeleVault',
     };
-    final inputFile = {'@type': 'inputFileLocal', 'path': uploadPath};
-
     if (uploadFormat == SyncUploadFormat.compressedMedia &&
         _isCompressibleMedia(file)) {
       if (_isImagePath(uploadPath)) {
@@ -552,6 +665,8 @@ class FileUploader {
     return {
       '@type': 'inputMessageDocument',
       'document': inputFile,
+      'thumbnail': null,
+      'disable_content_type_detection': false,
       'caption': caption,
     };
   }

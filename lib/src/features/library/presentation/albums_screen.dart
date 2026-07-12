@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
+import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../repositories/gallery_repository.dart';
 import 'library_controller.dart';
@@ -41,7 +42,12 @@ class _AlbumsScreenState extends ConsumerState<AlbumsScreen> {
           final albums = snapshot.data!;
 
           return GridView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: AppResponsive.pagePaddingWithBottomSafe(
+              context,
+              horizontal: 16,
+              top: 16,
+              bottomExtra: 18,
+            ),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 16,
