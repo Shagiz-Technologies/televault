@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/presentation/secure_text_dialog.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/app_lock_controller.dart';
@@ -58,7 +59,12 @@ class _AppLockSettingsScreenState extends ConsumerState<AppLockSettingsScreen> {
               snapshot.connectionState != ConnectionState.done;
 
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: AppResponsive.pagePaddingWithBottomSafe(
+              context,
+              horizontal: 16,
+              top: 16,
+              bottomExtra: 18,
+            ),
             children: [
               SwitchListTile(
                 value: config.enabled,
@@ -76,7 +82,7 @@ class _AppLockSettingsScreenState extends ConsumerState<AppLockSettingsScreen> {
                     ? 'Checking this device...'
                     : access?.phoneSecurityAvailable == true
                     ? 'Available: fingerprint, face unlock, phone PIN, pattern, or phone password.'
-                    : 'Not available. Set a device passcode or biometric in system settings to use it here.',
+                    : 'Not available. Set a phone screen lock in Android settings to use it here.',
                 statusLabel: access?.phoneSecurityAvailable == true
                     ? 'Ready'
                     : 'Unavailable',

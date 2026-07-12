@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../library/presentation/albums_screen.dart';
+import '../../library/presentation/library_controller.dart';
 import '../../library/presentation/library_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
@@ -30,6 +33,11 @@ class MainScreen extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: currentIndex,
         onDestinationSelected: (index) {
+          if (index == 0) {
+            unawaited(
+              ref.read(libraryControllerProvider.notifier).showAllPhotos(),
+            );
+          }
           ref.read(mainTabIndexProvider.notifier).state = index;
         },
         backgroundColor: Colors.black,

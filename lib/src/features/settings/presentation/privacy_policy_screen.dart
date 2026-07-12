@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../../core/presentation/responsive_layout.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -10,7 +13,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Privacy Policy')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: AppResponsive.pagePaddingWithBottomSafe(
+          context,
+          horizontal: 20,
+          top: 20,
+          bottomExtra: 24,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -51,25 +59,36 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
             _buildSection(
               'Vault Security',
-              'Vault items are encrypted before upload. Your Vault PIN or password is stored as a salted hash on-device, not as plain text. Phone Security can be used to unlock or reset access when configured.',
+              'Vault items are encrypted before upload. Your Vault password is stored as a salted hash on-device, not as plain text. Phone Security can be used to unlock or reset access when configured.',
             ),
 
             _buildSection(
               'Your Control',
-              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, your operating system may remove local app data, because operating systems do not care about our feelings.',
+              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, Android may remove local app data, because Android does not care about our feelings.',
             ),
 
-            const SizedBox(height: 40),
-
+            const SizedBox(height: 28),
             Center(
-              child: Text(
-                '© $year ማሔር ሻላል ሓዥ ባዝ',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              child: Column(
+                children: [
+                  Text(
+                    '\u00A9 $year Copyright',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '\u121B\u1214\u122D \u123B\u120B\u120D \u1213\u12E5 \u1263\u12DD',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.notoSansEthiopic(
+                      fontSize: 8,
+                      color: Colors.grey[500],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-
-            const SizedBox(height: 40),
           ],
         ),
       ),

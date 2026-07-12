@@ -8,6 +8,7 @@ import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/presentation/secure_text_dialog.dart';
 import '../../../core/presentation/televault_logo_mark.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../backup/services/auto_metadata_backup_service.dart';
 import '../../backup/services/safe_uninstall_backup_service.dart';
 import '../services/bucket_service.dart';
 import '../../sync/services/sync_initializer.dart';
@@ -50,6 +51,9 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
       _bucketCount = count;
       _loadingBucketCount = false;
     });
+    if (count == 0) {
+      unawaited(_restoreAutomaticMetadataBackup());
+    }
   }
 
   Future<void> _createBucket() async {
@@ -97,6 +101,17 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
         allowedTypes: _selectedTypes,
       );
       await ref.read(syncInitializerProvider).ensureStarted();
+      unawaited(
+        ref
+            .read(autoMetadataBackupServiceProvider)
+            .backupNow(reason: 'bucket_created')
+            .then<void>(
+              (_) {},
+              onError: (Object e, StackTrace stackTrace) {
+                debugPrint('Initial metadata backup failed: $e');
+              },
+            ),
+      );
 
       if (mounted) {
         final isFirstBucket = existingBuckets.isEmpty;
@@ -254,7 +269,7 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
                 label: Text(
                   _isRestoring
                       ? 'Looking for previous backup...'
-                      : 'Existing user? Restore Safe Uninstall backup',
+                      : 'Restore older passphrase backup',
                 ),
               ),
               if (_restoreStatus != null) ...[
@@ -317,6 +332,56 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
       BucketMediaType.app => 'Apps',
       BucketMediaType.other => 'Others',
     };
+  }
+
+  Future<void> _restoreAutomaticMetadataBackup() async {
+    if (_isRestoring) return;
+    setState(() {
+      _isRestoring = true;
+      _restoreStatus = 'Checking Telegram for a TeleVault metadata channel...';
+    });
+
+    try {
+      final result = await ref
+          .read(autoMetadataBackupServiceProvider)
+          .restoreLatestIfAvailable(
+            onStatus: (status) {
+              if (!mounted) return;
+              setState(() => _restoreStatus = status);
+            },
+          );
+
+      if (!mounted) return;
+      if (result == null) {
+        setState(() {
+          _restoreStatus = null;
+        });
+        return;
+      }
+
+      setState(() {
+        _restoreStatus =
+            'Previous TeleVault metadata restored from message ${result.messageId}.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Previous TeleVault metadata restored')),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(ref.read(syncInitializerProvider).ensureStarted());
+        ref.read(bucketPresenceProvider.notifier).setHasBuckets(true);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _restoreStatus =
+            'Automatic metadata restore did not finish. You can create a new bucket or restore an older passphrase backup. Details: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _isRestoring = false);
+    }
   }
 
   Future<void> _restoreSafeUninstallBackup() async {

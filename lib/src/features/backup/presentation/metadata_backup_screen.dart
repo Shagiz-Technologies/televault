@@ -7,9 +7,11 @@ import 'package:gap/gap.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/presentation/secure_text_dialog.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
+import '../services/auto_metadata_backup_service.dart';
 import '../services/metadata_backup_service.dart';
 import '../services/safe_uninstall_backup_service.dart';
 
@@ -26,7 +28,25 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   bool _importing = false;
   bool _safeUninstallBackingUp = false;
   bool _safeUninstallCompleted = false;
+  bool _savingAutoMetadataInterval = false;
+  bool _metadataBackupNow = false;
+  int _autoMetadataEveryFiles =
+      AutoMetadataBackupService.defaultBackupEveryFiles;
   String? _safeUninstallStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoMetadataSettings();
+  }
+
+  Future<void> _loadAutoMetadataSettings() async {
+    final interval = await ref
+        .read(autoMetadataBackupServiceProvider)
+        .getBackupEveryFiles();
+    if (!mounted) return;
+    setState(() => _autoMetadataEveryFiles = interval);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +60,12 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Export or import encrypted metadata snapshots (.tvmeta). Imports only work when logged in with the same Telegram account that created the snapshot.',
+              'TeleVault keeps metadata account-bound to your Telegram login. Manual exports still use your passphrase.',
               style: TextStyle(color: Colors.grey),
             ),
             const Gap(20),
+            _metadataAutoBackupCard(),
+            const Gap(10),
             _actionCard(
               icon: Icons.upload_file,
               title: 'Export Metadata Snapshot',
@@ -64,7 +86,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
               icon: Icons.health_and_safety_outlined,
               title: 'Safe Uninstall Backup',
               subtitle:
-                  'Uploads pending media first, then metadata last to the active bucket',
+                  'Pauses auto-backup, finishes the current upload, then saves metadata',
               loading: _safeUninstallBackingUp,
               onTap: _safeUninstallBackingUp ? null : _safeUninstallBackup,
             ),
@@ -97,6 +119,64 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _metadataAutoBackupCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cloud_done_outlined, color: AppTheme.primary),
+              const Gap(12),
+              const Expanded(
+                child: Text(
+                  'Automatic Metadata Backup',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: _savingAutoMetadataInterval
+                    ? null
+                    : _editAutoMetadataInterval,
+                child: Text('Every $_autoMetadataEveryFiles'),
+              ),
+            ],
+          ),
+          const Gap(6),
+          const Text(
+            'Updates a private “TeleVault” Telegram channel after successful uploads, so a fresh install can restore metadata after login.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const Gap(10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: _metadataBackupNow ? null : _runMetadataBackupNow,
+              icon: _metadataBackupNow
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.backup_outlined),
+              label: Text(_metadataBackupNow ? 'Backing up...' : 'Back up now'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -161,6 +241,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   Future<void> _exportMetadata() async {
     final passphrase = await _promptPassphrase(confirm: true);
     if (passphrase == null || passphrase.isEmpty) return;
+    if (!mounted) return;
 
     setState(() => _exporting = true);
     try {
@@ -189,6 +270,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   Future<void> _importMetadata() async {
     final passphrase = await _promptPassphrase(confirm: false);
     if (passphrase == null || passphrase.isEmpty) return;
+    if (!mounted) return;
 
     setState(() => _importing = true);
     try {
@@ -202,8 +284,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       await ref
           .read(metadataBackupServiceProvider)
           .importEncryptedSnapshot(io.File(path), passphrase: passphrase);
-      ref.read(fileUploaderProvider).wake();
-      await ref.read(syncServiceProvider).syncNow();
+      await ref.read(syncServiceProvider).syncNow(ignoreConstraints: false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -227,9 +308,12 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        scrollable: true,
         title: const Text('Safe Uninstall Backup'),
         content: const Text(
-          'TeleVault will first scan and upload pending media. Only after that succeeds, it uploads the encrypted metadata snapshot as the final item in your active Telegram bucket. Do not uninstall until this finishes.',
+          'TeleVault will pause new auto-backup work, wait only for the current uploading file to finish, then save the latest metadata in your private TeleVault metadata channel. Pending files stay pending for next install or resume.',
         ),
         actions: [
           TextButton(
@@ -244,9 +328,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       ),
     );
     if (confirmed != true) return;
-
-    final passphrase = await _promptPassphrase(confirm: true);
-    if (passphrase == null || passphrase.isEmpty) return;
+    if (!mounted) return;
 
     setState(() {
       _safeUninstallBackingUp = true;
@@ -258,7 +340,6 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       final result = await ref
           .read(safeUninstallBackupServiceProvider)
           .createSafeUninstallBackup(
-            passphrase: passphrase,
             onStep: (step) {
               if (!mounted) return;
               setState(
@@ -271,12 +352,13 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       setState(() {
         _safeUninstallCompleted = true;
         _safeUninstallStatus =
-            'Safe Uninstall backup completed in "${result.bucketName}". Metadata message id: ${result.messageId}. You can now uninstall the app if you need to.';
+            'Safe Uninstall metadata backup completed. Metadata message id: ${result.messageId}. Pending media will resume later if you reinstall or resume auto-backup.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Safe Uninstall backup completed')),
       );
     } catch (e) {
+      debugPrint('Safe Uninstall backup failed: $e');
       if (!mounted) return;
       setState(() {
         _safeUninstallCompleted = false;
@@ -310,105 +392,82 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
     return switch (step) {
       SafeUninstallStep.scanning => 'Scanning all buckets for pending media...',
       SafeUninstallStep.uploadingMedia =>
-        'Auto-sync is paused. Uploading pending media first so metadata can be backed up last...',
+        'Auto-backup is paused. Waiting for the current upload to finish...',
       SafeUninstallStep.exportingMetadata =>
-        'Media queue is clear. Creating encrypted metadata snapshot...',
+        'Creating the latest account-bound metadata snapshot...',
       SafeUninstallStep.uploadingMetadata =>
-        'Uploading metadata as the final Safe Uninstall item...',
+        'Uploading metadata to the private TeleVault metadata channel...',
       SafeUninstallStep.complete => 'Safe Uninstall backup completed.',
     };
   }
 
-  Future<String?> _promptPassphrase({required bool confirm}) async {
-    final ctrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    var obscure = true;
-    var validation = '';
+  Future<void> _runMetadataBackupNow() async {
+    setState(() => _metadataBackupNow = true);
+    try {
+      final result = await ref
+          .read(autoMetadataBackupServiceProvider)
+          .backupNow(reason: 'manual');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Metadata backed up: ${result.messageId}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Metadata backup failed: $e')));
+    } finally {
+      if (mounted) setState(() => _metadataBackupNow = false);
+    }
+  }
 
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.surface,
-              title: Text(
-                confirm ? 'Set Export Passphrase' : 'Import Passphrase',
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: ctrl,
-                    obscureText: obscure,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'Passphrase',
-                      suffixIcon: IconButton(
-                        onPressed: () {
-                          setDialogState(() => obscure = !obscure);
-                        },
-                        icon: Icon(
-                          obscure ? Icons.visibility : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (confirm) ...[
-                    const Gap(8),
-                    TextField(
-                      controller: confirmCtrl,
-                      obscureText: obscure,
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm passphrase',
-                      ),
-                    ),
-                  ],
-                  if (validation.isNotEmpty) ...[
-                    const Gap(8),
-                    Text(
-                      validation,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    final value = ctrl.text.trim();
-                    if (value.length < 8) {
-                      setDialogState(() {
-                        validation = 'Use at least 8 characters';
-                      });
-                      return;
-                    }
-                    if (confirm && value != confirmCtrl.text.trim()) {
-                      setDialogState(() {
-                        validation = 'Passphrases do not match';
-                      });
-                      return;
-                    }
-                    Navigator.pop(context, value);
-                  },
-                  child: const Text('Continue'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+  Future<void> _editAutoMetadataInterval() async {
+    final value = await showSecureTextDialog(
+      context,
+      title: 'Metadata Backup Frequency',
+      description:
+          'TeleVault updates its metadata channel after this many successful media uploads. Minimum is 5.',
+      fieldLabel: 'Files',
+      actionLabel: 'Save',
+      minLength: 1,
+      keyboardType: TextInputType.number,
     );
+    final parsed = int.tryParse(value ?? '');
+    if (parsed == null) return;
 
-    ctrl.dispose();
-    confirmCtrl.dispose();
-    return result;
+    setState(() => _savingAutoMetadataInterval = true);
+    try {
+      await ref
+          .read(autoMetadataBackupServiceProvider)
+          .setBackupEveryFiles(parsed);
+      await _loadAutoMetadataSettings();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Metadata backup frequency set to $_autoMetadataEveryFiles files',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _savingAutoMetadataInterval = false);
+    }
+  }
+
+  Future<String?> _promptPassphrase({required bool confirm}) async {
+    return showSecureTextDialog(
+      context,
+      title: confirm ? 'Set Export Passphrase' : 'Import Passphrase',
+      description: confirm
+          ? 'Use at least 8 characters. This passphrase is required to restore the encrypted metadata snapshot later.'
+          : 'Enter the passphrase used to encrypt this metadata snapshot.',
+      fieldLabel: 'Passphrase',
+      actionLabel: 'Continue',
+      confirmLabel: 'Confirm passphrase',
+      minLength: 8,
+      minLengthMessage: 'Use at least 8 characters.',
+      requireConfirmation: confirm,
+      hideConfirmationWhenVisible: false,
+    );
   }
 }

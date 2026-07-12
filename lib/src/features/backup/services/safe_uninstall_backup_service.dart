@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
-import '../../../core/database/file_sync_status.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
+import 'auto_metadata_backup_service.dart';
 import 'metadata_backup_service.dart';
 
 final safeUninstallBackupServiceProvider = Provider<SafeUninstallBackupService>(
@@ -18,6 +18,7 @@ final safeUninstallBackupServiceProvider = Provider<SafeUninstallBackupService>(
       ref.watch(databaseProvider),
       ref.watch(telegramServiceProvider),
       ref.watch(metadataBackupServiceProvider),
+      ref.watch(autoMetadataBackupServiceProvider),
       ref.watch(syncServiceProvider),
       ref.watch(fileUploaderProvider),
     );
@@ -58,23 +59,23 @@ class SafeUninstallBackupService {
   final AppDatabase _db;
   final TelegramService _telegram;
   final MetadataBackupService _metadataBackupService;
+  final AutoMetadataBackupService _autoMetadataBackupService;
   final SyncService _syncService;
   final FileUploader _fileUploader;
 
   static const marker = '#TeleVaultSafeUninstallMetadataV1';
-  static const _captionPrefix = 'TeleVault Safe Uninstall Metadata';
   bool _safeUninstallRunning = false;
 
   SafeUninstallBackupService(
     this._db,
     this._telegram,
     this._metadataBackupService,
+    this._autoMetadataBackupService,
     this._syncService,
     this._fileUploader,
   );
 
   Future<SafeUninstallBackupResult> createSafeUninstallBackup({
-    required String passphrase,
     void Function(SafeUninstallStep step)? onStep,
   }) async {
     if (_safeUninstallRunning) {
@@ -96,32 +97,15 @@ class SafeUninstallBackupService {
     _fileUploader.suspendBackgroundWakes();
 
     try {
-      onStep?.call(SafeUninstallStep.scanning);
-      await _syncService.scanAndEnqueueAllBucketsForSafeUninstall();
-
       onStep?.call(SafeUninstallStep.uploadingMedia);
-      await _flushUploadsBeforeMetadata();
-
-      // One final scan+drain pass closes the race between the first queue drain
-      // and metadata export. If anything remains unresolved, metadata is not
-      // uploaded.
-      onStep?.call(SafeUninstallStep.scanning);
-      await _syncService.scanAndEnqueueAllBucketsForSafeUninstall();
-      onStep?.call(SafeUninstallStep.uploadingMedia);
-      await _flushUploadsBeforeMetadata();
+      await _fileUploader.waitForCurrentUploadToFinish();
 
       onStep?.call(SafeUninstallStep.exportingMetadata);
-      final snapshot = await _metadataBackupService.exportEncryptedSnapshot(
-        passphrase: passphrase,
-      );
-
-      // No file rows should be pending immediately before the final metadata
-      // send. This is intentionally after export so metadata is still blocked
-      // if any last media item appeared during export.
-      await _flushUploadsBeforeMetadata();
-
       onStep?.call(SafeUninstallStep.uploadingMetadata);
-      final messageId = await _uploadMetadataSnapshot(snapshot, bucket);
+      final result = await _autoMetadataBackupService.backupNow(
+        reason: 'safe_uninstall',
+      );
+      final messageId = result.messageId;
       await _writeSafeUninstallAudit(messageId, bucket);
 
       completed = true;
@@ -181,96 +165,6 @@ class SafeUninstallBackupService {
             .get();
     if (buckets.isEmpty) return null;
     return buckets.first;
-  }
-
-  Future<void> _resetInterruptedUploads() async {
-    await (_db.update(_db.files)
-          ..where((t) => t.status.equals(FileSyncStatus.uploading.dbValue)))
-        .write(FilesCompanion(status: Value(FileSyncStatus.pending.dbValue)));
-  }
-
-  Future<void> _flushUploadsBeforeMetadata() async {
-    await _resetInterruptedUploads();
-    await _fileUploader.retryFailed();
-    await _fileUploader.drainQueue(ignoreConstraints: true);
-    final unresolved = await _unresolvedUploadCount();
-    if (unresolved > 0) {
-      throw Exception(
-        '$unresolved item(s) are still not backed up. Metadata was not uploaded, because it must be the final Safe Uninstall backup item.',
-      );
-    }
-  }
-
-  Future<int> _unresolvedUploadCount() {
-    return _db
-        .customSelect(
-          'SELECT COUNT(*) AS c FROM files WHERE status IN (?, ?, ?)',
-          variables: [
-            Variable<int>(FileSyncStatus.pending.dbValue),
-            Variable<int>(FileSyncStatus.uploading.dbValue),
-            Variable<int>(FileSyncStatus.failed.dbValue),
-          ],
-          readsFrom: {_db.files},
-        )
-        .map((row) => row.read<int>('c'))
-        .getSingle();
-  }
-
-  Future<int> _uploadMetadataSnapshot(io.File snapshot, Bucket bucket) async {
-    final chatId = _toTdInt64(bucket.chatId);
-    if (chatId == null) {
-      throw Exception('Invalid active bucket chat id.');
-    }
-
-    final captionText =
-        '$_captionPrefix\n$marker\nCreated: ${DateTime.now().toIso8601String()}';
-
-    final response = await _telegram.request({
-      '@type': 'sendMessage',
-      'chat_id': chatId,
-      'input_message_content': {
-        '@type': 'inputMessageDocument',
-        'document': {'@type': 'inputFileLocal', 'path': snapshot.path},
-        'caption': {'@type': 'formattedText', 'text': captionText},
-      },
-    }, timeout: const Duration(minutes: 3));
-
-    if (response['@type'] == 'error') {
-      throw Exception(
-        response['message'] ?? 'Unable to upload Safe Uninstall metadata.',
-      );
-    }
-    if (response['@type'] != 'message') {
-      throw Exception('Unexpected Telegram response: ${response['@type']}');
-    }
-
-    final tempMessageId = _extractInt(response['id']);
-    if (tempMessageId == null) {
-      throw Exception('Telegram message id missing for metadata upload.');
-    }
-
-    final sendingStateType = response['sending_state']?['@type']?.toString();
-    if (sendingStateType == null) return tempMessageId;
-
-    final update = await _telegram.waitForUpdate((event) {
-      final type = event['@type'];
-      if (type != 'updateMessageSendSucceeded' &&
-          type != 'updateMessageSendFailed') {
-        return false;
-      }
-      final oldId = _extractInt(event['old_message_id']);
-      final updateChat = event['message']?['chat_id']?.toString();
-      return oldId == tempMessageId && updateChat == bucket.chatId.toString();
-    }, timeout: const Duration(minutes: 5));
-
-    if (update['@type'] == 'updateMessageSendFailed') {
-      throw Exception(
-        update['error_message']?.toString() ??
-            'Safe Uninstall metadata upload failed.',
-      );
-    }
-
-    return _extractInt(update['message']?['id']) ?? tempMessageId;
   }
 
   Future<void> _writeSafeUninstallAudit(int messageId, Bucket bucket) async {

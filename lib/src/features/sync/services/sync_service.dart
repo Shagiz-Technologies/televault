@@ -36,6 +36,8 @@ class SyncService {
   final FileUploader _uploader;
 
   static const _legacyLastScanAtKey = 'sync_last_scan_at';
+  static const _legacyDeletedLocalRepairKey =
+      'sync_deleted_local_repair_v1_completed';
 
   Timer? _syncTimer;
   StreamSubscription? _constraintsSub;
@@ -116,21 +118,35 @@ class SyncService {
               .canRunAutomaticSync(bucketId: bucket.id);
           if (!constraintsAllowed) continue;
         }
-        await _scanBucket(bucket, preferences);
+        final repairLegacyDeletedRows = await _needsLegacyDeletedLocalRepair(
+          bucket.id,
+        );
+        final completedScan = await _scanBucket(
+          bucket,
+          preferences,
+          repairLegacyDeletedRows: repairLegacyDeletedRows,
+        );
+        if (repairLegacyDeletedRows && completedScan) {
+          await _markLegacyDeletedLocalRepairComplete(bucket.id);
+        }
       }
     } finally {
       _isScanning = false;
     }
   }
 
-  Future<void> _scanBucket(Bucket bucket, SyncPreferences preferences) async {
+  Future<bool> _scanBucket(
+    Bucket bucket,
+    SyncPreferences preferences, {
+    required bool repairLegacyDeletedRows,
+  }) async {
     final bucketId = bucket.id;
     final allowedTypes = _parseAllowedTypes(bucket.allowedMediaTypes);
 
     final allAlbums = await _galleryRepo.getAlbums();
-    if (allAlbums.isEmpty) return;
+    if (allAlbums.isEmpty) return false;
     final albums = _filterAlbums(allAlbums, preferences);
-    if (albums.isEmpty) return;
+    if (albums.isEmpty) return false;
 
     final dbFiles = await (_db.select(
       _db.files,
@@ -143,10 +159,11 @@ class SyncService {
       dbMapByPath[file.localPath] = file;
     }
 
-    final seenGalleryIds = <String>{};
     final globallyVisitedAssets = <String>{};
     var newCount = 0;
-    final lastScanAt = await _getLastScanAt(bucketId);
+    final lastScanAt = repairLegacyDeletedRows
+        ? null
+        : await _getLastScanAt(bucketId);
     final maxBytes = preferences.maxFileSizeMb * 1024 * 1024;
 
     for (final album in albums) {
@@ -169,21 +186,21 @@ class SyncService {
             continue;
           }
           globallyVisitedAssets.add(asset.id);
-          seenGalleryIds.add(asset.id);
-
           final existingById = dbMapById[asset.id];
           if (existingById != null) {
             await _repairQueueDateAdded(existingById, asset.createDateTime);
-          }
-
-          if (!_matchesMediaPreferences(asset, preferences, allowedTypes)) {
+            if (repairLegacyDeletedRows &&
+                existingById.status == FileSyncStatus.deletedLocal.dbValue) {
+              await _restoreLegacyDeletedLocalRow(existingById);
+            }
+            if (lastScanAt != null &&
+                asset.createDateTime.isBefore(lastScanAt)) {
+              reachedOldAssets = true;
+            }
             continue;
           }
 
-          if (lastScanAt != null &&
-              asset.createDateTime.isBefore(lastScanAt) &&
-              dbMapById.containsKey(asset.id)) {
-            reachedOldAssets = true;
+          if (!_matchesMediaPreferences(asset, preferences, allowedTypes)) {
             continue;
           }
 
@@ -229,29 +246,47 @@ class SyncService {
       }
     }
 
-    if (dbMapById.isNotEmpty) {
-      for (final entry in dbMapById.entries) {
-        if (!seenGalleryIds.contains(entry.key)) {
-          final row = entry.value;
-          if (row.status != FileSyncStatus.deletedLocal.dbValue) {
-            await (_db.update(
-              _db.files,
-            )..where((t) => t.id.equals(row.id))).write(
-              FilesCompanion(
-                status: Value(FileSyncStatus.deletedLocal.dbValue),
-                deletedLocallyAt: Value(DateTime.now()),
-              ),
-            );
-          }
-        }
-      }
-    }
-
+    // Incremental scans intentionally stop once known older media is reached.
+    // That partial result cannot safely prove that unseen database rows were
+    // deleted from the device.
     await _setLastScanAt(bucketId, DateTime.now());
 
     if (newCount > 0) {
       _uploader.wake();
     }
+    return true;
+  }
+
+  Future<void> _restoreLegacyDeletedLocalRow(File row) async {
+    final restoredStatus = row.telegramMessageId == null
+        ? FileSyncStatus.pending
+        : FileSyncStatus.synced;
+    await (_db.update(_db.files)..where((t) => t.id.equals(row.id))).write(
+      FilesCompanion(
+        status: Value(restoredStatus.dbValue),
+        deletedLocallyAt: const Value(null),
+      ),
+    );
+  }
+
+  Future<bool> _needsLegacyDeletedLocalRepair(int bucketId) async {
+    final setting =
+        await (_db.select(_db.appSettings)..where(
+              (t) => t.key.equals('$_legacyDeletedLocalRepairKey.$bucketId'),
+            ))
+            .getSingleOrNull();
+    return setting?.value != 'true';
+  }
+
+  Future<void> _markLegacyDeletedLocalRepairComplete(int bucketId) {
+    return _db
+        .into(_db.appSettings)
+        .insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            key: '$_legacyDeletedLocalRepairKey.$bucketId',
+            value: 'true',
+          ),
+        );
   }
 
   List<AssetPathEntity> _filterAlbums(

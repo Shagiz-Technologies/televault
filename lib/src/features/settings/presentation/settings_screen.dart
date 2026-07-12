@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_service.dart';
@@ -14,7 +15,7 @@ import '../../sync/presentation/sync_dashboard_screen.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'about_screen.dart';
-import 'activity_log_screen.dart';
+import 'release_log_screen.dart';
 import 'app_lock_settings_screen.dart';
 import 'diagnostics_screen.dart';
 import 'sync_preferences_screen.dart';
@@ -39,193 +40,191 @@ class SettingsScreen extends ConsumerWidget {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Profile Card
-              _buildProfileCard(context),
-              const Gap(24),
+        padding: AppResponsive.pagePaddingWithBottomSafe(
+          context,
+          horizontal: 16,
+          top: 16,
+          bottomExtra: 24,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Profile Card
+            _buildProfileCard(context),
+            const Gap(24),
 
-              // 2. Backup Storage Section
-              const Text(
-                "Backup Storage",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const Gap(12),
-              FutureBuilder(
-                future: bucketFuture,
-                builder: (context, snapshot) {
-                  final bucketName =
-                      snapshot.data?.name ?? "No Bucket Selected";
-                  return _buildSectionTile(
-                    context,
-                    icon: Icons.cloud_outlined,
-                    title: "Current Bucket",
-                    subtitle: bucketName,
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: Colors.transparent,
-                        isScrollControlled: true,
-                        builder: (_) => const BucketSelectorSheet(),
-                      ).then((_) {
-                        // Force rebuild? relying on riverpod provider invalidation usually better
-                        // Ideally SettingsScreen listens to a Stream or StateNotifier.
-                      });
-                    },
-                  );
-                },
-              ),
-              const Gap(24),
-              const Text(
-                "Sync & Recovery",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const Gap(12),
-              _buildSectionTile(
-                context,
-                icon: Icons.dashboard_customize_outlined,
-                title: "Sync Dashboard",
-                subtitle: "Queue status, sync now, retry failed",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SyncDashboardScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.tune,
-                title: "Sync Preferences",
-                subtitle: "Albums, media types, size limits",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SyncPreferencesScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.file_copy_outlined,
-                title: "Metadata Backup",
-                subtitle: "Export/import encrypted .tvmeta",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const MetadataBackupScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.analytics_outlined,
-                title: "Diagnostics",
-                subtitle: "Operational counters only",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const DiagnosticsScreen(),
-                    ),
-                  );
-                },
-              ),
+            // 2. Backup Storage Section
+            const Text(
+              "Backup Storage",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const Gap(12),
+            FutureBuilder(
+              future: bucketFuture,
+              builder: (context, snapshot) {
+                final bucketName = snapshot.data?.name ?? "No Bucket Selected";
+                return _buildSectionTile(
+                  context,
+                  icon: Icons.cloud_outlined,
+                  title: "Current Bucket",
+                  subtitle: bucketName,
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (_) => const BucketSelectorSheet(),
+                    ).then((_) {
+                      // Force rebuild? relying on riverpod provider invalidation usually better
+                      // Ideally SettingsScreen listens to a Stream or StateNotifier.
+                    });
+                  },
+                );
+              },
+            ),
+            const Gap(24),
+            const Text(
+              "Sync & Recovery",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const Gap(12),
+            _buildSectionTile(
+              context,
+              icon: Icons.dashboard_customize_outlined,
+              title: "Sync Dashboard",
+              subtitle: "Queue status, sync now, retry failed",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SyncDashboardScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.tune,
+              title: "Sync Preferences",
+              subtitle: "Albums, media types, size limits",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SyncPreferencesScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.file_copy_outlined,
+              title: "Metadata Backup",
+              subtitle: "Export/import encrypted .tvmeta",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MetadataBackupScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.analytics_outlined,
+              title: "Diagnostics",
+              subtitle: "Operational counters only",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
+                );
+              },
+            ),
 
-              const Gap(24),
+            const Gap(24),
 
-              // 3. Preferences Section
-              const Text(
-                "Preferences",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const Gap(12),
-              _buildSectionTile(
-                context,
-                icon: Icons.lock,
-                title: "Set Vault PIN",
-                subtitle: "Protect your vaulted files",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const VaultPinScreen(mode: VaultPinMode.set),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.lock_clock_outlined,
-                title: "App Lock",
-                subtitle: "PIN, password, or biometric",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const AppLockSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.shield_outlined,
-                title: "Privacy Policy",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const PrivacyPolicyScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.history,
-                title: "Activity Log",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ActivityLogScreen(),
-                    ),
-                  );
-                },
-              ),
-              const Gap(8),
-              _buildSectionTile(
-                context,
-                icon: Icons.info_outline,
-                title: "About TeleVault",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AboutScreen()),
-                  );
-                },
-              ),
-
-              const Gap(40),
-            ],
-          ),
+            // 3. Preferences Section
+            const Text(
+              "Preferences",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const Gap(12),
+            _buildSectionTile(
+              context,
+              icon: Icons.lock,
+              title: "Set Vault PIN",
+              subtitle: "Protect your vaulted files",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const VaultPinScreen(mode: VaultPinMode.set),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.lock_clock_outlined,
+              title: "App Lock",
+              subtitle: "PIN, password, or biometric",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AppLockSettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.shield_outlined,
+              title: "Privacy Policy",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.new_releases_outlined,
+              title: "Release Log",
+              subtitle: "Features included in each release",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ReleaseLogScreen()),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.info_outline,
+              title: "About TeleVault",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AboutScreen()),
+                );
+              },
+            ),
+            const Gap(12),
+          ],
         ),
       ),
     );
