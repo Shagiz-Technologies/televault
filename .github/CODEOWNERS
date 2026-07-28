@@ -1,0 +1,15 @@
+# TeleVault code ownership
+# Replace the individual owner with @Shagiz-Technologies/televault-maintainers
+# after that organization team is created and granted Write access.
+
+* @ZelalemGizachew
+
+# Security- and release-sensitive areas
+/.github/ @ZelalemGizachew
+/android/ @ZelalemGizachew
+/ios/ @ZelalemGizachew
+/third_party/ @ZelalemGizachew
+/pubspec.yaml @ZelalemGizachew
+/pubspec.lock @ZelalemGizachew
+/SECURITY.md @ZelalemGizachew
+/PRIVACY.md @ZelalemGizachew
