@@ -1,4 +1,4 @@
-﻿# TeleVault
+# TeleVault
 
 [![Flutter CI](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml/badge.svg)](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
@@ -26,6 +26,7 @@ TeleVault is an independent project and is not affiliated with, endorsed by, or 
 - [Build from source](#build-from-source)
 - [Roadmap preview](#roadmap-preview)
 - [Contributing](#contributing)
+- [Support TeleVault](#support-televault)
 
 ## What is TeleVault?
 
@@ -242,6 +243,10 @@ Near-term release-readiness work is tracked in [`ROADMAP.md`](ROADMAP.md) and Gi
 Contributions are welcome when they keep user privacy, data integrity, and Android reliability in mind.
 
 Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then open a focused issue or pull request. Changes touching privacy, permissions, encryption, Telegram login, sync, vault, or restore need careful review and Android testing.
+
+## Support TeleVault
+
+If TeleVault is useful to you and you want to support its continued development, you can make an optional contribution through [PayPal](https://www.paypal.com/paypalme/ZelalemGizachew). Contributions are voluntary and do not purchase support, roadmap priority, or access.
 
 ## Security
 
