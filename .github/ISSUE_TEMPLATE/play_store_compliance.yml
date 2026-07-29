@@ -1,0 +1,74 @@
+name: Play Store compliance
+description: Report an evidence-backed Android release or policy concern.
+title: "[Play Store]: "
+labels:
+  - play-store
+  - android
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for technical or policy-readiness findings. Do not include
+        Play Console credentials, signing files, service-account data, private
+        test-account access, user media, or unredacted scanner output.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Compliance area
+      options:
+        - Android permission policy
+        - Target SDK or build tools
+        - Native binary or 16 KB page size
+        - Privacy Policy or Data Safety
+        - Reviewer access
+        - Signing or release process
+        - Store listing or disclosure
+        - Release blocker
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Authoritative source
+      description: Link to the relevant Google Play or Android documentation when available.
+      placeholder: https://...
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: Finding
+      description: State the observed repository or artifact behavior and why it may be non-compliant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Include commands, paths, versions, or output with secrets and user data removed.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Release impact
+      options:
+        - Informational
+        - Needs review
+        - Blocks internal testing
+        - Blocks production release
+    validations:
+      required: true
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Suggested verification or remediation
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: This report contains no secrets, signing material, private Play Console data, Telegram sessions, personal media, databases, backups, or unredacted logs.
+          required: true
