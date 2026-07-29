@@ -73,9 +73,9 @@ dependencies:
   # --- Phase 5: Security & Backup ---
   encrypt: ^5.0.3
   crypto: ^3.0.3
-  google_sign_in: ^6.2.1
+  google_sign_in: ^7.2.0
   googleapis: ^13.1.0
-  extension_google_sign_in_as_googleapis_auth: ^2.0.12 # Helper for auth
+  extension_google_sign_in_as_googleapis_auth: ^3.0.0 # Helper for auth
   connectivity_plus: ^6.1.4
   battery_plus: ^6.2.1
   local_auth: ^2.3.0
