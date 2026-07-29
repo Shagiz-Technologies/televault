@@ -53,14 +53,14 @@ dependencies:
   photo_manager: ^3.5.0 # Access phone's gallery
   photo_manager_image_provider: ^2.1.2 # Image thumbnails from AssetEntity
   video_player: ^2.8.1
-  chewie: ^1.7.1
+  chewie: ^1.13.1
 
   # --- Sharing ---
   share_plus: ^10.1.2 # Share files and contentorage access
   file_picker: ^8.0.7
 
   # --- UI Utilities ---
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.9
   intl: ^0.19.0 # For date formatting
   gap: ^3.0.1 # Easier spacing than SizedBox
   google_fonts: ^6.2.1 # Nice typography
