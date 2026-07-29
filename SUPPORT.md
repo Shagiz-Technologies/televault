@@ -41,4 +41,3 @@ restrictions, or resolve Telegram service outages. Use
 [Telegram Support](https://telegram.org/support) for those problems.
 
 Support is best-effort and is not guaranteed.
-
