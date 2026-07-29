@@ -1,4 +1,4 @@
-﻿name: tele_vault
+name: tele_vault
 description: "Privacy-first Android media backup and vault app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -39,7 +39,7 @@ dependencies:
   # --- The Engine ---
   libtdjson: # Telegram Wrapper (JSON Interface)
     path: third_party/libtdjson
-  uuid: ^4.5.1 # For generating unique IDs
+  uuid: ^4.6.0 # For generating unique IDs
   ffi: ^2.1.3
 
   # --- Database (Virtual File System) ---
