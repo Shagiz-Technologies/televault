@@ -22,6 +22,7 @@ TeleVault is an independent project and is not affiliated with, endorsed by, or 
 - [How it works](#how-it-works)
 - [Features](#features)
 - [Privacy & security](#privacy--security)
+- [Legal & support](#legal--support)
 - [What is encrypted?](#what-is-encrypted)
 - [Build from source](#build-from-source)
 - [Roadmap preview](#roadmap-preview)
@@ -103,6 +104,22 @@ Important boundaries:
 - Normal non-vault uploads are not client-side encrypted by TeleVault today.
 
 Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting guidance is in [`SECURITY.md`](SECURITY.md).
+
+## Legal & Support
+
+The Shagiz Technologies Pages site is the canonical consumer-facing source for
+TeleVault policies and support guidance:
+
+- [TeleVault legal center](https://shagiz-technologies.github.io/tele-vault/)
+- [Privacy Policy](https://shagiz-technologies.github.io/tele-vault/privacy-policy.html)
+- [Terms of Service](https://shagiz-technologies.github.io/tele-vault/terms-of-service.html)
+- [Support](https://shagiz-technologies.github.io/tele-vault/support.html)
+- [Data & Deletion](https://shagiz-technologies.github.io/tele-vault/data-deletion.html)
+- [Security](https://shagiz-technologies.github.io/tele-vault/security.html)
+
+Repository Markdown documents provide technical and contributor-facing detail.
+If a repository summary and the consumer-facing policy differ, open an issue
+so maintainers can reconcile them; do not silently broaden privacy claims.
 
 ## What is encrypted?
 

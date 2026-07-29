@@ -1,5 +1,16 @@
 ﻿# Privacy
 
+The canonical consumer-facing TeleVault Privacy Policy is:
+
+<https://shagiz-technologies.github.io/tele-vault/privacy-policy.html>
+
+This Markdown file provides technical implementation context for contributors.
+The consumer-facing legal center also provides the
+[Terms of Service](https://shagiz-technologies.github.io/tele-vault/terms-of-service.html),
+[Support](https://shagiz-technologies.github.io/tele-vault/support.html), and
+[Data & Deletion](https://shagiz-technologies.github.io/tele-vault/data-deletion.html)
+guidance.
+
 TeleVault is designed so users back up media to Telegram storage controlled by their own Telegram account. This repository does not include a TeleVault-operated backend server.
 
 TeleVault is independent and is not affiliated with, endorsed by, or sponsored by Telegram.
@@ -34,3 +45,8 @@ TeleVault requests media permissions to scan photos and videos, biometric permis
 ## User responsibility
 
 Users are responsible for the Telegram account, private channels, credentials, device lock, passphrases, and local backups they choose to use with TeleVault.
+
+Clearing or uninstalling TeleVault normally removes local application data but
+does not automatically delete Telegram channels, messages, uploaded files, or
+metadata packages stored elsewhere. Shagiz Technologies cannot directly delete
+data held in a user-controlled Telegram account.

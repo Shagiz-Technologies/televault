@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gap/gap.dart';
 
+import '../../../core/config/legal_urls.dart';
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/services/external_url_service.dart';
+import '../../../core/theme/app_theme.dart';
 
-class PrivacyPolicyScreen extends StatelessWidget {
+class PrivacyPolicyScreen extends ConsumerWidget {
   const PrivacyPolicyScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    final year = DateTime.now().year;
+  static const lastUpdated = 'July 29, 2026';
 
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Privacy Policy')),
+      appBar: AppBar(title: const Text('Privacy & Transparency')),
       body: SingleChildScrollView(
         padding: AppResponsive.pagePaddingWithBottomSafe(
           context,
@@ -23,70 +27,70 @@ class PrivacyPolicyScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'TeleVault Privacy Policy',
+              'Privacy summary',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Last updated: $year',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+            const Gap(6),
+            const Text(
+              'Last policy update: $lastUpdated',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
-            const SizedBox(height: 24),
-
-            _buildSection(
-              'The Short Version',
-              'Your photos and videos go to your own private Telegram channels. We do not run a secret server full of your selfies. Honestly, we are too broke for that infrastructure, and your privacy benefits from our budget situation.',
+            const Gap(24),
+            const _PrivacySection(
+              title: 'Where your data goes',
+              body:
+                  'TeleVault stores library, bucket, label, settings, and sync '
+                  'metadata locally on your device. Selected backup media is '
+                  'sent through TDLib to Telegram channels connected to your '
+                  'Telegram account.',
             ),
-
-            _buildSection(
-              'What We Collect',
-              'TeleVault keeps local metadata on your device so it can remember what is pending, uploaded, failed, vaulted, or restored. Your actual media is not collected by us. It is backed up to Telegram storage that belongs to your account.',
+            const _PrivacySection(
+              title: 'Telegram is the storage provider',
+              body:
+                  'TeleVault does not operate a media-storage backend in the '
+                  'current implementation. Telegram and TDLib process login, '
+                  'channel access, uploaded files, and related account data '
+                  'under Telegram\'s own terms and privacy practices.',
             ),
-
-            _buildSection(
-              'What We Do Not Do',
-              'We do not sell your data. We do not rent it. We do not feed it to an AI model and call it innovation. We are not one of those companies casually training models on your private memories while smiling in a policy document.',
+            const _PrivacySection(
+              title: 'Encryption boundary',
+              body:
+                  'Normal non-vault media is not currently client-side '
+                  'encrypted by TeleVault before upload. Media intentionally '
+                  'processed through the TeleVault vault flow is encrypted by '
+                  'that flow.',
             ),
-
-            _buildSection(
-              'Telegram Storage',
-              'TeleVault uses Telegram TDLib to talk to Telegram. Your backups live in private Telegram channels controlled by your Telegram account. Telegram is the storage provider; TeleVault is the tool that organizes the backup flow.',
+            const _PrivacySection(
+              title: 'Diagnostics',
+              body:
+                  'The reviewed app includes local operational diagnostics. '
+                  'No external analytics or telemetry SDK was identified '
+                  'during open-source preparation. Never share credentials, '
+                  'private media, databases, or unredacted logs publicly.',
             ),
-
-            _buildSection(
-              'Vault Security',
-              'Vault items are encrypted before upload. Your Vault password is stored as a salted hash on-device, not as plain text. Phone Security can be used to unlock or reset access when configured.',
+            const _PrivacySection(
+              title: 'Deletion',
+              body:
+                  'Clearing app data or uninstalling normally removes local '
+                  'application data. It does not automatically delete '
+                  'Telegram bucket channels, messages, files, or exported '
+                  'metadata packages.',
             ),
-
-            _buildSection(
-              'Your Control',
-              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, Android may remove local app data, because Android does not care about our feelings.',
-            ),
-
-            const SizedBox(height: 28),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    '\u00A9 $year Copyright',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '\u121B\u1214\u122D \u123B\u120B\u120D \u1213\u12E5 \u1263\u12DD',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansEthiopic(
-                      fontSize: 8,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+            const Gap(6),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => openExternalUrl(
+                  context,
+                  ref.read(externalUrlServiceProvider),
+                  LegalUrls.privacyPolicy,
+                ),
+                icon: const Icon(Icons.open_in_new_rounded),
+                label: const Text('Read full Privacy Policy'),
               ),
             ),
           ],
@@ -94,27 +98,35 @@ class PrivacyPolicyScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildSection(String title, String content) {
+class _PrivacySection extends StatelessWidget {
+  const _PrivacySection({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
             style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 8),
+          const Gap(7),
           Text(
-            content,
-            style: TextStyle(
+            body,
+            style: const TextStyle(
               fontSize: 14,
-              color: Colors.grey[300],
+              color: AppTheme.textSecondary,
               height: 1.5,
             ),
           ),
