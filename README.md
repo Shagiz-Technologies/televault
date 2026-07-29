@@ -1,4 +1,4 @@
-﻿# TeleVault
+# TeleVault
 
 [![Flutter CI](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml/badge.svg)](https://github.com/Shagiz-Technologies/televault/actions/workflows/flutter-ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
@@ -247,6 +247,11 @@ Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then open a focused issue or pu
 
 Read [`SECURITY.md`](SECURITY.md) before reporting a vulnerability. Do not open public issues containing secrets, credentials, private metadata, personal media, or exploit details.
 
+## Support TeleVault
+
+TeleVault is maintained independently by Shagiz Technologies. If the project is useful to you, you can [support continued development through PayPal](https://www.paypal.com/paypalme/ZelalemGizachew).
+
+Sponsorship is optional and does not change access to the open-source project.
 ## License
 
 TeleVault is licensed under the MIT License. See [`LICENSE`](LICENSE).
