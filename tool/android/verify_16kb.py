@@ -67,13 +67,13 @@ def find_android_tool(name: str, explicit: str | None) -> Path:
     raise VerificationError(f"Unable to locate {executable}; pass its path explicitly")
 
 
-def find_readelf(explicit: str | None) -> Path:
-    executable = "llvm-readelf.exe" if os.name == "nt" else "llvm-readelf"
+def find_ndk_tool(name: str, explicit: str | None) -> Path:
+    executable = f"llvm-{name}.exe" if os.name == "nt" else f"llvm-{name}"
     if explicit:
         path = Path(explicit).resolve()
         if path.is_file():
             return path
-        raise VerificationError(f"llvm-readelf does not exist: {path}")
+        raise VerificationError(f"{executable} does not exist: {path}")
 
     ndk = os.environ.get("ANDROID_NDK_HOME") or os.environ.get("ANDROID_NDK_ROOT")
     candidates: list[Path] = []
@@ -85,7 +85,7 @@ def find_readelf(explicit: str | None) -> Path:
     candidates = sorted(candidates, key=ndk_version_key, reverse=True)
     if candidates:
         return candidates[0].resolve()
-    raise VerificationError("Unable to locate NDK llvm-readelf; pass --readelf")
+    raise VerificationError(f"Unable to locate NDK {executable}; pass --{name}")
 
 
 def verify_source_configuration(repo_root: Path) -> None:
@@ -177,10 +177,27 @@ def parse_load_alignments(output: str) -> list[int]:
     return alignments
 
 
-def verify_elf(path: Path, readelf: Path) -> tuple[list[int], bool, str]:
-    result = run([str(readelf), "-lW", str(path)])
-    alignments = parse_load_alignments(result.stdout)
-    relro = bool(re.search(r"^\s*GNU_RELRO\b", result.stdout, re.MULTILINE))
+def parse_objdump_load_alignments(output: str) -> list[int]:
+    alignments = []
+    for line in output.splitlines():
+        if re.match(r"^\s*LOAD\b", line):
+            match = re.search(r"align\s+2\*\*(\d+)\s*$", line)
+            if not match:
+                raise VerificationError(f"Unable to parse ELF LOAD alignment: {line}")
+            alignments.append(1 << int(match.group(1)))
+    if not alignments:
+        raise VerificationError("ELF has no LOAD segments")
+    return alignments
+
+
+def verify_elf(path: Path, readelf: Path, objdump: Path) -> tuple[list[int], bool, str]:
+    program_headers = run([str(objdump), "-p", str(path)]).stdout
+    alignments = parse_objdump_load_alignments(program_headers)
+    readelf_program_headers = run([str(readelf), "-lW", str(path)]).stdout
+    relro = bool(
+        re.search(r"^\s*RELRO\b", program_headers, re.MULTILINE)
+        or re.search(r"^\s*GNU_RELRO\b", readelf_program_headers, re.MULTILINE)
+    )
     if min(alignments) < MINIMUM_LOAD_ALIGNMENT:
         raise VerificationError(
             f"{path.name} has LOAD alignment {min(alignments):#x}; expected at least 0x4000"
@@ -188,6 +205,8 @@ def verify_elf(path: Path, readelf: Path) -> tuple[list[int], bool, str]:
     relro_status = "enabled"
     if not relro:
         sections = run([str(readelf), "-SW", str(path)]).stdout
+        if "Section Headers:" not in sections:
+            raise VerificationError("Unable to inspect ELF section headers")
         relocation_sections = re.findall(
             r"\.(?:got(?:\.plt)?|data\.rel\.ro|rel(?:a)?\.[^\s]+|init_array|fini_array)\b",
             sections,
@@ -239,6 +258,7 @@ def main() -> int:
     parser.add_argument("--zipalign")
     parser.add_argument("--aapt2")
     parser.add_argument("--readelf")
+    parser.add_argument("--objdump")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -251,7 +271,8 @@ def main() -> int:
     origins = json.loads(args.origins.read_text(encoding="utf-8"))
     zipalign = find_android_tool("zipalign", args.zipalign)
     aapt2 = find_android_tool("aapt2", args.aapt2)
-    readelf = find_readelf(args.readelf)
+    readelf = find_ndk_tool("readelf", args.readelf)
+    objdump = find_ndk_tool("objdump", args.objdump)
 
     config = run(["java", "-jar", str(bundletool), "dump", "config", f"--bundle={aab}"]).stdout
     if "PAGE_ALIGNMENT_16K" not in config:
@@ -308,7 +329,7 @@ def main() -> int:
                 library = native_root / entry
                 print(f"Verifying {entry}", flush=True)
                 try:
-                    alignments, relro, relro_status = verify_elf(library, readelf)
+                    alignments, relro, relro_status = verify_elf(library, readelf, objdump)
                 except VerificationError as error:
                     raise VerificationError(f"{entry}: {error}") from error
                 digest = sha256(library)

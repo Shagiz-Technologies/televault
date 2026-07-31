@@ -8,6 +8,7 @@ from verify_16kb import (  # noqa: E402
     VerificationError,
     parse_badging,
     parse_load_alignments,
+    parse_objdump_load_alignments,
     verify_provenance_digest,
 )
 
@@ -38,6 +39,13 @@ class Verify16KbTest(unittest.TestCase):
     def test_rejects_unparseable_load_alignment(self) -> None:
         with self.assertRaises(VerificationError):
             parse_load_alignments("  LOAD malformed\n")
+
+    def test_parses_official_objdump_load_alignments(self) -> None:
+        output = (
+            "    LOAD off 0x0000 vaddr 0x0000 paddr 0x0000 align 2**14\n"
+            "    LOAD off 0x4000 vaddr 0x4000 paddr 0x4000 align 2**16\n"
+        )
+        self.assertEqual(parse_objdump_load_alignments(output), [0x4000, 0x10000])
 
     def test_accepts_reviewed_native_hash(self) -> None:
         verify_provenance_digest(
