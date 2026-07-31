@@ -275,7 +275,7 @@ class SettingsScreen extends ConsumerWidget {
                             ? FileImage(io.File(photoPath))
                             : null,
                         onBackgroundImageError: photoPath != null
-                            ? (_, __) {
+                            ? (_, _) {
                                 // Handle error
                               }
                             : null,
