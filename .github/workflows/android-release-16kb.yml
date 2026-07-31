@@ -41,10 +41,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [[ -z "$sdk_root" || ! -d "$sdk_root/cmdline-tools" ]]; then
+            echo "Android SDK command-line tools are not configured" >&2
+            exit 1
+          fi
+          sdkmanager="$(find "$sdk_root/cmdline-tools" -type f -path '*/bin/sdkmanager' \
+            | sort -V | tail -n 1)"
+          if [[ -z "$sdkmanager" || ! -x "$sdkmanager" ]]; then
+            echo "Unable to locate sdkmanager under $sdk_root/cmdline-tools" >&2
+            exit 1
+          fi
           set +o pipefail
-          yes | sdkmanager --licenses >/dev/null
+          yes | "$sdkmanager" --licenses >/dev/null
           set -o pipefail
-          sdkmanager \
+          "$sdkmanager" \
             "platforms;android-36" \
             "build-tools;36.1.0" \
             "ndk;28.2.13676358"
