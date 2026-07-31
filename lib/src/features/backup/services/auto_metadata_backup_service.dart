@@ -6,17 +6,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_gateway.dart';
+import '../../../core/services/telegram_error.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import 'metadata_backup_service.dart';
 
 final autoMetadataBackupServiceProvider = Provider<AutoMetadataBackupService>((
   ref,
 ) {
-  return AutoMetadataBackupService(
+  final service = AutoMetadataBackupService(
     ref.watch(databaseProvider),
     ref.watch(telegramServiceProvider),
     ref.watch(metadataBackupServiceProvider),
+    ref.watch(telegramReliabilityServiceProvider),
   );
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
 class AutoMetadataBackupResult {
@@ -45,6 +50,7 @@ class AutoMetadataBackupService {
   final AppDatabase _db;
   final TelegramGateway _telegram;
   final MetadataBackupService _metadataBackupService;
+  final TelegramReliabilityService _telegramReliability;
 
   static const channelTitle = 'TeleVault';
   static const channelDescription =
@@ -61,12 +67,20 @@ class AutoMetadataBackupService {
 
   bool _backupRunning = false;
   bool _restoreRunning = false;
+  StreamSubscription<TelegramReliabilityState>? _telegramStateSubscription;
 
   AutoMetadataBackupService(
     this._db,
     this._telegram,
     this._metadataBackupService,
-  );
+    this._telegramReliability,
+  ) {
+    _telegramStateSubscription = _telegramReliability.states.listen((state) {
+      if (!state.isBlockedAt(DateTime.now())) {
+        unawaited(_retryThresholdBackup());
+      }
+    });
+  }
 
   Future<int> getBackupEveryFiles() async {
     final raw = await _getSetting(_keyBackupEveryFiles);
@@ -93,7 +107,31 @@ class AutoMetadataBackupService {
 
     final threshold = await getBackupEveryFiles();
     if (next < threshold) return;
-    unawaited(backupNow(reason: 'upload_threshold'));
+    unawaited(_triggerBackup(reason: 'upload_threshold'));
+  }
+
+  Future<void> _retryThresholdBackup() async {
+    final uploaded =
+        int.tryParse(await _getSetting(_keyUploadedSinceBackup) ?? '') ?? 0;
+    if (uploaded >= await getBackupEveryFiles()) {
+      await _triggerBackup(reason: 'flood_wait_resume');
+    }
+  }
+
+  Future<void> _triggerBackup({required String reason}) async {
+    if (_backupRunning ||
+        _telegramReliability.currentState.isBlockedAt(DateTime.now())) {
+      return;
+    }
+    try {
+      await backupNow(reason: reason);
+    } on TelegramError {
+      // Exact waits remain persisted by the shared write coordinator. The
+      // threshold count is intentionally retained for the resume event.
+    } catch (_) {
+      // Automatic metadata backup is retried by the next completed upload or
+      // explicit user action; background failures must not escape unawaited.
+    }
   }
 
   Future<AutoMetadataBackupResult> backupNow({required String reason}) async {
@@ -178,35 +216,54 @@ class AutoMetadataBackupService {
     }
 
     if (!createIfMissing) {
-      throw Exception('TeleVault metadata channel was not found.');
-    }
-
-    final response = await _telegram.request({
-      '@type': 'createNewSupergroupChat',
-      'title': channelTitle,
-      'is_channel': true,
-      'description': channelDescription,
-    }, timeout: const Duration(seconds: 30));
-
-    if (response['@type'] == 'error') {
-      throw Exception(
-        response['message'] ?? 'Unable to create TeleVault metadata channel.',
+      throw const TelegramError(
+        code: null,
+        tdlibMessage: 'TeleVault metadata channel was not found',
+        operation: 'find_metadata_channel',
+        category: TelegramErrorCategory.userActionRequired,
+        canRetry: false,
+        userActionRequired: true,
       );
     }
+
+    final response = await _telegramReliability.executeWrite(
+      {
+        '@type': 'createNewSupergroupChat',
+        'title': channelTitle,
+        'is_channel': true,
+        'description': channelDescription,
+      },
+      operation: 'create_metadata_channel',
+      timeout: const Duration(seconds: 30),
+    );
 
     var chatId = _extractBigInt(response['id']);
     if (chatId == null) {
-      final event = await _telegram.waitForUpdate(
-        (u) =>
-            u['@type'] == 'updateNewChat' &&
-            u['chat']?['title'] == channelTitle,
-        timeout: const Duration(seconds: 30),
-      );
+      TelegramUpdate event;
+      try {
+        event = await _telegram.waitForUpdate(
+          (u) =>
+              u['@type'] == 'updateNewChat' &&
+              u['chat']?['title'] == channelTitle,
+          timeout: const Duration(seconds: 30),
+        );
+      } catch (error) {
+        throw TelegramErrorParser.fromThrown(
+          error,
+          operation: 'create_metadata_channel',
+        );
+      }
       chatId = _extractBigInt(event['chat']?['id']);
     }
 
     if (chatId == null) {
-      throw Exception('Telegram did not return the metadata channel id.');
+      throw const TelegramError(
+        code: null,
+        tdlibMessage: 'Telegram did not return the metadata channel id',
+        operation: 'create_metadata_channel',
+        category: TelegramErrorCategory.transient,
+        canRetry: true,
+      );
     }
 
     await _setSetting(_keyChatId, chatId.toString());
@@ -290,7 +347,13 @@ class AutoMetadataBackupService {
       'message_thread_id': 0,
     }, timeout: const Duration(seconds: 20));
 
-    if (response['@type'] == 'error') return null;
+    if (response['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'read_metadata_chat',
+        chatId: BigInt.from(chatId),
+      )!;
+    }
     final messages = response['messages'] as List<dynamic>? ?? const [];
     for (final raw in messages.cast<Map<String, dynamic>>()) {
       if (_messageHasMarker(raw)) return raw;
@@ -306,7 +369,10 @@ class AutoMetadataBackupService {
     }, timeout: const Duration(seconds: 30));
 
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to read Telegram chats.');
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'read_metadata_chats',
+      )!;
     }
 
     final ids = response['chat_ids'] as List<dynamic>? ?? const [];
@@ -320,7 +386,13 @@ class AutoMetadataBackupService {
       '@type': 'getChat',
       'chat_id': chatIdInt,
     }, timeout: const Duration(seconds: 10));
-    if (response['@type'] == 'error') return null;
+    if (response['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'read_metadata_chat',
+        chatId: chatId,
+      )!;
+    }
     return response;
   }
 
@@ -335,88 +407,48 @@ class AutoMetadataBackupService {
   ) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) {
-      throw Exception('Invalid TeleVault metadata channel id.');
+      throw TelegramError(
+        code: null,
+        tdlibMessage: 'Invalid TeleVault metadata channel id',
+        operation: 'upload_metadata',
+        chatId: chatId,
+        category: TelegramErrorCategory.permanent,
+        canRetry: false,
+      );
     }
 
     final captionText =
         '$_captionPrefix\n$marker\nReason: $reason\nCreated: ${DateTime.now().toIso8601String()}';
 
-    final uploaded = await _telegram.request({
-      '@type': 'preliminaryUploadFile',
-      'file': {'@type': 'inputFileLocal', 'path': snapshot.path},
-      'file_type': {'@type': 'fileTypeDocument'},
-      'priority': 1,
-    }, timeout: const Duration(minutes: 3));
-    if (uploaded['@type'] == 'error') {
-      throw Exception(
-        uploaded['message'] ?? 'Unable to upload TeleVault metadata.',
-      );
-    }
-    final uploadedFileId = _extractInt(uploaded['id']);
-    if (uploaded['@type'] != 'file' || uploadedFileId == null) {
-      throw Exception('Telegram metadata upload file id missing.');
-    }
-
-    final response = await _telegram.request({
-      '@type': 'sendMessage',
-      'chat_id': chatIdInt,
-      'input_message_content': {
+    return _telegramReliability.sendMessageAndWait(
+      operation: 'upload_metadata',
+      chatId: chatId,
+      inputMessageContent: {
         '@type': 'inputMessageDocument',
-        'document': {'@type': 'inputFileId', 'id': uploadedFileId},
+        'document': {'@type': 'inputFileLocal', 'path': snapshot.path},
         'thumbnail': null,
         'disable_content_type_detection': false,
         'caption': {'@type': 'formattedText', 'text': captionText},
       },
-    }, timeout: const Duration(minutes: 3));
-
-    if (response['@type'] == 'error') {
-      throw Exception(
-        response['message'] ?? 'Unable to upload TeleVault metadata.',
-      );
-    }
-    if (response['@type'] != 'message') {
-      throw Exception('Unexpected Telegram response: ${response['@type']}');
-    }
-
-    final tempMessageId = _extractInt(response['id']);
-    if (tempMessageId == null) {
-      throw Exception('Telegram message id missing for metadata upload.');
-    }
-
-    final sendingStateType = response['sending_state']?['@type']?.toString();
-    if (sendingStateType == null) return tempMessageId;
-
-    final update = await _telegram.waitForUpdate((event) {
-      final type = event['@type'];
-      if (type != 'updateMessageSendSucceeded' &&
-          type != 'updateMessageSendFailed') {
-        return false;
-      }
-      final oldId = _extractInt(event['old_message_id']);
-      final updateChat = event['message']?['chat_id']?.toString();
-      return oldId == tempMessageId && updateChat == chatId.toString();
-    }, timeout: const Duration(minutes: 5));
-
-    if (update['@type'] == 'updateMessageSendFailed') {
-      throw Exception(
-        update['error_message']?.toString() ??
-            'TeleVault metadata upload failed.',
-      );
-    }
-
-    return _extractInt(update['message']?['id']) ?? tempMessageId;
+      timeout: const Duration(minutes: 5),
+    );
   }
 
   Future<void> _deletePreviousSnapshot(BigInt chatId, int messageId) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) return;
     try {
-      await _telegram.request({
-        '@type': 'deleteMessages',
-        'chat_id': chatIdInt,
-        'message_ids': [messageId],
-        'revoke': true,
-      }, timeout: const Duration(seconds: 20));
+      await _telegramReliability.executeWrite(
+        {
+          '@type': 'deleteMessages',
+          'chat_id': chatIdInt,
+          'message_ids': [messageId],
+          'revoke': true,
+        },
+        operation: 'delete_previous_metadata',
+        chatId: chatId,
+        timeout: const Duration(seconds: 20),
+      );
     } catch (_) {
       // Keeping an older metadata package is safer than risking the new one.
     }
@@ -443,7 +475,10 @@ class AutoMetadataBackupService {
     }, timeout: const Duration(minutes: 3));
 
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to download metadata.');
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'download_metadata',
+      )!;
     }
 
     final localPath = response['local']?['path']?.toString();
@@ -499,6 +534,10 @@ class AutoMetadataBackupService {
     if (value is int) return BigInt.from(value);
     if (value is String) return BigInt.tryParse(value);
     return null;
+  }
+
+  Future<void> dispose() async {
+    await _telegramStateSubscription?.cancel();
   }
 }
 

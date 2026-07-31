@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
+import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
@@ -208,7 +209,10 @@ class SafeUninstallBackupService {
     }, timeout: const Duration(seconds: 30));
 
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to read Telegram chats.');
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'read_safe_uninstall_chats',
+      )!;
     }
 
     final ids = response['chat_ids'] as List<dynamic>? ?? const [];
@@ -290,7 +294,10 @@ class SafeUninstallBackupService {
     }, timeout: const Duration(minutes: 3));
 
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to download metadata.');
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'download_safe_uninstall_metadata',
+      )!;
     }
 
     final localPath = response['local']?['path']?.toString();

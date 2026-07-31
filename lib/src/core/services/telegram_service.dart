@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'telegram_gateway.dart';
+import 'telegram_error.dart';
 
 final telegramServiceProvider = Provider<TelegramService>((ref) {
   final service = TelegramService();
@@ -331,7 +332,14 @@ class TelegramService implements TelegramGateway {
     final apiId = int.tryParse(apiIdString) ?? 0;
 
     if (apiId <= 0 || apiHash.isEmpty) {
-      throw StateError('Telegram API credentials are missing or invalid.');
+      throw const TelegramError(
+        code: null,
+        tdlibMessage: 'Telegram API credentials are missing or invalid',
+        operation: 'configure_tdlib',
+        category: TelegramErrorCategory.userActionRequired,
+        canRetry: false,
+        userActionRequired: true,
+      );
     }
 
     await Directory(dbPath).create(recursive: true);
@@ -357,7 +365,7 @@ class TelegramService implements TelegramGateway {
     }, timeout: const Duration(seconds: 20));
 
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to configure Telegram');
+      throw TelegramErrorParser.parse(response, operation: 'configure_tdlib')!;
     }
 
     _tdlibParametersSent = true;
@@ -455,9 +463,18 @@ class TelegramService implements TelegramGateway {
       return Map<String, dynamic>.from(response);
     }
     if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Unable to read auth state');
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'read_authorization_state',
+      )!;
     }
-    throw Exception('Unexpected auth state response: ${response['@type']}');
+    throw const TelegramError(
+      code: null,
+      tdlibMessage: 'Unexpected authorization state response',
+      operation: 'read_authorization_state',
+      category: TelegramErrorCategory.transient,
+      canRetry: true,
+    );
   }
 
   Future<void> checkDatabaseEncryptionKey() async {
@@ -485,9 +502,10 @@ class TelegramService implements TelegramGateway {
     }, timeout: const Duration(seconds: 20));
 
     if (response['@type'] == 'error') {
-      throw Exception(
-        response['message'] ?? 'Unable to unlock Telegram database',
-      );
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'unlock_tdlib_database',
+      )!;
     }
 
     _databaseEncryptionKeyChecked = true;
@@ -579,23 +597,6 @@ class TelegramService implements TelegramGateway {
     if (Platform.isMacOS) return 'macOS';
     if (Platform.isLinux) return 'Linux';
     return 'TeleVault';
-  }
-
-  Future<void> sendVerificationCode(String code) async {
-    final me = await request({'@type': 'getMe'});
-    final chatId = me['id'];
-
-    await request({
-      '@type': 'sendMessage',
-      'chat_id': chatId,
-      'input_message_content': {
-        '@type': 'inputMessageText',
-        'text': {
-          '@type': 'formattedText',
-          'text': 'Your TeleVault Reset Code is: $code',
-        },
-      },
-    });
   }
 
   @override

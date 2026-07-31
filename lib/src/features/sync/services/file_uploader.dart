@@ -9,7 +9,9 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
 import '../../../core/services/diagnostics_service.dart';
+import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_gateway.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../backup/services/auto_metadata_backup_service.dart';
 import '../../settings/services/settings_service.dart';
@@ -22,6 +24,7 @@ final fileUploaderProvider = Provider<FileUploader>((ref) {
     ref.watch(settingsServiceProvider),
     ref.watch(diagnosticsServiceProvider),
     ref.watch(syncConstraintsServiceProvider),
+    ref.watch(telegramReliabilityServiceProvider),
     ref.watch(autoMetadataBackupServiceProvider),
   );
   ref.onDispose(() {
@@ -37,6 +40,7 @@ class FileUploader {
   final DiagnosticsService _diagnosticsService;
   final SyncConstraintsService _constraintsService;
   final AutoMetadataBackupService? _autoMetadataBackupService;
+  final TelegramReliabilityService _telegramReliability;
 
   final _progressController = StreamController<Map<String, double>>.broadcast();
   final Map<String, double> _currentProgress = {};
@@ -45,7 +49,9 @@ class FileUploader {
   StreamSubscription? _progressSub;
   StreamSubscription? _pendingSub;
   StreamSubscription? _constraintsSub;
+  StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
   Timer? _retryWakeTimer;
+  DateTime? _scheduledWakeAt;
   _UploadWakeRequest? _queuedWake;
   bool _isUploading = false;
   bool _started = false;
@@ -57,7 +63,8 @@ class FileUploader {
     this._telegramService,
     this._settingsService,
     this._diagnosticsService,
-    this._constraintsService, [
+    this._constraintsService,
+    this._telegramReliability, [
     this._autoMetadataBackupService,
   ]) {
     _initProgressListener();
@@ -119,12 +126,71 @@ class FileUploader {
     _constraintsSub = _constraintsService.watchConstraintChanges().listen((_) {
       wake();
     });
-
-    _retryWakeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      wake();
+    _telegramStateSub = _telegramReliability.states.listen((state) {
+      unawaited(_handleTelegramState(state));
     });
 
+    await _handleTelegramState(_telegramReliability.currentState);
     wake();
+  }
+
+  Future<void> _handleTelegramState(TelegramReliabilityState state) async {
+    if (_disposed) return;
+    await _applyAccountUploadLimit(state);
+    if (state.isBlockedAt(DateTime.now())) {
+      _scheduleWakeAt(state.blockedUntil);
+    } else {
+      wake();
+    }
+  }
+
+  Future<void> _applyAccountUploadLimit(TelegramReliabilityState state) async {
+    if (!state.capabilityResolved) return;
+    final maxBytes = state.effectiveUploadLimitMb * 1024 * 1024;
+    await (_db.update(_db.files)..where(
+          (t) =>
+              t.status.isIn([
+                FileSyncStatus.pending.dbValue,
+                FileSyncStatus.failed.dbValue,
+              ]) &
+              t.size.isBiggerThanValue(maxBytes),
+        ))
+        .write(
+          FilesCompanion(
+            status: Value(FileSyncStatus.failed.dbValue),
+            lastError: Value(
+              'This file exceeds the current Telegram account limit of '
+              '${state.effectiveUploadLimitMb} MiB.',
+            ),
+            nextRetryAt: const Value(null),
+            telegramErrorCode: const Value(null),
+            telegramErrorCategory: Value(
+              TelegramErrorCategory.userActionRequired.name,
+            ),
+            telegramRetryAfter: const Value(null),
+            lastTelegramOperation: const Value('validate_upload_limit'),
+            userActionRequired: const Value(true),
+          ),
+        );
+
+    await (_db.update(_db.files)..where(
+          (t) =>
+              t.status.equals(FileSyncStatus.failed.dbValue) &
+              t.lastTelegramOperation.equals('validate_upload_limit') &
+              t.size.isSmallerOrEqualValue(maxBytes),
+        ))
+        .write(
+          FilesCompanion(
+            status: Value(FileSyncStatus.pending.dbValue),
+            lastError: const Value(null),
+            nextRetryAt: const Value(null),
+            telegramErrorCode: const Value(null),
+            telegramErrorCategory: const Value(null),
+            telegramRetryAfter: const Value(null),
+            lastTelegramOperation: const Value(null),
+            userActionRequired: const Value(false),
+          ),
+        );
   }
 
   Future<void> _recoverInterruptedUploads() async {
@@ -150,6 +216,11 @@ class FileUploader {
             status: Value(FileSyncStatus.pending.dbValue),
             nextRetryAt: const Value(null),
             lastError: const Value(null),
+            telegramErrorCode: const Value(null),
+            telegramErrorCategory: const Value(null),
+            telegramRetryAfter: const Value(null),
+            lastTelegramOperation: const Value(null),
+            userActionRequired: const Value(false),
           ),
         );
   }
@@ -262,7 +333,16 @@ class FileUploader {
           _db.buckets,
         )..where((t) => t.id.equals(nextFile.bucketId))).getSingleOrNull();
         if (bucket == null) {
-          await _markFailed(nextFile, 'Active bucket no longer exists');
+          await _markFailed(
+            nextFile,
+            const _UploadFailure(
+              message: 'The selected backup bucket no longer exists.',
+              category: TelegramErrorCategory.permanent,
+              canRetry: false,
+              operation: 'resolve_bucket',
+              continueQueue: true,
+            ),
+          );
           continue;
         }
 
@@ -290,6 +370,11 @@ class FileUploader {
               retryCount: const Value(0),
               nextRetryAt: const Value(null),
               lastError: const Value(null),
+              telegramErrorCode: const Value(null),
+              telegramErrorCategory: const Value(null),
+              telegramRetryAfter: const Value(null),
+              lastTelegramOperation: const Value(null),
+              userActionRequired: const Value(false),
             ),
           );
           unawaited(
@@ -299,10 +384,10 @@ class FileUploader {
           if (autoMetadataBackupService != null) {
             unawaited(autoMetadataBackupService.noteMediaUploadCompleted());
           }
-        } catch (e) {
-          final error = e.toString();
-          await _markFailed(nextFile, error);
-          if (!_shouldRetryAutomatically(error)) {
+        } catch (error) {
+          final failure = _normalizeFailure(error);
+          await _markFailed(nextFile, failure);
+          if (!failure.continueQueue) {
             break;
           }
         } finally {
@@ -316,6 +401,7 @@ class FileUploader {
       }
     } finally {
       _isUploading = false;
+      unawaited(_scheduleNextWake());
       final queuedWake = _queuedWake;
       _queuedWake = null;
       if (queuedWake != null && !_disposed) {
@@ -328,6 +414,11 @@ class FileUploader {
   }
 
   Future<int> retryFailed({int? limit, int? bucketId}) async {
+    final gate = _telegramReliability.currentState;
+    if (gate.isBlockedAt(DateTime.now())) {
+      _scheduleWakeAt(gate.blockedUntil);
+      return 0;
+    }
     final failedRows =
         await (_db.select(_db.files)
               ..where(
@@ -347,14 +438,26 @@ class FileUploader {
               ..limit(limit ?? 100000))
             .get();
 
-    if (failedRows.isEmpty) return 0;
+    final retryableRows = failedRows
+        .where(
+          (row) =>
+              row.lastTelegramOperation != 'validate_upload_limit' ||
+              _telegramReliability.canUploadBytes(row.size),
+        )
+        .toList();
+    if (retryableRows.isEmpty) return 0;
 
-    final ids = failedRows.map((e) => e.id).toList();
+    final ids = retryableRows.map((e) => e.id).toList();
     await (_db.update(_db.files)..where((t) => t.id.isIn(ids))).write(
       FilesCompanion(
         status: Value(FileSyncStatus.pending.dbValue),
         nextRetryAt: const Value(null),
         lastError: const Value(null),
+        telegramErrorCode: const Value(null),
+        telegramErrorCategory: const Value(null),
+        telegramRetryAfter: const Value(null),
+        lastTelegramOperation: const Value(null),
+        userActionRequired: const Value(false),
       ),
     );
 
@@ -370,6 +473,11 @@ class FileUploader {
   }
 
   Future<bool> _canUpload({required bool ignoreConstraints}) async {
+    final reliability = _telegramReliability.currentState;
+    if (reliability.isBlockedAt(DateTime.now())) {
+      _scheduleWakeAt(reliability.blockedUntil);
+      return false;
+    }
     return true;
   }
 
@@ -445,11 +553,15 @@ class FileUploader {
     return null;
   }
 
-  Future<void> _markFailed(File file, String error) async {
+  Future<void> _markFailed(File file, _UploadFailure failure) async {
     final retry = file.retryCount + 1;
     final normalizedRetry = retry < 1 ? 1 : (retry > 6 ? 6 : retry);
     final backoffSeconds = (15 * (1 << (normalizedRetry - 1))).clamp(15, 900);
-    final retryAt = _shouldRetryAutomatically(error)
+    final gate = _telegramReliability.currentState;
+    final retryAt = failure.retryAfter != null
+        ? gate.blockedUntil ?? DateTime.now().add(failure.retryAfter!)
+        : failure.category == TelegramErrorCategory.transient &&
+              failure.canRetry
         ? DateTime.now().add(Duration(seconds: backoffSeconds))
         : null;
 
@@ -458,24 +570,70 @@ class FileUploader {
         status: Value(FileSyncStatus.failed.dbValue),
         retryCount: Value(retry),
         nextRetryAt: Value(retryAt),
-        lastError: Value(error),
+        lastError: Value(failure.message),
+        telegramErrorCode: Value(failure.code),
+        telegramErrorCategory: Value(failure.category.name),
+        telegramRetryAfter: Value(
+          failure.retryAfter == null
+              ? null
+              : gate.serverRetryUntil ??
+                    DateTime.now().add(failure.retryAfter!),
+        ),
+        lastTelegramOperation: Value(failure.operation),
+        userActionRequired: Value(failure.userActionRequired),
       ),
     );
+    _scheduleWakeAt(retryAt);
     unawaited(
       _diagnosticsService.increment(DiagnosticsService.uploadFailureKey),
     );
   }
 
-  bool _shouldRetryAutomatically(String error) {
-    final normalized = error.toLowerCase();
-    return !normalized.contains('inputfile is not specified') &&
-        !normalized.contains('local media file is no longer available') &&
-        !normalized.contains('gallery item is no longer available') &&
-        !normalized.contains('invalid telegram chat id') &&
-        !normalized.contains('active bucket no longer exists');
+  _UploadFailure _normalizeFailure(Object error) {
+    if (error is _LocalUploadException) return error.failure;
+    if (error is TelegramError) {
+      return _UploadFailure(
+        message: error.userMessage,
+        category: error.category,
+        canRetry: error.canRetry,
+        operation: error.operation,
+        code: error.code,
+        retryAfter: error.retryAfter,
+        userActionRequired: error.userActionRequired,
+        continueQueue: error.category == TelegramErrorCategory.permanent,
+      );
+    }
+    final typed = TelegramErrorParser.fromThrown(
+      error,
+      operation: 'upload_media',
+    );
+    return _UploadFailure(
+      message: typed.userMessage,
+      category: typed.category,
+      canRetry: typed.canRetry,
+      operation: typed.operation,
+      code: typed.code,
+      retryAfter: typed.retryAfter,
+      userActionRequired: typed.userActionRequired,
+      continueQueue: false,
+    );
   }
 
   Future<int> _uploadFile(File file, BigInt chatId) async {
+    if (!_telegramReliability.canUploadBytes(file.size)) {
+      final limit = _telegramReliability.effectiveUploadLimitMb;
+      throw _LocalUploadException(
+        _UploadFailure(
+          message:
+              'This file exceeds the current Telegram account limit of $limit MiB.',
+          category: TelegramErrorCategory.userActionRequired,
+          canRetry: false,
+          operation: 'validate_upload_limit',
+          userActionRequired: true,
+          continueQueue: true,
+        ),
+      );
+    }
     final localFile = await _resolveUploadFile(file);
     final uploadPath = localFile.absolute.path;
     _uploadProgressAliases[uploadPath] = file.localPath;
@@ -494,13 +652,29 @@ class FileUploader {
     // Encrypted vault paths must never fall back to the original gallery item.
     final assetId = file.assetId;
     if (file.isEncrypted || assetId == null || assetId.isEmpty) {
-      throw Exception('The local media file is no longer available.');
+      throw const _LocalUploadException(
+        _UploadFailure(
+          message: 'The local media file is no longer available.',
+          category: TelegramErrorCategory.permanent,
+          canRetry: false,
+          operation: 'resolve_local_file',
+          continueQueue: true,
+        ),
+      );
     }
 
     final asset = await AssetEntity.fromId(assetId);
     final resolved = await asset?.originFile ?? await asset?.file;
     if (resolved == null || !await resolved.exists()) {
-      throw Exception('The gallery item is no longer available.');
+      throw const _LocalUploadException(
+        _UploadFailure(
+          message: 'The gallery item is no longer available.',
+          category: TelegramErrorCategory.permanent,
+          canRetry: false,
+          operation: 'resolve_gallery_item',
+          continueQueue: true,
+        ),
+      );
     }
     return resolved;
   }
@@ -508,7 +682,14 @@ class FileUploader {
   Future<int> _sendFile(File file, BigInt chatId, String uploadPath) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) {
-      throw Exception('Invalid Telegram chat id');
+      throw TelegramError(
+        code: null,
+        tdlibMessage: 'Invalid Telegram chat id',
+        operation: 'validate_bucket_chat',
+        chatId: chatId,
+        category: TelegramErrorCategory.permanent,
+        canRetry: false,
+      );
     }
 
     final chatInfo = await _telegramService.request({
@@ -516,108 +697,30 @@ class FileUploader {
       'chat_id': chatIdInt,
     }, timeout: const Duration(seconds: 20));
     if (chatInfo['@type'] == 'error') {
-      throw Exception(chatInfo['message'] ?? 'Unable to access bucket channel');
+      final error = TelegramErrorParser.parse(
+        chatInfo,
+        operation: 'read_bucket_chat',
+        chatId: chatId,
+      )!;
+      await _telegramReliability.registerError(error);
+      throw error;
     }
 
     final preferences = await _settingsService.getSyncPreferences(
       bucketId: file.bucketId,
     );
-    final uploadedFile = await _preliminaryUpload(
-      file,
-      preferences.uploadFormat,
-      uploadPath,
-    );
     final content = _buildInputMessageContent(
       file,
       preferences.uploadFormat,
       uploadPath,
-      uploadedFile,
+      {'@type': 'inputFileLocal', 'path': uploadPath},
     );
-
-    final response = await _telegramService.request({
-      '@type': 'sendMessage',
-      'chat_id': chatIdInt,
-      'input_message_content': content,
-    }, timeout: const Duration(seconds: 90));
-
-    if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Telegram sendMessage failed');
-    }
-    if (response['@type'] != 'message') {
-      throw Exception('Unexpected response: ${response['@type']}');
-    }
-
-    final tempMessageId = _extractInt(response['id']);
-    if (tempMessageId == null) {
-      throw Exception('Telegram message id missing');
-    }
-
-    final sendingStateType = response['sending_state']?['@type']?.toString();
-    if (sendingStateType == null) {
-      return tempMessageId;
-    }
-
-    final sendUpdate = await _telegramService.waitForUpdate((update) {
-      final type = update['@type'];
-      if (type == 'updateMessageSendSucceeded') {
-        final oldId = _extractInt(update['old_message_id']);
-        final updateChat = update['message']?['chat_id']?.toString();
-        return oldId == tempMessageId && updateChat == chatId.toString();
-      }
-      if (type == 'updateMessageSendFailed') {
-        final oldId = _extractInt(update['old_message_id']);
-        final updateChat = update['message']?['chat_id']?.toString();
-        return oldId == tempMessageId && updateChat == chatId.toString();
-      }
-      return false;
-    }, timeout: _sendCompletionTimeout(file.size));
-
-    if (sendUpdate['@type'] == 'updateMessageSendFailed') {
-      final err =
-          sendUpdate['error_message']?.toString() ?? 'Telegram send failed';
-      throw Exception(err);
-    }
-
-    return _extractInt(sendUpdate['message']?['id']) ?? tempMessageId;
-  }
-
-  Future<Map<String, dynamic>> _preliminaryUpload(
-    File file,
-    SyncUploadFormat uploadFormat,
-    String uploadPath,
-  ) async {
-    final response = await _telegramService.request({
-      '@type': 'preliminaryUploadFile',
-      'file': {'@type': 'inputFileLocal', 'path': uploadPath},
-      'file_type': {'@type': _tdFileType(file, uploadFormat, uploadPath)},
-      'priority': 1,
-    }, timeout: const Duration(seconds: 90));
-
-    if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Telegram upload failed');
-    }
-    if (response['@type'] != 'file') {
-      throw Exception('Unexpected upload response: ${response['@type']}');
-    }
-
-    final fileId = _extractInt(response['id']);
-    if (fileId == null || fileId <= 0) {
-      throw Exception('Telegram upload file id missing');
-    }
-    return {'@type': 'inputFileId', 'id': fileId};
-  }
-
-  String _tdFileType(
-    File file,
-    SyncUploadFormat uploadFormat,
-    String uploadPath,
-  ) {
-    if (uploadFormat == SyncUploadFormat.compressedMedia &&
-        _isCompressibleMedia(file)) {
-      if (_isImagePath(uploadPath)) return 'fileTypePhoto';
-      if (_isVideoPath(uploadPath)) return 'fileTypeVideo';
-    }
-    return 'fileTypeDocument';
+    return _telegramReliability.sendMessageAndWait(
+      operation: 'upload_media',
+      chatId: chatId,
+      inputMessageContent: content,
+      timeout: _sendCompletionTimeout(file.size),
+    );
   }
 
   Map<String, dynamic> _buildInputMessageContent(
@@ -724,6 +827,40 @@ class FileUploader {
     return null;
   }
 
+  Future<void> _scheduleNextWake() async {
+    if (_disposed) return;
+    final gate = _telegramReliability.currentState;
+    if (gate.isBlockedAt(DateTime.now())) {
+      _scheduleWakeAt(gate.blockedUntil);
+      return;
+    }
+    final row =
+        await (_db.select(_db.files)
+              ..where(
+                (t) =>
+                    t.status.equals(FileSyncStatus.failed.dbValue) &
+                    t.nextRetryAt.isNotNull(),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.nextRetryAt)])
+              ..limit(1))
+            .getSingleOrNull();
+    _scheduleWakeAt(row?.nextRetryAt);
+  }
+
+  void _scheduleWakeAt(DateTime? wakeAt) {
+    if (_disposed || wakeAt == null) return;
+    if (_scheduledWakeAt == wakeAt && _retryWakeTimer?.isActive == true) {
+      return;
+    }
+    _retryWakeTimer?.cancel();
+    _scheduledWakeAt = wakeAt;
+    final delay = wakeAt.difference(DateTime.now());
+    _retryWakeTimer = Timer(delay > Duration.zero ? delay : Duration.zero, () {
+      _scheduledWakeAt = null;
+      wake();
+    });
+  }
+
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -731,6 +868,7 @@ class FileUploader {
     await _progressSub?.cancel();
     await _pendingSub?.cancel();
     await _constraintsSub?.cancel();
+    await _telegramStateSub?.cancel();
     _retryWakeTimer?.cancel();
     await _progressController.close();
   }
@@ -741,4 +879,35 @@ class _UploadWakeRequest {
   final int? bucketId;
 
   const _UploadWakeRequest({required this.ignoreConstraints, this.bucketId});
+}
+
+class _UploadFailure {
+  final String message;
+  final TelegramErrorCategory category;
+  final bool canRetry;
+  final String operation;
+  final int? code;
+  final Duration? retryAfter;
+  final bool userActionRequired;
+  final bool continueQueue;
+
+  const _UploadFailure({
+    required this.message,
+    required this.category,
+    required this.canRetry,
+    required this.operation,
+    required this.continueQueue,
+    this.code,
+    this.retryAfter,
+    this.userActionRequired = false,
+  });
+}
+
+class _LocalUploadException implements Exception {
+  final _UploadFailure failure;
+
+  const _LocalUploadException(this.failure);
+
+  @override
+  String toString() => failure.message;
 }

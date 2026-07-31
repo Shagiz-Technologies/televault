@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database_provider.dart';
 import '../../core/services/diagnostics_service.dart';
+import '../../core/services/telegram_error.dart';
 import '../../core/services/telegram_service.dart';
 
 enum AuthStatus {
@@ -45,9 +46,11 @@ class AuthController extends StateNotifier<AuthStatus> {
       }
 
       if (update['@type'] == 'error' && update['@extra'] == null) {
-        final code = update['code'];
-        final message = update['message']?.toString() ?? 'Authentication error';
-        _setError('($code) $message');
+        final error = TelegramErrorParser.parse(
+          update,
+          operation: 'telegram_authentication',
+        );
+        if (error != null) _setError(_friendlyAuthError(error));
       }
     });
     unawaited(refreshAuthorizationState());
@@ -259,6 +262,7 @@ class AuthController extends StateNotifier<AuthStatus> {
         await db.delete(db.files).go();
         await db.delete(db.buckets).go();
         await db.delete(db.appSettings).go();
+        await db.delete(db.telegramAccountStates).go();
       });
       _cancelStartupFallbackTimer();
       state = AuthStatus.enterPhone;
@@ -326,10 +330,10 @@ class AuthController extends StateNotifier<AuthStatus> {
 
   void _throwIfTdError(Map<String, dynamic> response) {
     if (response['@type'] != 'error') return;
-    final code = response['code'];
-    final message =
-        response['message']?.toString() ?? 'Telegram request failed';
-    throw Exception('($code) $message');
+    throw TelegramErrorParser.parse(
+      response,
+      operation: 'telegram_authentication',
+    )!;
   }
 
   void _setError(String message) {
@@ -338,34 +342,36 @@ class AuthController extends StateNotifier<AuthStatus> {
   }
 
   String _friendlyAuthError(Object error) {
-    final text = error.toString();
-    if (text.contains('PHONE_NUMBER_INVALID')) {
-      return 'That phone number is invalid. Use the full number with country code.';
+    if (error is TelegramError) {
+      if (error.code == 406) return error.userMessage;
+      if (error.operation == 'configure_tdlib' && error.userActionRequired) {
+        return 'Telegram API credentials are missing. Configure TELEGRAM_API_ID and TELEGRAM_API_HASH.';
+      }
+      final message = error.tdlibMessage;
+      if (message.contains('PHONE_NUMBER_INVALID')) {
+        return 'That phone number is invalid. Use the full number with country code.';
+      }
+      if (message.contains('PHONE_CODE_INVALID')) {
+        return 'That login code is incorrect.';
+      }
+      if (message.contains('PHONE_CODE_EXPIRED')) {
+        return 'That login code expired. Request a new code.';
+      }
+      if (message.contains('PASSWORD_HASH_INVALID')) {
+        return 'That Telegram password is incorrect.';
+      }
+      if (error.hasExactRetryAfter) {
+        return 'Telegram is rate limiting login attempts. Try again after the displayed wait.';
+      }
+      return error.userMessage;
     }
-    if (text.contains('PHONE_CODE_INVALID')) {
-      return 'That login code is incorrect.';
-    }
-    if (text.contains('PHONE_CODE_EXPIRED')) {
-      return 'That login code expired. Request a new code.';
-    }
-    if (text.contains('PASSWORD_HASH_INVALID')) {
-      return 'That Telegram password is incorrect.';
-    }
-    if (text.contains('FLOOD_WAIT')) {
-      return 'Telegram is rate limiting login attempts. Wait a bit before trying again.';
-    }
-    if (text.contains('Request aborted')) {
-      return 'Telegram was still starting. Wait a moment and try again.';
-    }
-    if (text.contains('timed out')) {
+    if (error is TimeoutException) {
       return 'Telegram did not respond in time. Check your connection and try again.';
     }
-    if (text.contains('credentials are missing')) {
-      return 'Telegram API credentials are missing. Add TELEGRAM_API_ID and TELEGRAM_API_HASH.';
+    if (error is StateError) {
+      return 'Telegram is not ready for that step yet. Wait a moment and try again.';
     }
-    return text
-        .replaceFirst('Exception: ', '')
-        .replaceFirst('StateError: ', '');
+    return 'Telegram could not complete this request. Check your connection and try again.';
   }
 
   @override

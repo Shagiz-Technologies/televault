@@ -8,6 +8,7 @@ import 'package:gap/gap.dart';
 import '../../../core/database/app_database.dart' show Bucket;
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../buckets/services/bucket_service.dart';
 import '../../settings/services/settings_service.dart';
@@ -32,10 +33,23 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
   bool _constraintsAllowed = true;
   Bucket? _activeBucket;
   StreamSubscription? _constraintSub;
+  StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
+  Timer? _countdownTimer;
+  TelegramReliabilityState _telegramState = const TelegramReliabilityState();
 
   @override
   void initState() {
     super.initState();
+    final reliability = ref.read(telegramReliabilityServiceProvider);
+    _telegramState = reliability.currentState;
+    _telegramStateSub = reliability.states.listen((state) {
+      if (mounted) setState(() => _telegramState = state);
+    });
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _telegramState.isBlockedAt(DateTime.now())) {
+        setState(() {});
+      }
+    });
     _constraintSub = ref
         .read(syncConstraintsServiceProvider)
         .watchConstraintChanges()
@@ -52,6 +66,8 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
   @override
   void dispose() {
     _constraintSub?.cancel();
+    _telegramStateSub?.cancel();
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
@@ -197,6 +213,10 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
                 ),
               ),
             const Gap(8),
+            if (_telegramState.isBlockedAt(DateTime.now())) ...[
+              _telegramPauseCard(context),
+              const Gap(8),
+            ],
             StreamBuilder<List<QueryRow>>(
               stream: countsStream,
               builder: (context, snapshot) {
@@ -322,7 +342,8 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
                 const Gap(12),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _retrying
+                    onPressed:
+                        _retrying || _telegramState.isBlockedAt(DateTime.now())
                         ? null
                         : () async {
                             setState(() => _retrying = true);
@@ -374,6 +395,66 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, color: color),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _telegramPauseCard(BuildContext context) {
+    final blockedUntil = _telegramState.blockedUntil!;
+    final remaining = _telegramState.remainingAt(DateTime.now());
+    final totalSeconds = remaining.inSeconds < 0 ? 0 : remaining.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    final countdown = hours > 0
+        ? '${hours}h ${minutes}m ${seconds}s'
+        : '${minutes}m ${seconds}s';
+    final resumeTime = MaterialLocalizations.of(context).formatTimeOfDay(
+      TimeOfDay.fromDateTime(blockedUntil.toLocal()),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return Card(
+      color: Colors.orange.withValues(alpha: 0.12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.schedule_rounded, color: Colors.orange),
+            const Gap(10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Telegram uploads paused',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const Gap(3),
+                  Text(
+                    _telegramState.pauseReason ??
+                        'Telegram required a retry wait',
+                    style: const TextStyle(color: Colors.orangeAccent),
+                  ),
+                  const Gap(3),
+                  Text(
+                    'Resumes at $resumeTime ($countdown)',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  if (_telegramState.isPremiumFloodWait &&
+                      !_telegramState.isPremium)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Telegram Premium may remove this specific limitation.',
+                        style: TextStyle(color: Colors.orangeAccent),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

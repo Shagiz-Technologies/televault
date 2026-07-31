@@ -183,4 +183,51 @@ void main() {
     expect(second.maxFileSizeMb, 256);
     expect(second.uploadFormat, SyncUploadFormat.compressedMedia);
   });
+
+  test(
+    'stored and imported upload limits are clamped to live capability',
+    () async {
+      var effectiveLimit = telegramFreeMaxFileSizeMb;
+      final constrained = SettingsService(
+        db,
+        effectiveMaxFileSizeMb: () => effectiveLimit,
+      );
+      await db
+          .into(db.appSettings)
+          .insert(
+            AppSettingsCompanion.insert(
+              key: SettingsService.keySyncMaxFileSizeMb,
+              value: '3900',
+            ),
+          );
+      await db
+          .into(db.appSettings)
+          .insert(
+            AppSettingsCompanion.insert(
+              key: 'bucket.8.${SettingsService.keySyncMaxFileSizeMb}',
+              value: '5000',
+            ),
+          );
+
+      await constrained.normalizeStoredUploadLimits();
+
+      expect(
+        (await constrained.getSyncPreferences()).maxFileSizeMb,
+        telegramFreeMaxFileSizeMb,
+      );
+      expect(
+        (await constrained.getSyncPreferences(bucketId: 8)).maxFileSizeMb,
+        telegramFreeMaxFileSizeMb,
+      );
+
+      effectiveLimit = telegramPremiumMaxFileSizeMb;
+      await constrained.saveSyncPreferences(
+        const SyncPreferences(maxFileSizeMb: 5000),
+      );
+      expect(
+        (await constrained.getSyncPreferences()).maxFileSizeMb,
+        telegramPremiumMaxFileSizeMb,
+      );
+    },
+  );
 }
