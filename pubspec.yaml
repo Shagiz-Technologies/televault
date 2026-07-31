@@ -40,7 +40,7 @@ dependencies:
   libtdjson: # Telegram Wrapper (JSON Interface)
     path: third_party/libtdjson
   uuid: ^4.6.0 # For generating unique IDs
-  ffi: ^2.1.3
+  ffi: ^2.2.0
 
   # --- Database (Virtual File System) ---
   drift: ^2.31.0 # SQL Database
