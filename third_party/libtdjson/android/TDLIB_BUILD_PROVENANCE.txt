@@ -1,0 +1,77 @@
+TeleVault Android TDLib native binary provenance
+================================================
+
+Build date: 2026-07-31
+Builder recipe: tool/android/tdlib/Dockerfile
+Builder recipe SHA-256: df69398d8bdecd1d09d52e933ccd61859350ce18ce614f68b64e2d9ba5540154
+
+Source inputs
+-------------
+TDLib version: 1.8.66
+TDLib repository: https://github.com/tdlib/td.git
+TDLib commit: 022d60202e446ad1287b9fb68e687c8a0760788b
+TDLib license: Boost Software License 1.0
+
+OpenSSL version: 3.5.7 LTS
+OpenSSL repository: https://github.com/openssl/openssl.git
+OpenSSL commit: 8cf17aaeb4599f8af87fefd810b5b5fee90fe69e
+OpenSSL license: Apache License 2.0
+
+The build uses TDLib's official example/android/build-openssl.sh and
+example/android/build-tdlib.sh scripts from the pinned commit. The recipe
+changes only the OpenSSL source URL from a mutable tag archive to the exact
+commit archive and limits the script ABI loops to arm64-v8a and x86_64.
+
+Build toolchain
+---------------
+Base image: ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+Android command-line tools: 13114758
+Android command-line tools SHA-256: 7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
+Android NDK: 28.2.13676358 (r28b)
+Android NDK Clang: 19.0.1, Android build 13624864
+Android CMake: 3.22.1
+Native helper Android SDK platform: 34
+Native helper Android build tools: 34.0.0
+TDLib interface: JSON
+Android STL: c++_static
+CMake build type: RelWithDebInfo
+Requested Android platform: android-16
+Effective 64-bit Android platform: android-21
+ABIs: arm64-v8a, x86_64
+
+Host packages recorded by the successful build:
+default-jdk 2:1.21-75+exp1
+g++ 4:13.2.0-7ubuntu1
+git 1:2.43.0-1ubuntu7.3
+gperf 3.1-1build1
+make 4.3-4.1build2
+perl 5.38.2-3.2ubuntu0.3
+php-cli 2:8.3+93ubuntu2
+unzip 6.0-28ubuntu4.1
+wget 1.21.4-1ubuntu4.4
+
+TDLib CMake configuration from the pinned official script:
+-DCMAKE_TOOLCHAIN_FILE=<NDK>/build/cmake/android.toolchain.cmake
+-DOPENSSL_ROOT_DIR=<OpenSSL output>/<ABI>
+-DCMAKE_BUILD_TYPE=RelWithDebInfo
+-GNinja
+-DANDROID_ABI=<ABI>
+-DANDROID_STL=c++_static
+-DANDROID_PLATFORM=android-16
+-DTD_ANDROID_JSON=ON
+
+NDK r28 adds the 16 KB linker behavior. The observed final link included
+-z now, -z relro, and -z max-page-size=16384 for both outputs.
+
+Vendored outputs
+----------------
+180fe842a2a192ab19ff0a124e4289199f5359b17fa17b84065ef36f208db03b  android/src/main/jniLibs/arm64-v8a/libtdjson.so
+9cac8a88e0f8d7ee5d0002801e2c92ef74018dd1fc5eebf55475a53b4288f5ad  android/src/main/jniLibs/x86_64/libtdjson.so
+
+ELF verification with NDK 28.2.13676358 llvm-readelf:
+arm64-v8a: 23,793,448 bytes; all LOAD alignments 0x4000; GNU_RELRO present
+x86_64: 26,027,200 bytes; all LOAD alignments 0x4000; GNU_RELRO present
+
+The output hashes are release gates. Rebuilds must not replace these files
+unless their source inputs, toolchain record, licenses, hashes, and ELF
+verification results are updated together and reviewed.

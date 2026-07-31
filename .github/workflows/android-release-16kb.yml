@@ -1,0 +1,94 @@
+name: Android release and 16 KB validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-16kb-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build and inspect release AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter 3.38.9
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: 3.38.9
+          channel: stable
+          cache: true
+
+      - name: Install pinned Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +o pipefail
+          yes | sdkmanager --licenses >/dev/null
+          set -o pipefail
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.1.0" \
+            "ndk;28.2.13676358"
+
+      - name: Download pinned bundletool
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bundletool"
+          curl --fail --location --retry 3 \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
+            --output "$RUNNER_TEMP/bundletool/bundletool.jar"
+          echo "a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  $RUNNER_TEMP/bundletool/bundletool.jar" \
+            | sha256sum --check --strict
+
+      - name: Check tracked secrets and release files
+        run: python3 tool/android/check_release_secrets.py
+
+      - name: Test Android release verifier
+        run: python3 -m unittest tool.android.test_verify_16kb -v
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Build unsigned release bundle
+        run: >-
+          flutter build appbundle --release
+          --target-platform=android-arm64,android-x64
+          --dart-define=TELEGRAM_API_ID=0
+          --dart-define=TELEGRAM_API_HASH=placeholder
+
+      - name: Verify API 36 and 16 KB compatibility
+        run: >-
+          python3 tool/android/verify_16kb.py
+          --aab build/app/outputs/bundle/release/app-release.aab
+          --bundletool "$RUNNER_TEMP/bundletool/bundletool.jar"
+          --zipalign "$ANDROID_SDK_ROOT/build-tools/36.1.0/zipalign"
+          --aapt2 "$ANDROID_SDK_ROOT/build-tools/36.1.0/aapt2"
+          --readelf "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+
+      - name: Upload native inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-16kb-native-inventory-${{ github.sha }}
+          path: build/reports/android-16kb-inventory.json
+          if-no-files-found: error
+          retention-days: 7
