@@ -306,7 +306,11 @@ def main() -> int:
                 if filename not in origins:
                     raise VerificationError(f"Native library has no provenance mapping: {filename}")
                 library = native_root / entry
-                alignments, relro, relro_status = verify_elf(library, readelf)
+                print(f"Verifying {entry}", flush=True)
+                try:
+                    alignments, relro, relro_status = verify_elf(library, readelf)
+                except VerificationError as error:
+                    raise VerificationError(f"{entry}: {error}") from error
                 digest = sha256(library)
                 provenance = origins[filename]
                 verify_provenance_digest(
