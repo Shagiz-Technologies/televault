@@ -13,8 +13,7 @@ import '../../buckets/services/bucket_service.dart';
 import '../../buckets/presentation/bucket_selector_sheet.dart';
 import '../../sync/presentation/sync_dashboard_screen.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
-import 'privacy_policy_screen.dart';
-import 'about_screen.dart';
+import 'legal_support_section.dart';
 import 'release_log_screen.dart';
 import 'app_lock_settings_screen.dart';
 import 'diagnostics_screen.dart';
@@ -184,21 +183,9 @@ class SettingsScreen extends ConsumerWidget {
                 );
               },
             ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.shield_outlined,
-              title: "Privacy Policy",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const PrivacyPolicyScreen(),
-                  ),
-                );
-              },
-            ),
-            const Gap(8),
+            const Gap(24),
+            const LegalSupportSection(),
+            const Gap(24),
             _buildSectionTile(
               context,
               icon: Icons.new_releases_outlined,
@@ -208,18 +195,6 @@ class SettingsScreen extends ConsumerWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ReleaseLogScreen()),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.info_outline,
-              title: "About TeleVault",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AboutScreen()),
                 );
               },
             ),

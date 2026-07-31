@@ -5,6 +5,8 @@ import 'package:gap/gap.dart';
 
 import '../../core/presentation/responsive_layout.dart';
 import '../../core/presentation/televault_logo_mark.dart';
+import '../../core/config/legal_urls.dart';
+import '../../core/services/external_url_service.dart';
 import '../../core/services/telegram_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'auth_controller.dart';
@@ -117,15 +119,86 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ],
             Gap(AppResponsive.gap(context, 20, compact: 12)),
-            Text(
-              'By continuing, you agree to our Terms of Service.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppTheme.textSecondary.withValues(alpha: 0.6),
-                fontSize: 12,
-              ),
-            ).animate().fadeIn(delay: 800.ms),
+            const LoginLegalNotice().animate().fadeIn(delay: 800.ms),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class LoginLegalNotice extends ConsumerWidget {
+  const LoginLegalNotice({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = TextStyle(
+      color: AppTheme.textSecondary.withValues(alpha: 0.8),
+      fontSize: 12,
+    );
+    final linkStyle = style.copyWith(
+      color: AppTheme.primary,
+      fontWeight: FontWeight.w700,
+      decoration: TextDecoration.underline,
+      decorationColor: AppTheme.primary,
+    );
+
+    Future<void> open(String url) async {
+      await openExternalUrl(context, ref.read(externalUrlServiceProvider), url);
+    }
+
+    return Semantics(
+      label:
+          'By continuing, you acknowledge the Terms of Service and Privacy '
+          'Policy. Both links open in your browser.',
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 3,
+        runSpacing: 0,
+        children: [
+          Text('By continuing, you acknowledge the', style: style),
+          _LoginLegalLink(
+            label: 'Terms of Service',
+            style: linkStyle,
+            onTap: () => open(LegalUrls.termsOfService),
+          ),
+          Text('and', style: style),
+          _LoginLegalLink(
+            label: 'Privacy Policy',
+            style: linkStyle,
+            onTap: () => open(LegalUrls.privacyPolicy),
+          ),
+          Text('.', style: style),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoginLegalLink extends StatelessWidget {
+  const _LoginLegalLink({
+    required this.label,
+    required this.style,
+    required this.onTap,
+  });
+
+  final String label;
+  final TextStyle style;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      link: true,
+      button: true,
+      label: 'Open $label',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Text(label, style: style),
         ),
       ),
     );

@@ -1,5 +1,9 @@
 ﻿# Security Policy
 
+Consumer-facing security guidance is published at
+<https://shagiz-technologies.github.io/tele-vault/security.html>. This file is
+the technical reporting policy for the open-source repository.
+
 ## Supported versions
 
 This repository is preparing an initial open-source release. Until stable release tags exist, security fixes target the `main` branch.
@@ -10,7 +14,7 @@ Do not open a public issue containing secrets, personal metadata, credentials, e
 
 Preferred reporting path:
 
-1. Use GitHub private vulnerability reporting if it is enabled for this repository.
+1. Use [GitHub Private Vulnerability Reporting](https://github.com/Shagiz-Technologies/televault/security/advisories/new).
 2. If private reporting is not available, open a minimal public issue that says a security report is needed, without sensitive details.
 
 ## Sensitive areas
