@@ -52,7 +52,7 @@ dependencies:
   # --- Gallery & Media ---
   photo_manager: ^3.5.0 # Access phone's gallery
   photo_manager_image_provider: ^2.1.2 # Image thumbnails from AssetEntity
-  video_player: ^2.8.1
+  video_player: ^2.13.0
   chewie: ^1.13.1
 
   # --- Sharing ---
