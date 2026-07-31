@@ -13,11 +13,13 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_service.dart';
+import '../../settings/services/settings_service.dart';
 
 final metadataBackupServiceProvider = Provider<MetadataBackupService>((ref) {
   return DriftMetadataBackupService(
     ref.watch(databaseProvider),
     ref.watch(telegramServiceProvider),
+    ref.watch(settingsServiceProvider),
   );
 });
 
@@ -34,6 +36,7 @@ abstract interface class MetadataBackupService {
 class DriftMetadataBackupService implements MetadataBackupService {
   final AppDatabase _db;
   final TelegramService _telegram;
+  final SettingsService _settingsService;
 
   static const _formatVersionV1 = 1;
   static const _formatVersionV2 = 2;
@@ -43,7 +46,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
   static const _ivLength = 12;
   static const _pbkdf2Iterations = 120000;
 
-  DriftMetadataBackupService(this._db, this._telegram);
+  DriftMetadataBackupService(this._db, this._telegram, this._settingsService);
 
   @override
   Future<io.File> exportEncryptedSnapshot({required String passphrase}) async {
@@ -133,6 +136,11 @@ class DriftMetadataBackupService implements MetadataBackupService {
               'last_error': f.lastError,
               'next_retry_at': f.nextRetryAt?.toIso8601String(),
               'last_attempt_at': f.lastAttemptAt?.toIso8601String(),
+              'telegram_error_code': f.telegramErrorCode,
+              'telegram_error_category': f.telegramErrorCategory,
+              'telegram_retry_after': f.telegramRetryAfter?.toIso8601String(),
+              'last_telegram_operation': f.lastTelegramOperation,
+              'user_action_required': f.userActionRequired,
               'is_vaulted': f.isVaulted,
               'is_encrypted': f.isEncrypted,
               'encryption_version': f.encryptionVersion,
@@ -332,6 +340,21 @@ class DriftMetadataBackupService implements MetadataBackupService {
                 lastAttemptAt: Value(
                   DateTime.tryParse(row['last_attempt_at'] as String? ?? ''),
                 ),
+                telegramErrorCode: Value(row['telegram_error_code'] as int?),
+                telegramErrorCategory: Value(
+                  row['telegram_error_category'] as String?,
+                ),
+                telegramRetryAfter: Value(
+                  DateTime.tryParse(
+                    row['telegram_retry_after'] as String? ?? '',
+                  ),
+                ),
+                lastTelegramOperation: Value(
+                  row['last_telegram_operation'] as String?,
+                ),
+                userActionRequired: Value(
+                  row['user_action_required'] as bool? ?? false,
+                ),
                 isVaulted: Value(row['is_vaulted'] as bool? ?? false),
                 isEncrypted: Value(row['is_encrypted'] as bool? ?? false),
                 encryptionVersion: Value(row['encryption_version'] as int?),
@@ -365,6 +388,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
             );
       }
     });
+    await _settingsService.normalizeStoredUploadLimits();
   }
 
   Map<String, dynamic> _decodeV4Payload(

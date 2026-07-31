@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_gateway.dart';
+import '../../../core/services/telegram_error.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../settings/services/settings_service.dart';
 
@@ -12,6 +14,7 @@ final bucketServiceProvider = Provider<BucketService>((ref) {
     ref.watch(databaseProvider),
     ref.watch(telegramServiceProvider),
     ref.watch(settingsServiceProvider),
+    ref.watch(telegramReliabilityServiceProvider),
   );
 });
 
@@ -59,8 +62,14 @@ class BucketService {
   final AppDatabase _db;
   final TelegramGateway _telegramService;
   final SettingsService _settingsService;
+  final TelegramReliabilityService _telegramReliability;
 
-  BucketService(this._db, this._telegramService, this._settingsService);
+  BucketService(
+    this._db,
+    this._telegramService,
+    this._settingsService,
+    this._telegramReliability,
+  );
 
   Future<bool> hasBuckets() async {
     return getBucketCount().then((count) => count > 0);
@@ -89,29 +98,40 @@ class BucketService {
       throw BucketLimitException(maxFreeBuckets);
     }
 
-    final response = await _telegramService.request({
-      '@type': 'createNewSupergroupChat',
-      'title': name,
-      'is_channel': true,
-      'description': description,
-    }, timeout: const Duration(seconds: 20));
-
-    if (response['@type'] == 'error') {
-      throw Exception(response['message'] ?? 'Failed to create bucket');
-    }
+    final response = await _telegramReliability.executeWrite(
+      {
+        '@type': 'createNewSupergroupChat',
+        'title': name,
+        'is_channel': true,
+        'description': description,
+      },
+      operation: 'create_bucket',
+      timeout: const Duration(seconds: 20),
+    );
 
     var chatId = _extractInt(response['id']);
 
     if (chatId == null) {
-      final event = await _telegramService.waitForUpdate(
-        (u) => u['@type'] == 'updateNewChat' && u['chat']?['title'] == name,
-        timeout: const Duration(seconds: 20),
-      );
+      TelegramUpdate event;
+      try {
+        event = await _telegramService.waitForUpdate(
+          (u) => u['@type'] == 'updateNewChat' && u['chat']?['title'] == name,
+          timeout: const Duration(seconds: 20),
+        );
+      } catch (error) {
+        throw TelegramErrorParser.fromThrown(error, operation: 'create_bucket');
+      }
       chatId = _extractInt(event['chat']?['id']);
     }
 
     if (chatId == null) {
-      throw Exception('Telegram did not return chat id for the new bucket');
+      throw const TelegramError(
+        code: null,
+        tdlibMessage: 'Telegram did not return a chat identifier',
+        operation: 'create_bucket',
+        category: TelegramErrorCategory.transient,
+        canRetry: true,
+      );
     }
 
     final isFirst = existingBuckets.isEmpty;

@@ -36,6 +36,12 @@ class Files extends Table {
   TextColumn get lastError => text().nullable()();
   DateTimeColumn get nextRetryAt => dateTime().nullable()();
   DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  IntColumn get telegramErrorCode => integer().nullable()();
+  TextColumn get telegramErrorCategory => text().nullable()();
+  DateTimeColumn get telegramRetryAfter => dateTime().nullable()();
+  TextColumn get lastTelegramOperation => text().nullable()();
+  BoolColumn get userActionRequired =>
+      boolean().withDefault(const Constant(false))();
 
   // Security
   BoolColumn get isVaulted => boolean().withDefault(const Constant(false))();
@@ -69,4 +75,19 @@ class AppSettings extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+class TelegramAccountStates extends Table {
+  Int64Column get accountId => int64()();
+  BoolColumn get isPremium => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get premiumUpdatedAt => dateTime().nullable()();
+  DateTimeColumn get serverRetryUntil => dateTime().nullable()();
+  DateTimeColumn get writeBlockedUntil => dateTime().nullable()();
+  TextColumn get pauseReason => text().nullable()();
+  BoolColumn get isPremiumFloodWait =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {accountId};
 }

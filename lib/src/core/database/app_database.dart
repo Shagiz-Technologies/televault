@@ -8,7 +8,9 @@ import 'tables.dart';
 // Import the generated code (this file doesn't exist yet, we will generate it next)
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Buckets, Files, Labels, AppSettings])
+@DriftDatabase(
+  tables: [Buckets, Files, Labels, AppSettings, TelegramAccountStates],
+)
 class AppDatabase extends _$AppDatabase {
   // We tell the database where to store the file
   AppDatabase() : super(_openConnection());
@@ -16,7 +18,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -49,6 +51,14 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 7) {
         await m.addColumn(files, files.labelId);
+      }
+      if (from < 8) {
+        await m.addColumn(files, files.telegramErrorCode);
+        await m.addColumn(files, files.telegramErrorCategory);
+        await m.addColumn(files, files.telegramRetryAfter);
+        await m.addColumn(files, files.lastTelegramOperation);
+        await m.addColumn(files, files.userActionRequired);
+        await m.createTable(telegramAccountStates);
       }
       await _createPerformanceIndexes();
     },

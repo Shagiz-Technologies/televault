@@ -5,14 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 
 enum SyncAlbumMode { all, include, exclude }
 
 enum SyncUploadFormat { originalFile, compressedMedia }
 
 const int defaultSyncMaxFileSizeMb = 1900;
-const int telegramFreeMaxFileSizeMb = 1900;
-const int telegramPremiumMaxFileSizeMb = 4096;
+const int telegramFreeMaxFileSizeMb = telegramFreeOperationalLimitMb;
+const int telegramPremiumMaxFileSizeMb = telegramPremiumOperationalLimitMb;
 
 class SyncPreferences {
   final bool autoBackupEnabled;
@@ -67,13 +68,20 @@ class SyncPreferences {
 }
 
 final settingsServiceProvider = Provider<SettingsService>((ref) {
-  return SettingsService(ref.watch(databaseProvider));
+  final reliability = ref.watch(telegramReliabilityServiceProvider);
+  return SettingsService(
+    ref.watch(databaseProvider),
+    effectiveMaxFileSizeMb: () => reliability.effectiveUploadLimitMb,
+  );
 });
 
 class SettingsService {
   final AppDatabase _db;
+  final int Function() _effectiveMaxFileSizeMb;
 
-  SettingsService(this._db);
+  SettingsService(this._db, {int Function()? effectiveMaxFileSizeMb})
+    : _effectiveMaxFileSizeMb =
+          effectiveMaxFileSizeMb ?? (() => telegramFreeMaxFileSizeMb);
 
   static const keyAutoBackup = 'auto_backup';
   static const keySyncIncludePhotos = 'sync_include_photos';
@@ -261,7 +269,23 @@ class SettingsService {
     if (value == null || value == 2048) {
       return defaultSyncMaxFileSizeMb;
     }
-    return value.clamp(32, telegramPremiumMaxFileSizeMb).toInt();
+    return value.clamp(32, _effectiveMaxFileSizeMb()).toInt();
+  }
+
+  Future<void> normalizeStoredUploadLimits() async {
+    final rows =
+        await (_db.select(_db.appSettings)..where(
+              (t) =>
+                  t.key.equals(keySyncMaxFileSizeMb) |
+                  t.key.like('$bucketSettingPrefix.%.$keySyncMaxFileSizeMb'),
+            ))
+            .get();
+    for (final row in rows) {
+      final normalized = _normalizeMaxFileSizeMb(int.tryParse(row.value));
+      if (row.value != normalized.toString()) {
+        await _upsert(row.key, normalized.toString());
+      }
+    }
   }
 
   Future<void> _writeSyncPreferences(
@@ -298,7 +322,7 @@ class SettingsService {
     );
     await _upsert(
       _keyForScope(keySyncMaxFileSizeMb, bucketId),
-      preferences.maxFileSizeMb.toString(),
+      _normalizeMaxFileSizeMb(preferences.maxFileSizeMb).toString(),
     );
     await _upsert(
       _keyForScope(keySyncUploadFormat, bucketId),

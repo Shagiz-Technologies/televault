@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
 import 'package:tele_vault/src/core/database/file_sync_status.dart';
 import 'package:tele_vault/src/core/services/diagnostics_service.dart';
+import 'package:tele_vault/src/core/services/telegram_error.dart';
 import 'package:tele_vault/src/core/services/telegram_gateway.dart';
+import 'package:tele_vault/src/core/services/telegram_reliability_service.dart';
 import 'package:tele_vault/src/features/settings/services/settings_service.dart';
 import 'package:tele_vault/src/features/sync/services/file_uploader.dart';
 import 'package:tele_vault/src/features/sync/services/sync_constraints_service.dart';
@@ -15,24 +17,38 @@ import 'package:tele_vault/src/features/sync/services/sync_constraints_service.d
 void main() {
   late AppDatabase db;
   late SettingsService settingsService;
-  late _FakeTelegramGateway telegramGateway;
+  late _UploaderTelegramGateway telegramGateway;
+  late TelegramReliabilityService reliability;
   late FileUploader uploader;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    settingsService = SettingsService(db);
-    telegramGateway = _FakeTelegramGateway();
+    telegramGateway = _UploaderTelegramGateway();
+    reliability = TelegramReliabilityService(
+      db,
+      telegramGateway,
+      jitter: () => Duration.zero,
+      autoInitialize: false,
+    );
+    await reliability.initialize();
+    settingsService = SettingsService(
+      db,
+      effectiveMaxFileSizeMb: () => reliability.effectiveUploadLimitMb,
+    );
     uploader = FileUploader(
       db,
       telegramGateway,
       settingsService,
       DiagnosticsService(db),
       _NoopSyncConstraintsService(settingsService),
+      reliability,
     );
   });
 
   tearDown(() async {
     await uploader.dispose();
+    await reliability.dispose();
+    await telegramGateway.dispose();
     await db.close();
   });
 
@@ -49,6 +65,9 @@ void main() {
     required String path,
     required FileSyncStatus status,
     DateTime? dateAdded,
+    int size = 42,
+    String? lastTelegramOperation,
+    bool userActionRequired = false,
   }) {
     return db
         .into(db.files)
@@ -56,12 +75,24 @@ void main() {
           FilesCompanion.insert(
             localPath: path,
             folderName: 'Camera',
-            size: 42,
+            size: size,
             bucketId: bucketId,
             status: Value(status.dbValue),
             dateAdded: Value(dateAdded ?? DateTime.now()),
+            lastTelegramOperation: Value(lastTelegramOperation),
+            userActionRequired: Value(userActionRequired),
           ),
         );
+  }
+
+  Future<io.File> tempMedia(String name) async {
+    final dir = await io.Directory.systemTemp.createTemp('televault_upload_');
+    addTearDown(() async {
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+    final file = io.File('${dir.path}/$name');
+    await file.writeAsBytes([1, 2, 3]);
+    return file;
   }
 
   test('retryFailed can be scoped to one bucket', () async {
@@ -69,288 +100,332 @@ void main() {
     final videosBucket = await insertBucket('Videos', 1002);
     await insertFile(
       bucketId: photosBucket,
-      path: '/storage/photos/a.jpg',
+      path: '/missing/photos.jpg',
       status: FileSyncStatus.failed,
     );
     await insertFile(
       bucketId: videosBucket,
-      path: '/storage/videos/b.mp4',
+      path: '/missing/video.mp4',
       status: FileSyncStatus.failed,
     );
 
     final retried = await uploader.retryFailed(bucketId: photosBucket);
-
     final rows = await db.select(db.files).get();
-    final photosRow = rows.singleWhere((row) => row.bucketId == photosBucket);
-    final videosRow = rows.singleWhere((row) => row.bucketId == videosBucket);
 
     expect(retried, 1);
-    expect(photosRow.status, FileSyncStatus.pending.dbValue);
-    expect(videosRow.status, FileSyncStatus.failed.dbValue);
+    expect(
+      rows.singleWhere((row) => row.bucketId == photosBucket).status,
+      FileSyncStatus.pending.dbValue,
+    );
+    expect(
+      rows.singleWhere((row) => row.bucketId == videosBucket).status,
+      FileSyncStatus.failed.dbValue,
+    );
   });
 
-  test('upload loop sends older media before newer media', () async {
+  test('upload loop sends older media first using inputFileLocal', () async {
     final bucketId = await insertBucket('Photos', 1001);
-    final dir = await io.Directory.systemTemp.createTemp(
-      'televault_upload_order_',
-    );
-    addTearDown(() async {
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
-    });
-
-    final newerFile = io.File('${dir.path}/newer.jpg');
-    final olderFile = io.File('${dir.path}/older.jpg');
-    await newerFile.writeAsBytes([2, 3, 4]);
-    await olderFile.writeAsBytes([1, 2, 3]);
-
+    final newer = await tempMedia('newer.jpg');
+    final older = await tempMedia('older.jpg');
     await insertFile(
       bucketId: bucketId,
-      path: newerFile.path,
+      path: newer.path,
       status: FileSyncStatus.pending,
-      dateAdded: DateTime(2026, 6, 1),
+      dateAdded: DateTime(2026),
     );
     await insertFile(
       bucketId: bucketId,
-      path: olderFile.path,
+      path: older.path,
       status: FileSyncStatus.pending,
-      dateAdded: DateTime(2020, 1, 1),
+      dateAdded: DateTime(2020),
     );
 
-    telegramGateway.completeSendMessages = true;
     await uploader.drainQueueForTesting(ignoreConstraints: true);
 
+    expect(telegramGateway.uploadedPaths, [older.path, newer.path]);
+    expect(telegramGateway.sentInputFileTypes, [
+      'inputFileLocal',
+      'inputFileLocal',
+    ]);
+    expect(telegramGateway.requestCount('preliminaryUploadFile'), 0);
     final rows = await db.select(db.files).get();
     expect(
       rows.every((row) => row.status == FileSyncStatus.synced.dbValue),
       isTrue,
     );
-    expect(telegramGateway.uploadedPaths, [olderFile.path, newerFile.path]);
-    expect(telegramGateway.sentInputFileTypes, ['inputFileId', 'inputFileId']);
   });
 
-  test('suspended background wakes still allow explicit queue drain', () async {
+  test('queue keeps send concurrency at exactly one', () async {
     final bucketId = await insertBucket('Photos', 1001);
-    final dir = await io.Directory.systemTemp.createTemp(
-      'televault_upload_suspend_',
-    );
-    addTearDown(() async {
-      if (await dir.exists()) {
-        await dir.delete(recursive: true);
-      }
-    });
-
-    final image = io.File('${dir.path}/image.jpg');
-    await image.writeAsBytes([1, 2, 3]);
+    final first = await tempMedia('first.jpg');
+    final second = await tempMedia('second.jpg');
     await insertFile(
       bucketId: bucketId,
-      path: image.path,
+      path: first.path,
       status: FileSyncStatus.pending,
+      dateAdded: DateTime(2020),
     );
+    await insertFile(
+      bucketId: bucketId,
+      path: second.path,
+      status: FileSyncStatus.pending,
+      dateAdded: DateTime(2021),
+    );
+    final releaseFirst = Completer<void>();
+    telegramGateway.nextSendGate = releaseFirst;
 
-    telegramGateway.completeSendMessages = true;
-    uploader.suspendBackgroundWakes();
-    await uploader.startUploadLoop();
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    final drain = uploader.drainQueueForTesting(ignoreConstraints: true);
+    await telegramGateway.firstSendStarted.future;
+    expect(telegramGateway.activeSends, 1);
+    expect(telegramGateway.uploadedPaths, [first.path]);
+    releaseFirst.complete();
+    await drain;
 
-    expect(telegramGateway.uploadedPaths, isEmpty);
-
-    await uploader.drainQueueForTesting(ignoreConstraints: true);
-
-    final row = await db.select(db.files).getSingle();
-    expect(row.status, FileSyncStatus.synced.dbValue);
-    expect(telegramGateway.uploadedPaths, [image.path]);
+    expect(telegramGateway.maxConcurrentSends, 1);
+    expect(telegramGateway.uploadedPaths, [first.path, second.path]);
   });
 
-  test(
-    'suspend lets current upload finish without starting next file',
-    () async {
-      final bucketId = await insertBucket('Photos', 1001);
-      final dir = await io.Directory.systemTemp.createTemp(
-        'televault_upload_pause_current_',
-      );
-      addTearDown(() async {
-        if (await dir.exists()) await dir.delete(recursive: true);
-      });
-
-      final first = io.File('${dir.path}/first.jpg');
-      final second = io.File('${dir.path}/second.jpg');
-      await first.writeAsBytes([1, 2, 3]);
-      await second.writeAsBytes([4, 5, 6]);
-      await insertFile(
-        bucketId: bucketId,
-        path: first.path,
-        status: FileSyncStatus.pending,
-        dateAdded: DateTime(2020),
-      );
-      await insertFile(
-        bucketId: bucketId,
-        path: second.path,
-        status: FileSyncStatus.pending,
-        dateAdded: DateTime(2021),
-      );
-
-      telegramGateway.completeSendMessages = true;
-      final gate = Completer<void>();
-      telegramGateway.nextSendGate = gate;
-      await uploader.startUploadLoop();
-      while (telegramGateway.uploadedPaths.isEmpty) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-
-      uploader.suspendBackgroundWakes();
-      gate.complete();
-      await uploader.waitForCurrentUploadToFinish(
-        timeout: const Duration(seconds: 2),
-      );
-
-      final rows = await (db.select(
-        db.files,
-      )..orderBy([(t) => OrderingTerm.asc(t.dateAdded)])).get();
-      expect(telegramGateway.uploadedPaths, [first.path]);
-      expect(rows.first.status, FileSyncStatus.synced.dbValue);
-      expect(rows.last.status, FileSyncStatus.pending.dbValue);
-    },
-  );
-
-  test('automatic retry respects disabled auto backup', () async {
+  test('transient failures use bounded exponential backoff', () async {
     final bucketId = await insertBucket('Photos', 1001);
+    final media = await tempMedia('temporary.jpg');
+    await insertFile(
+      bucketId: bucketId,
+      path: media.path,
+      status: FileSyncStatus.pending,
+    );
+    telegramGateway.sendError = {
+      '@type': 'error',
+      'code': 500,
+      'message': 'TEMPORARILY_UNAVAILABLE',
+    };
+    final startedAt = DateTime.now();
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final row = await db.select(db.files).getSingle();
+
+    expect(row.status, FileSyncStatus.failed.dbValue);
+    expect(row.telegramErrorCategory, TelegramErrorCategory.transient.name);
+    expect(row.nextRetryAt, isNotNull);
+    expect(
+      row.nextRetryAt!.isAfter(startedAt.add(const Duration(seconds: 14))),
+      isTrue,
+    );
+    expect(row.telegramRetryAfter, isNull);
+  });
+
+  test('permanent errors are never automatically retried', () async {
+    final bucketId = await insertBucket('Photos', 1001);
+    final media = await tempMedia('invalid-chat.jpg');
+    await insertFile(
+      bucketId: bucketId,
+      path: media.path,
+      status: FileSyncStatus.pending,
+    );
+    telegramGateway.sendError = {
+      '@type': 'error',
+      'code': 400,
+      'message': 'CHAT_ID_INVALID',
+    };
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final row = await db.select(db.files).getSingle();
+
+    expect(row.status, FileSyncStatus.failed.dbValue);
+    expect(row.telegramErrorCategory, TelegramErrorCategory.permanent.name);
+    expect(row.nextRetryAt, isNull);
+  });
+
+  test('manual retry cannot bypass a Telegram flood gate', () async {
+    final bucketId = await insertBucket('Photos', 1001);
+    await insertFile(
+      bucketId: bucketId,
+      path: '/missing/waiting.jpg',
+      status: FileSyncStatus.failed,
+    );
+    await reliability.registerError(
+      TelegramErrorParser.parse({
+        '@type': 'error',
+        'code': 429,
+        'message': 'FLOOD_WAIT_3600',
+      }, operation: 'upload_media')!,
+    );
+
+    final retried = await uploader.retryFailed(bucketId: bucketId);
+    final row = await db.select(db.files).getSingle();
+
+    expect(retried, 0);
+    expect(row.status, FileSyncStatus.failed.dbValue);
+    expect(telegramGateway.requestCount('sendMessage'), 0);
+  });
+
+  test('free account rejects a 1950 MiB file', () async {
+    final bucketId = await insertBucket('Photos', 1001);
+    final media = await tempMedia('free-too-large.jpg');
+    await insertFile(
+      bucketId: bucketId,
+      path: media.path,
+      status: FileSyncStatus.pending,
+      size: 1950 * 1024 * 1024,
+    );
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final row = await db.select(db.files).getSingle();
+
+    expect(row.status, FileSyncStatus.failed.dbValue);
+    expect(row.userActionRequired, isTrue);
+    expect(row.lastTelegramOperation, 'validate_upload_limit');
+    expect(telegramGateway.requestCount('sendMessage'), 0);
+  });
+
+  test('Premium accepts 3900 MiB and rejects above the cap', () async {
+    await reliability.updateAccountCapability(
+      accountId: BigInt.from(123),
+      isPremium: true,
+    );
+    final bucketId = await insertBucket('Premium', 1001);
+    final accepted = await tempMedia('accepted.jpg');
+    final rejected = await tempMedia('rejected.jpg');
+    await insertFile(
+      bucketId: bucketId,
+      path: accepted.path,
+      status: FileSyncStatus.pending,
+      size: 3900 * 1024 * 1024,
+      dateAdded: DateTime(2020),
+    );
+    await insertFile(
+      bucketId: bucketId,
+      path: rejected.path,
+      status: FileSyncStatus.pending,
+      size: 3901 * 1024 * 1024,
+      dateAdded: DateTime(2021),
+    );
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final rows = await db.select(db.files).get();
+
+    expect(
+      rows.singleWhere((row) => row.localPath == accepted.path).status,
+      FileSyncStatus.synced.dbValue,
+    );
+    final rejectedRow = rows.singleWhere(
+      (row) => row.localPath == rejected.path,
+    );
+    expect(rejectedRow.status, FileSyncStatus.failed.dbValue);
+    expect(rejectedRow.userActionRequired, isTrue);
+  });
+
+  test('Premium expiry blocks oversized pending files', () async {
+    await reliability.updateAccountCapability(
+      accountId: BigInt.from(123),
+      isPremium: true,
+    );
+    final bucketId = await insertBucket('Premium', 1001);
     await settingsService.saveSyncPreferences(
       const SyncPreferences(autoBackupEnabled: false),
       bucketId: bucketId,
     );
-    final dir = await io.Directory.systemTemp.createTemp(
-      'televault_upload_paused_',
-    );
-    addTearDown(() async {
-      if (await dir.exists()) await dir.delete(recursive: true);
-    });
-    final image = io.File('${dir.path}/paused.jpg');
-    await image.writeAsBytes([1, 2, 3]);
+    final media = await tempMedia('premium-expired.jpg');
     await insertFile(
       bucketId: bucketId,
-      path: image.path,
-      status: FileSyncStatus.failed,
+      path: media.path,
+      status: FileSyncStatus.pending,
+      size: 1950 * 1024 * 1024,
     );
-
-    telegramGateway.completeSendMessages = true;
     await uploader.startUploadLoop();
-    await uploader.retryFailed(bucketId: bucketId);
-    await Future<void>.delayed(const Duration(milliseconds: 80));
 
-    final row = await db.select(db.files).getSingle();
-    expect(row.status, FileSyncStatus.pending.dbValue);
-    expect(telegramGateway.uploadedPaths, isEmpty);
+    await reliability.updateAccountCapability(
+      accountId: BigInt.from(123),
+      isPremium: false,
+    );
+    File row = await db.select(db.files).getSingle();
+    for (
+      var i = 0;
+      i < 20 && row.status != FileSyncStatus.failed.dbValue;
+      i++
+    ) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      row = await db.select(db.files).getSingle();
+    }
+
+    expect(row.status, FileSyncStatus.failed.dbValue);
+    expect(row.userActionRequired, isTrue);
+    expect(row.nextRetryAt, isNull);
+    expect(telegramGateway.requestCount('sendMessage'), 0);
   });
-
-  test(
-    'permanent TDLib input failures do not spin in the retry loop',
-    () async {
-      final bucketId = await insertBucket('Photos', 1001);
-      final dir = await io.Directory.systemTemp.createTemp(
-        'televault_upload_permanent_failure_',
-      );
-      addTearDown(() async {
-        if (await dir.exists()) await dir.delete(recursive: true);
-      });
-      final image = io.File('${dir.path}/broken.jpg');
-      await image.writeAsBytes([1, 2, 3]);
-      await insertFile(
-        bucketId: bucketId,
-        path: image.path,
-        status: FileSyncStatus.pending,
-      );
-
-      telegramGateway.completeSendMessages = true;
-      telegramGateway.preliminaryUploadError = 'InputFile is not specified';
-      await uploader.drainQueueForTesting(ignoreConstraints: true);
-
-      final row = await db.select(db.files).getSingle();
-      expect(row.status, FileSyncStatus.failed.dbValue);
-      expect(row.nextRetryAt, null);
-      expect(telegramGateway.preliminaryUploadAttempts, 1);
-    },
-  );
 }
 
-class _FakeTelegramGateway implements TelegramGateway {
+class _UploaderTelegramGateway implements TelegramGateway {
   final _updates = StreamController<TelegramUpdate>.broadcast();
+  final List<TelegramRequest> requests = [];
   final List<String> uploadedPaths = [];
   final List<String> sentInputFileTypes = [];
-  bool completeSendMessages = false;
+  final Completer<void> firstSendStarted = Completer<void>();
   Completer<void>? nextSendGate;
-  String? preliminaryUploadError;
-  int preliminaryUploadAttempts = 0;
+  TelegramResult? sendError;
+  int activeSends = 0;
+  int maxConcurrentSends = 0;
   int _nextMessageId = 100;
-  int _nextFileId = 1000;
 
   @override
   Stream<TelegramUpdate> get updates => _updates.stream;
 
+  int requestCount(String type) =>
+      requests.where((request) => request['@type'] == type).length;
+
   @override
-  void send(TelegramRequest request) {}
+  void send(TelegramRequest request) {
+    requests.add(Map<String, dynamic>.from(request));
+  }
 
   @override
   Future<TelegramResult> request(
     TelegramRequest request, {
     Duration timeout = const Duration(seconds: 15),
-  }) {
-    if (!completeSendMessages) {
-      throw UnimplementedError(
-        'No Telegram requests are expected in this test',
-      );
-    }
-    final type = request['@type'];
-    if (type == 'getChat') {
-      return Future.value({'@type': 'chat', 'id': request['chat_id']});
-    }
-    if (type == 'preliminaryUploadFile') {
-      preliminaryUploadAttempts++;
-      final error = preliminaryUploadError;
-      if (error != null) {
-        return Future.value({'@type': 'error', 'code': 400, 'message': error});
-      }
-      final inputFile = request['file'] as Map<String, dynamic>? ?? {};
-      uploadedPaths.add(inputFile['path'] as String? ?? '');
-      return Future.value({
-        '@type': 'file',
-        'id': _nextFileId++,
-        'local': {'path': inputFile['path']},
-      });
-    }
-    if (type == 'sendMessage') {
-      sentInputFileTypes.add(_extractInputFileType(request));
-      final response = {'@type': 'message', 'id': _nextMessageId++};
+  }) async {
+    requests.add(Map<String, dynamic>.from(request));
+    return switch ((request['@type'], request['name'])) {
+      ('getOption', 'my_id') => {'@type': 'optionValueInteger', 'value': 123},
+      ('getOption', 'is_premium') => {
+        '@type': 'optionValueBoolean',
+        'value': false,
+      },
+      ('getMe', _) => {'@type': 'user', 'id': 123, 'is_premium': false},
+      ('getChat', _) => {'@type': 'chat', 'id': request['chat_id']},
+      ('sendMessage', _) => await _sendMessage(request),
+      _ => throw UnimplementedError(
+        'Unexpected Telegram request: ${request['@type']}',
+      ),
+    };
+  }
+
+  Future<TelegramResult> _sendMessage(TelegramRequest request) async {
+    activeSends++;
+    if (activeSends > maxConcurrentSends) maxConcurrentSends = activeSends;
+    if (!firstSendStarted.isCompleted) firstSendStarted.complete();
+    final content = request['input_message_content'] as Map<String, dynamic>;
+    final inputFile =
+        (content['document'] ?? content['photo'] ?? content['video'])
+            as Map<String, dynamic>;
+    uploadedPaths.add(inputFile['path']?.toString() ?? '');
+    sentInputFileTypes.add(inputFile['@type']?.toString() ?? '');
+    try {
       final gate = nextSendGate;
       nextSendGate = null;
-      if (gate == null) return Future.value(response);
-      return gate.future.then((_) => response);
+      if (gate != null) await gate.future;
+      return sendError ?? {'@type': 'message', 'id': _nextMessageId++};
+    } finally {
+      activeSends--;
     }
-    throw UnimplementedError('Unexpected Telegram request: $type');
   }
 
   @override
   Future<TelegramUpdate> waitForUpdate(
     bool Function(TelegramUpdate update) predicate, {
     Duration timeout = const Duration(seconds: 15),
-  }) {
-    throw UnimplementedError('No Telegram updates are expected in this test');
-  }
+  }) => _updates.stream.firstWhere(predicate).timeout(timeout);
 
   @override
-  Future<void> dispose() async {
-    await _updates.close();
-  }
-
-  String _extractInputFileType(TelegramRequest request) {
-    final content =
-        request['input_message_content'] as Map<String, dynamic>? ?? {};
-    final inputFile =
-        (content['document'] ?? content['photo'] ?? content['video'])
-            as Map<String, dynamic>?;
-    return inputFile?['@type'] as String? ?? '';
-  }
+  Future<void> dispose() => _updates.close();
 }
 
 class _NoopSyncConstraintsService extends SyncConstraintsService {

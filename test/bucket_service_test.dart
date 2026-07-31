@@ -1,25 +1,40 @@
-import 'dart:async';
-
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
-import 'package:tele_vault/src/core/services/telegram_gateway.dart';
+import 'package:tele_vault/src/core/services/telegram_error.dart';
+import 'package:tele_vault/src/core/services/telegram_reliability_service.dart';
 import 'package:tele_vault/src/features/buckets/services/bucket_service.dart';
 import 'package:tele_vault/src/features/settings/services/settings_service.dart';
+
+import 'support/fake_telegram_gateway.dart';
 
 void main() {
   late AppDatabase db;
   late BucketService service;
-  late _FakeTelegramGateway telegramGateway;
+  late FakeTelegramGateway telegramGateway;
+  late TelegramReliabilityService reliability;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    telegramGateway = _FakeTelegramGateway();
-    service = BucketService(db, telegramGateway, SettingsService(db));
+    telegramGateway = FakeTelegramGateway();
+    reliability = TelegramReliabilityService(
+      db,
+      telegramGateway,
+      jitter: () => Duration.zero,
+      autoInitialize: false,
+    );
+    await reliability.initialize();
+    service = BucketService(
+      db,
+      telegramGateway,
+      SettingsService(db),
+      reliability,
+    );
   });
 
   tearDown(() async {
+    await reliability.dispose();
     await telegramGateway.dispose();
     await db.close();
   });
@@ -96,35 +111,44 @@ void main() {
       );
     },
   );
-}
 
-class _FakeTelegramGateway implements TelegramGateway {
-  final _updates = StreamController<TelegramUpdate>.broadcast();
+  test('bucket creation uses the shared typed flood-wait path', () async {
+    telegramGateway.handler = (request) {
+      if (request['@type'] == 'createNewSupergroupChat') {
+        return {'@type': 'error', 'code': 429, 'message': 'FLOOD_WAIT_60'};
+      }
+      throw UnimplementedError('Unexpected request: ${request['@type']}');
+    };
 
-  @override
-  Stream<TelegramUpdate> get updates => _updates.stream;
+    await expectLater(
+      service.createBucket('Demo', 'Demo bucket'),
+      throwsA(
+        isA<TelegramError>()
+            .having(
+              (error) => error.category,
+              'category',
+              TelegramErrorCategory.exactWait,
+            )
+            .having(
+              (error) => error.retryAfter,
+              'retryAfter',
+              const Duration(seconds: 60),
+            ),
+      ),
+    );
+    expect(await service.getBucketCount(), 0);
+    expect(reliability.currentState.isBlockedAt(DateTime.now()), isTrue);
 
-  @override
-  void send(TelegramRequest request) {}
-
-  @override
-  Future<TelegramResult> request(
-    TelegramRequest request, {
-    Duration timeout = const Duration(seconds: 15),
-  }) {
-    throw UnimplementedError('No Telegram requests are expected in this test');
-  }
-
-  @override
-  Future<TelegramUpdate> waitForUpdate(
-    bool Function(TelegramUpdate update) predicate, {
-    Duration timeout = const Duration(seconds: 15),
-  }) {
-    throw UnimplementedError('No Telegram updates are expected in this test');
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _updates.close();
-  }
+    final requestsBefore = telegramGateway.requestCount(
+      'createNewSupergroupChat',
+    );
+    await expectLater(
+      service.createBucket('Blocked', 'Must not be sent'),
+      throwsA(isA<TelegramError>()),
+    );
+    expect(
+      telegramGateway.requestCount('createNewSupergroupChat'),
+      requestsBefore,
+    );
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
@@ -5,7 +7,7 @@ import 'package:photo_manager/photo_manager.dart';
 
 import '../../../core/database/app_database.dart' show Bucket;
 import '../../../core/presentation/responsive_layout.dart';
-import '../../../core/services/telegram_service.dart';
+import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../buckets/services/bucket_service.dart';
 import '../../library/repositories/gallery_repository.dart';
@@ -27,11 +29,32 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
   SyncPreferences _prefs = const SyncPreferences();
   List<AssetPathEntity> _albums = const [];
   Bucket? _activeBucket;
+  StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
 
   @override
   void initState() {
     super.initState();
+    _telegramStateSub = ref
+        .read(telegramReliabilityServiceProvider)
+        .states
+        .listen((state) {
+          if (!mounted) return;
+          setState(() {
+            _isTelegramPremium = state.isPremium;
+            if (_prefs.maxFileSizeMb > state.effectiveUploadLimitMb) {
+              _prefs = _prefs.copyWith(
+                maxFileSizeMb: state.effectiveUploadLimitMb,
+              );
+            }
+          });
+        });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _telegramStateSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -61,16 +84,9 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
   }
 
   Future<bool> _loadTelegramPremiumStatus() async {
-    try {
-      final telegram = ref.read(telegramServiceProvider);
-      final me = await telegram.request({
-        '@type': 'getMe',
-      }, timeout: const Duration(seconds: 5));
-      return me['is_premium'] == true;
-    } catch (e) {
-      debugPrint('Unable to resolve Telegram Premium status: $e');
-      return false;
-    }
+    final reliability = ref.read(telegramReliabilityServiceProvider);
+    await reliability.refreshAccountCapabilities();
+    return reliability.isPremium;
   }
 
   Future<void> _save() async {
@@ -352,8 +368,8 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
       ),
       _MaxFileSizeOption(
         telegramPremiumMaxFileSizeMb,
-        '4 GB',
-        'Telegram Premium accounts only',
+        '< 4 GB',
+        '3.9 GB operational cap for Telegram Premium accounts',
         premiumOnly: true,
       ),
     ];
@@ -587,7 +603,7 @@ class _SyncPreferencesScreenState extends ConsumerState<SyncPreferencesScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          '4 GB uploads are only available for Telegram Premium accounts. Non-Premium accounts are limited to files under 2 GB.',
+          'Files up to 3.9 GB require Telegram Premium. Free accounts use a 1.9 GB operational cap.',
         ),
       ),
     );

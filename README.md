@@ -124,6 +124,7 @@ Prerequisites:
 - TDLib/libtdjson native binaries included under `third_party/libtdjson`.
 
 The reproducible Android release baseline is pinned in [`docs/android-release-16kb.md`](docs/android-release-16kb.md).
+The typed error, flood-wait, and account-capability policy is documented in [`docs/telegram-reliability.md`](docs/telegram-reliability.md).
 
 ```bash
 flutter pub get

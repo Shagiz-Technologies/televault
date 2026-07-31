@@ -910,6 +910,64 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _telegramErrorCodeMeta = const VerificationMeta(
+    'telegramErrorCode',
+  );
+  @override
+  late final GeneratedColumn<int> telegramErrorCode = GeneratedColumn<int>(
+    'telegram_error_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _telegramErrorCategoryMeta =
+      const VerificationMeta('telegramErrorCategory');
+  @override
+  late final GeneratedColumn<String> telegramErrorCategory =
+      GeneratedColumn<String>(
+        'telegram_error_category',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _telegramRetryAfterMeta =
+      const VerificationMeta('telegramRetryAfter');
+  @override
+  late final GeneratedColumn<DateTime> telegramRetryAfter =
+      GeneratedColumn<DateTime>(
+        'telegram_retry_after',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _lastTelegramOperationMeta =
+      const VerificationMeta('lastTelegramOperation');
+  @override
+  late final GeneratedColumn<String> lastTelegramOperation =
+      GeneratedColumn<String>(
+        'last_telegram_operation',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _userActionRequiredMeta =
+      const VerificationMeta('userActionRequired');
+  @override
+  late final GeneratedColumn<bool> userActionRequired = GeneratedColumn<bool>(
+    'user_action_required',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("user_action_required" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _isVaultedMeta = const VerificationMeta(
     'isVaulted',
   );
@@ -1014,6 +1072,11 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     lastError,
     nextRetryAt,
     lastAttemptAt,
+    telegramErrorCode,
+    telegramErrorCategory,
+    telegramRetryAfter,
+    lastTelegramOperation,
+    userActionRequired,
     isVaulted,
     isEncrypted,
     encryptionVersion,
@@ -1132,6 +1195,51 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         lastAttemptAt.isAcceptableOrUnknown(
           data['last_attempt_at']!,
           _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('telegram_error_code')) {
+      context.handle(
+        _telegramErrorCodeMeta,
+        telegramErrorCode.isAcceptableOrUnknown(
+          data['telegram_error_code']!,
+          _telegramErrorCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('telegram_error_category')) {
+      context.handle(
+        _telegramErrorCategoryMeta,
+        telegramErrorCategory.isAcceptableOrUnknown(
+          data['telegram_error_category']!,
+          _telegramErrorCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('telegram_retry_after')) {
+      context.handle(
+        _telegramRetryAfterMeta,
+        telegramRetryAfter.isAcceptableOrUnknown(
+          data['telegram_retry_after']!,
+          _telegramRetryAfterMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_telegram_operation')) {
+      context.handle(
+        _lastTelegramOperationMeta,
+        lastTelegramOperation.isAcceptableOrUnknown(
+          data['last_telegram_operation']!,
+          _lastTelegramOperationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('user_action_required')) {
+      context.handle(
+        _userActionRequiredMeta,
+        userActionRequired.isAcceptableOrUnknown(
+          data['user_action_required']!,
+          _userActionRequiredMeta,
         ),
       );
     }
@@ -1255,6 +1363,26 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_attempt_at'],
       ),
+      telegramErrorCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}telegram_error_code'],
+      ),
+      telegramErrorCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}telegram_error_category'],
+      ),
+      telegramRetryAfter: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}telegram_retry_after'],
+      ),
+      lastTelegramOperation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_telegram_operation'],
+      ),
+      userActionRequired: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}user_action_required'],
+      )!,
       isVaulted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_vaulted'],
@@ -1307,6 +1435,11 @@ class File extends DataClass implements Insertable<File> {
   final String? lastError;
   final DateTime? nextRetryAt;
   final DateTime? lastAttemptAt;
+  final int? telegramErrorCode;
+  final String? telegramErrorCategory;
+  final DateTime? telegramRetryAfter;
+  final String? lastTelegramOperation;
+  final bool userActionRequired;
   final bool isVaulted;
   final bool isEncrypted;
   final int? encryptionVersion;
@@ -1329,6 +1462,11 @@ class File extends DataClass implements Insertable<File> {
     this.lastError,
     this.nextRetryAt,
     this.lastAttemptAt,
+    this.telegramErrorCode,
+    this.telegramErrorCategory,
+    this.telegramRetryAfter,
+    this.lastTelegramOperation,
+    required this.userActionRequired,
     required this.isVaulted,
     required this.isEncrypted,
     this.encryptionVersion,
@@ -1368,6 +1506,19 @@ class File extends DataClass implements Insertable<File> {
     if (!nullToAbsent || lastAttemptAt != null) {
       map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
     }
+    if (!nullToAbsent || telegramErrorCode != null) {
+      map['telegram_error_code'] = Variable<int>(telegramErrorCode);
+    }
+    if (!nullToAbsent || telegramErrorCategory != null) {
+      map['telegram_error_category'] = Variable<String>(telegramErrorCategory);
+    }
+    if (!nullToAbsent || telegramRetryAfter != null) {
+      map['telegram_retry_after'] = Variable<DateTime>(telegramRetryAfter);
+    }
+    if (!nullToAbsent || lastTelegramOperation != null) {
+      map['last_telegram_operation'] = Variable<String>(lastTelegramOperation);
+    }
+    map['user_action_required'] = Variable<bool>(userActionRequired);
     map['is_vaulted'] = Variable<bool>(isVaulted);
     map['is_encrypted'] = Variable<bool>(isEncrypted);
     if (!nullToAbsent || encryptionVersion != null) {
@@ -1416,6 +1567,19 @@ class File extends DataClass implements Insertable<File> {
       lastAttemptAt: lastAttemptAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastAttemptAt),
+      telegramErrorCode: telegramErrorCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(telegramErrorCode),
+      telegramErrorCategory: telegramErrorCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(telegramErrorCategory),
+      telegramRetryAfter: telegramRetryAfter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(telegramRetryAfter),
+      lastTelegramOperation: lastTelegramOperation == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastTelegramOperation),
+      userActionRequired: Value(userActionRequired),
       isVaulted: Value(isVaulted),
       isEncrypted: Value(isEncrypted),
       encryptionVersion: encryptionVersion == null && nullToAbsent
@@ -1454,6 +1618,17 @@ class File extends DataClass implements Insertable<File> {
       lastError: serializer.fromJson<String?>(json['lastError']),
       nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
       lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      telegramErrorCode: serializer.fromJson<int?>(json['telegramErrorCode']),
+      telegramErrorCategory: serializer.fromJson<String?>(
+        json['telegramErrorCategory'],
+      ),
+      telegramRetryAfter: serializer.fromJson<DateTime?>(
+        json['telegramRetryAfter'],
+      ),
+      lastTelegramOperation: serializer.fromJson<String?>(
+        json['lastTelegramOperation'],
+      ),
+      userActionRequired: serializer.fromJson<bool>(json['userActionRequired']),
       isVaulted: serializer.fromJson<bool>(json['isVaulted']),
       isEncrypted: serializer.fromJson<bool>(json['isEncrypted']),
       encryptionVersion: serializer.fromJson<int?>(json['encryptionVersion']),
@@ -1483,6 +1658,15 @@ class File extends DataClass implements Insertable<File> {
       'lastError': serializer.toJson<String?>(lastError),
       'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
       'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'telegramErrorCode': serializer.toJson<int?>(telegramErrorCode),
+      'telegramErrorCategory': serializer.toJson<String?>(
+        telegramErrorCategory,
+      ),
+      'telegramRetryAfter': serializer.toJson<DateTime?>(telegramRetryAfter),
+      'lastTelegramOperation': serializer.toJson<String?>(
+        lastTelegramOperation,
+      ),
+      'userActionRequired': serializer.toJson<bool>(userActionRequired),
       'isVaulted': serializer.toJson<bool>(isVaulted),
       'isEncrypted': serializer.toJson<bool>(isEncrypted),
       'encryptionVersion': serializer.toJson<int?>(encryptionVersion),
@@ -1508,6 +1692,11 @@ class File extends DataClass implements Insertable<File> {
     Value<String?> lastError = const Value.absent(),
     Value<DateTime?> nextRetryAt = const Value.absent(),
     Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<int?> telegramErrorCode = const Value.absent(),
+    Value<String?> telegramErrorCategory = const Value.absent(),
+    Value<DateTime?> telegramRetryAfter = const Value.absent(),
+    Value<String?> lastTelegramOperation = const Value.absent(),
+    bool? userActionRequired,
     bool? isVaulted,
     bool? isEncrypted,
     Value<int?> encryptionVersion = const Value.absent(),
@@ -1536,6 +1725,19 @@ class File extends DataClass implements Insertable<File> {
     lastAttemptAt: lastAttemptAt.present
         ? lastAttemptAt.value
         : this.lastAttemptAt,
+    telegramErrorCode: telegramErrorCode.present
+        ? telegramErrorCode.value
+        : this.telegramErrorCode,
+    telegramErrorCategory: telegramErrorCategory.present
+        ? telegramErrorCategory.value
+        : this.telegramErrorCategory,
+    telegramRetryAfter: telegramRetryAfter.present
+        ? telegramRetryAfter.value
+        : this.telegramRetryAfter,
+    lastTelegramOperation: lastTelegramOperation.present
+        ? lastTelegramOperation.value
+        : this.lastTelegramOperation,
+    userActionRequired: userActionRequired ?? this.userActionRequired,
     isVaulted: isVaulted ?? this.isVaulted,
     isEncrypted: isEncrypted ?? this.isEncrypted,
     encryptionVersion: encryptionVersion.present
@@ -1576,6 +1778,21 @@ class File extends DataClass implements Insertable<File> {
       lastAttemptAt: data.lastAttemptAt.present
           ? data.lastAttemptAt.value
           : this.lastAttemptAt,
+      telegramErrorCode: data.telegramErrorCode.present
+          ? data.telegramErrorCode.value
+          : this.telegramErrorCode,
+      telegramErrorCategory: data.telegramErrorCategory.present
+          ? data.telegramErrorCategory.value
+          : this.telegramErrorCategory,
+      telegramRetryAfter: data.telegramRetryAfter.present
+          ? data.telegramRetryAfter.value
+          : this.telegramRetryAfter,
+      lastTelegramOperation: data.lastTelegramOperation.present
+          ? data.lastTelegramOperation.value
+          : this.lastTelegramOperation,
+      userActionRequired: data.userActionRequired.present
+          ? data.userActionRequired.value
+          : this.userActionRequired,
       isVaulted: data.isVaulted.present ? data.isVaulted.value : this.isVaulted,
       isEncrypted: data.isEncrypted.present
           ? data.isEncrypted.value
@@ -1609,6 +1826,11 @@ class File extends DataClass implements Insertable<File> {
           ..write('lastError: $lastError, ')
           ..write('nextRetryAt: $nextRetryAt, ')
           ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('telegramErrorCode: $telegramErrorCode, ')
+          ..write('telegramErrorCategory: $telegramErrorCategory, ')
+          ..write('telegramRetryAfter: $telegramRetryAfter, ')
+          ..write('lastTelegramOperation: $lastTelegramOperation, ')
+          ..write('userActionRequired: $userActionRequired, ')
           ..write('isVaulted: $isVaulted, ')
           ..write('isEncrypted: $isEncrypted, ')
           ..write('encryptionVersion: $encryptionVersion, ')
@@ -1636,6 +1858,11 @@ class File extends DataClass implements Insertable<File> {
     lastError,
     nextRetryAt,
     lastAttemptAt,
+    telegramErrorCode,
+    telegramErrorCategory,
+    telegramRetryAfter,
+    lastTelegramOperation,
+    userActionRequired,
     isVaulted,
     isEncrypted,
     encryptionVersion,
@@ -1662,6 +1889,11 @@ class File extends DataClass implements Insertable<File> {
           other.lastError == this.lastError &&
           other.nextRetryAt == this.nextRetryAt &&
           other.lastAttemptAt == this.lastAttemptAt &&
+          other.telegramErrorCode == this.telegramErrorCode &&
+          other.telegramErrorCategory == this.telegramErrorCategory &&
+          other.telegramRetryAfter == this.telegramRetryAfter &&
+          other.lastTelegramOperation == this.lastTelegramOperation &&
+          other.userActionRequired == this.userActionRequired &&
           other.isVaulted == this.isVaulted &&
           other.isEncrypted == this.isEncrypted &&
           other.encryptionVersion == this.encryptionVersion &&
@@ -1686,6 +1918,11 @@ class FilesCompanion extends UpdateCompanion<File> {
   final Value<String?> lastError;
   final Value<DateTime?> nextRetryAt;
   final Value<DateTime?> lastAttemptAt;
+  final Value<int?> telegramErrorCode;
+  final Value<String?> telegramErrorCategory;
+  final Value<DateTime?> telegramRetryAfter;
+  final Value<String?> lastTelegramOperation;
+  final Value<bool> userActionRequired;
   final Value<bool> isVaulted;
   final Value<bool> isEncrypted;
   final Value<int?> encryptionVersion;
@@ -1708,6 +1945,11 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.lastError = const Value.absent(),
     this.nextRetryAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
+    this.telegramErrorCode = const Value.absent(),
+    this.telegramErrorCategory = const Value.absent(),
+    this.telegramRetryAfter = const Value.absent(),
+    this.lastTelegramOperation = const Value.absent(),
+    this.userActionRequired = const Value.absent(),
     this.isVaulted = const Value.absent(),
     this.isEncrypted = const Value.absent(),
     this.encryptionVersion = const Value.absent(),
@@ -1731,6 +1973,11 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.lastError = const Value.absent(),
     this.nextRetryAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
+    this.telegramErrorCode = const Value.absent(),
+    this.telegramErrorCategory = const Value.absent(),
+    this.telegramRetryAfter = const Value.absent(),
+    this.lastTelegramOperation = const Value.absent(),
+    this.userActionRequired = const Value.absent(),
     this.isVaulted = const Value.absent(),
     this.isEncrypted = const Value.absent(),
     this.encryptionVersion = const Value.absent(),
@@ -1757,6 +2004,11 @@ class FilesCompanion extends UpdateCompanion<File> {
     Expression<String>? lastError,
     Expression<DateTime>? nextRetryAt,
     Expression<DateTime>? lastAttemptAt,
+    Expression<int>? telegramErrorCode,
+    Expression<String>? telegramErrorCategory,
+    Expression<DateTime>? telegramRetryAfter,
+    Expression<String>? lastTelegramOperation,
+    Expression<bool>? userActionRequired,
     Expression<bool>? isVaulted,
     Expression<bool>? isEncrypted,
     Expression<int>? encryptionVersion,
@@ -1780,6 +2032,15 @@ class FilesCompanion extends UpdateCompanion<File> {
       if (lastError != null) 'last_error': lastError,
       if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
       if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (telegramErrorCode != null) 'telegram_error_code': telegramErrorCode,
+      if (telegramErrorCategory != null)
+        'telegram_error_category': telegramErrorCategory,
+      if (telegramRetryAfter != null)
+        'telegram_retry_after': telegramRetryAfter,
+      if (lastTelegramOperation != null)
+        'last_telegram_operation': lastTelegramOperation,
+      if (userActionRequired != null)
+        'user_action_required': userActionRequired,
       if (isVaulted != null) 'is_vaulted': isVaulted,
       if (isEncrypted != null) 'is_encrypted': isEncrypted,
       if (encryptionVersion != null) 'encryption_version': encryptionVersion,
@@ -1805,6 +2066,11 @@ class FilesCompanion extends UpdateCompanion<File> {
     Value<String?>? lastError,
     Value<DateTime?>? nextRetryAt,
     Value<DateTime?>? lastAttemptAt,
+    Value<int?>? telegramErrorCode,
+    Value<String?>? telegramErrorCategory,
+    Value<DateTime?>? telegramRetryAfter,
+    Value<String?>? lastTelegramOperation,
+    Value<bool>? userActionRequired,
     Value<bool>? isVaulted,
     Value<bool>? isEncrypted,
     Value<int?>? encryptionVersion,
@@ -1828,6 +2094,13 @@ class FilesCompanion extends UpdateCompanion<File> {
       lastError: lastError ?? this.lastError,
       nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      telegramErrorCode: telegramErrorCode ?? this.telegramErrorCode,
+      telegramErrorCategory:
+          telegramErrorCategory ?? this.telegramErrorCategory,
+      telegramRetryAfter: telegramRetryAfter ?? this.telegramRetryAfter,
+      lastTelegramOperation:
+          lastTelegramOperation ?? this.lastTelegramOperation,
+      userActionRequired: userActionRequired ?? this.userActionRequired,
       isVaulted: isVaulted ?? this.isVaulted,
       isEncrypted: isEncrypted ?? this.isEncrypted,
       encryptionVersion: encryptionVersion ?? this.encryptionVersion,
@@ -1883,6 +2156,27 @@ class FilesCompanion extends UpdateCompanion<File> {
     if (lastAttemptAt.present) {
       map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
     }
+    if (telegramErrorCode.present) {
+      map['telegram_error_code'] = Variable<int>(telegramErrorCode.value);
+    }
+    if (telegramErrorCategory.present) {
+      map['telegram_error_category'] = Variable<String>(
+        telegramErrorCategory.value,
+      );
+    }
+    if (telegramRetryAfter.present) {
+      map['telegram_retry_after'] = Variable<DateTime>(
+        telegramRetryAfter.value,
+      );
+    }
+    if (lastTelegramOperation.present) {
+      map['last_telegram_operation'] = Variable<String>(
+        lastTelegramOperation.value,
+      );
+    }
+    if (userActionRequired.present) {
+      map['user_action_required'] = Variable<bool>(userActionRequired.value);
+    }
     if (isVaulted.present) {
       map['is_vaulted'] = Variable<bool>(isVaulted.value);
     }
@@ -1924,6 +2218,11 @@ class FilesCompanion extends UpdateCompanion<File> {
           ..write('lastError: $lastError, ')
           ..write('nextRetryAt: $nextRetryAt, ')
           ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('telegramErrorCode: $telegramErrorCode, ')
+          ..write('telegramErrorCategory: $telegramErrorCategory, ')
+          ..write('telegramRetryAfter: $telegramRetryAfter, ')
+          ..write('lastTelegramOperation: $lastTelegramOperation, ')
+          ..write('userActionRequired: $userActionRequired, ')
           ..write('isVaulted: $isVaulted, ')
           ..write('isEncrypted: $isEncrypted, ')
           ..write('encryptionVersion: $encryptionVersion, ')
@@ -2144,6 +2443,556 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $TelegramAccountStatesTable extends TelegramAccountStates
+    with TableInfo<$TelegramAccountStatesTable, TelegramAccountState> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TelegramAccountStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<BigInt> accountId = GeneratedColumn<BigInt>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.bigInt,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isPremiumMeta = const VerificationMeta(
+    'isPremium',
+  );
+  @override
+  late final GeneratedColumn<bool> isPremium = GeneratedColumn<bool>(
+    'is_premium',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_premium" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _premiumUpdatedAtMeta = const VerificationMeta(
+    'premiumUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> premiumUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'premium_updated_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _serverRetryUntilMeta = const VerificationMeta(
+    'serverRetryUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> serverRetryUntil =
+      GeneratedColumn<DateTime>(
+        'server_retry_until',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _writeBlockedUntilMeta = const VerificationMeta(
+    'writeBlockedUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> writeBlockedUntil =
+      GeneratedColumn<DateTime>(
+        'write_blocked_until',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _pauseReasonMeta = const VerificationMeta(
+    'pauseReason',
+  );
+  @override
+  late final GeneratedColumn<String> pauseReason = GeneratedColumn<String>(
+    'pause_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isPremiumFloodWaitMeta =
+      const VerificationMeta('isPremiumFloodWait');
+  @override
+  late final GeneratedColumn<bool> isPremiumFloodWait = GeneratedColumn<bool>(
+    'is_premium_flood_wait',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_premium_flood_wait" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    isPremium,
+    premiumUpdatedAt,
+    serverRetryUntil,
+    writeBlockedUntil,
+    pauseReason,
+    isPremiumFloodWait,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'telegram_account_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TelegramAccountState> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    }
+    if (data.containsKey('is_premium')) {
+      context.handle(
+        _isPremiumMeta,
+        isPremium.isAcceptableOrUnknown(data['is_premium']!, _isPremiumMeta),
+      );
+    }
+    if (data.containsKey('premium_updated_at')) {
+      context.handle(
+        _premiumUpdatedAtMeta,
+        premiumUpdatedAt.isAcceptableOrUnknown(
+          data['premium_updated_at']!,
+          _premiumUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('server_retry_until')) {
+      context.handle(
+        _serverRetryUntilMeta,
+        serverRetryUntil.isAcceptableOrUnknown(
+          data['server_retry_until']!,
+          _serverRetryUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('write_blocked_until')) {
+      context.handle(
+        _writeBlockedUntilMeta,
+        writeBlockedUntil.isAcceptableOrUnknown(
+          data['write_blocked_until']!,
+          _writeBlockedUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('pause_reason')) {
+      context.handle(
+        _pauseReasonMeta,
+        pauseReason.isAcceptableOrUnknown(
+          data['pause_reason']!,
+          _pauseReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_premium_flood_wait')) {
+      context.handle(
+        _isPremiumFloodWaitMeta,
+        isPremiumFloodWait.isAcceptableOrUnknown(
+          data['is_premium_flood_wait']!,
+          _isPremiumFloodWaitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId};
+  @override
+  TelegramAccountState map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TelegramAccountState(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.bigInt,
+        data['${effectivePrefix}account_id'],
+      )!,
+      isPremium: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_premium'],
+      )!,
+      premiumUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}premium_updated_at'],
+      ),
+      serverRetryUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}server_retry_until'],
+      ),
+      writeBlockedUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}write_blocked_until'],
+      ),
+      pauseReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pause_reason'],
+      ),
+      isPremiumFloodWait: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_premium_flood_wait'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TelegramAccountStatesTable createAlias(String alias) {
+    return $TelegramAccountStatesTable(attachedDatabase, alias);
+  }
+}
+
+class TelegramAccountState extends DataClass
+    implements Insertable<TelegramAccountState> {
+  final BigInt accountId;
+  final bool isPremium;
+  final DateTime? premiumUpdatedAt;
+  final DateTime? serverRetryUntil;
+  final DateTime? writeBlockedUntil;
+  final String? pauseReason;
+  final bool isPremiumFloodWait;
+  final DateTime updatedAt;
+  const TelegramAccountState({
+    required this.accountId,
+    required this.isPremium,
+    this.premiumUpdatedAt,
+    this.serverRetryUntil,
+    this.writeBlockedUntil,
+    this.pauseReason,
+    required this.isPremiumFloodWait,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<BigInt>(accountId);
+    map['is_premium'] = Variable<bool>(isPremium);
+    if (!nullToAbsent || premiumUpdatedAt != null) {
+      map['premium_updated_at'] = Variable<DateTime>(premiumUpdatedAt);
+    }
+    if (!nullToAbsent || serverRetryUntil != null) {
+      map['server_retry_until'] = Variable<DateTime>(serverRetryUntil);
+    }
+    if (!nullToAbsent || writeBlockedUntil != null) {
+      map['write_blocked_until'] = Variable<DateTime>(writeBlockedUntil);
+    }
+    if (!nullToAbsent || pauseReason != null) {
+      map['pause_reason'] = Variable<String>(pauseReason);
+    }
+    map['is_premium_flood_wait'] = Variable<bool>(isPremiumFloodWait);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  TelegramAccountStatesCompanion toCompanion(bool nullToAbsent) {
+    return TelegramAccountStatesCompanion(
+      accountId: Value(accountId),
+      isPremium: Value(isPremium),
+      premiumUpdatedAt: premiumUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(premiumUpdatedAt),
+      serverRetryUntil: serverRetryUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverRetryUntil),
+      writeBlockedUntil: writeBlockedUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(writeBlockedUntil),
+      pauseReason: pauseReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pauseReason),
+      isPremiumFloodWait: Value(isPremiumFloodWait),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory TelegramAccountState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TelegramAccountState(
+      accountId: serializer.fromJson<BigInt>(json['accountId']),
+      isPremium: serializer.fromJson<bool>(json['isPremium']),
+      premiumUpdatedAt: serializer.fromJson<DateTime?>(
+        json['premiumUpdatedAt'],
+      ),
+      serverRetryUntil: serializer.fromJson<DateTime?>(
+        json['serverRetryUntil'],
+      ),
+      writeBlockedUntil: serializer.fromJson<DateTime?>(
+        json['writeBlockedUntil'],
+      ),
+      pauseReason: serializer.fromJson<String?>(json['pauseReason']),
+      isPremiumFloodWait: serializer.fromJson<bool>(json['isPremiumFloodWait']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<BigInt>(accountId),
+      'isPremium': serializer.toJson<bool>(isPremium),
+      'premiumUpdatedAt': serializer.toJson<DateTime?>(premiumUpdatedAt),
+      'serverRetryUntil': serializer.toJson<DateTime?>(serverRetryUntil),
+      'writeBlockedUntil': serializer.toJson<DateTime?>(writeBlockedUntil),
+      'pauseReason': serializer.toJson<String?>(pauseReason),
+      'isPremiumFloodWait': serializer.toJson<bool>(isPremiumFloodWait),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  TelegramAccountState copyWith({
+    BigInt? accountId,
+    bool? isPremium,
+    Value<DateTime?> premiumUpdatedAt = const Value.absent(),
+    Value<DateTime?> serverRetryUntil = const Value.absent(),
+    Value<DateTime?> writeBlockedUntil = const Value.absent(),
+    Value<String?> pauseReason = const Value.absent(),
+    bool? isPremiumFloodWait,
+    DateTime? updatedAt,
+  }) => TelegramAccountState(
+    accountId: accountId ?? this.accountId,
+    isPremium: isPremium ?? this.isPremium,
+    premiumUpdatedAt: premiumUpdatedAt.present
+        ? premiumUpdatedAt.value
+        : this.premiumUpdatedAt,
+    serverRetryUntil: serverRetryUntil.present
+        ? serverRetryUntil.value
+        : this.serverRetryUntil,
+    writeBlockedUntil: writeBlockedUntil.present
+        ? writeBlockedUntil.value
+        : this.writeBlockedUntil,
+    pauseReason: pauseReason.present ? pauseReason.value : this.pauseReason,
+    isPremiumFloodWait: isPremiumFloodWait ?? this.isPremiumFloodWait,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  TelegramAccountState copyWithCompanion(TelegramAccountStatesCompanion data) {
+    return TelegramAccountState(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      isPremium: data.isPremium.present ? data.isPremium.value : this.isPremium,
+      premiumUpdatedAt: data.premiumUpdatedAt.present
+          ? data.premiumUpdatedAt.value
+          : this.premiumUpdatedAt,
+      serverRetryUntil: data.serverRetryUntil.present
+          ? data.serverRetryUntil.value
+          : this.serverRetryUntil,
+      writeBlockedUntil: data.writeBlockedUntil.present
+          ? data.writeBlockedUntil.value
+          : this.writeBlockedUntil,
+      pauseReason: data.pauseReason.present
+          ? data.pauseReason.value
+          : this.pauseReason,
+      isPremiumFloodWait: data.isPremiumFloodWait.present
+          ? data.isPremiumFloodWait.value
+          : this.isPremiumFloodWait,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TelegramAccountState(')
+          ..write('accountId: $accountId, ')
+          ..write('isPremium: $isPremium, ')
+          ..write('premiumUpdatedAt: $premiumUpdatedAt, ')
+          ..write('serverRetryUntil: $serverRetryUntil, ')
+          ..write('writeBlockedUntil: $writeBlockedUntil, ')
+          ..write('pauseReason: $pauseReason, ')
+          ..write('isPremiumFloodWait: $isPremiumFloodWait, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    accountId,
+    isPremium,
+    premiumUpdatedAt,
+    serverRetryUntil,
+    writeBlockedUntil,
+    pauseReason,
+    isPremiumFloodWait,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TelegramAccountState &&
+          other.accountId == this.accountId &&
+          other.isPremium == this.isPremium &&
+          other.premiumUpdatedAt == this.premiumUpdatedAt &&
+          other.serverRetryUntil == this.serverRetryUntil &&
+          other.writeBlockedUntil == this.writeBlockedUntil &&
+          other.pauseReason == this.pauseReason &&
+          other.isPremiumFloodWait == this.isPremiumFloodWait &&
+          other.updatedAt == this.updatedAt);
+}
+
+class TelegramAccountStatesCompanion
+    extends UpdateCompanion<TelegramAccountState> {
+  final Value<BigInt> accountId;
+  final Value<bool> isPremium;
+  final Value<DateTime?> premiumUpdatedAt;
+  final Value<DateTime?> serverRetryUntil;
+  final Value<DateTime?> writeBlockedUntil;
+  final Value<String?> pauseReason;
+  final Value<bool> isPremiumFloodWait;
+  final Value<DateTime> updatedAt;
+  const TelegramAccountStatesCompanion({
+    this.accountId = const Value.absent(),
+    this.isPremium = const Value.absent(),
+    this.premiumUpdatedAt = const Value.absent(),
+    this.serverRetryUntil = const Value.absent(),
+    this.writeBlockedUntil = const Value.absent(),
+    this.pauseReason = const Value.absent(),
+    this.isPremiumFloodWait = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  TelegramAccountStatesCompanion.insert({
+    this.accountId = const Value.absent(),
+    this.isPremium = const Value.absent(),
+    this.premiumUpdatedAt = const Value.absent(),
+    this.serverRetryUntil = const Value.absent(),
+    this.writeBlockedUntil = const Value.absent(),
+    this.pauseReason = const Value.absent(),
+    this.isPremiumFloodWait = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  static Insertable<TelegramAccountState> custom({
+    Expression<BigInt>? accountId,
+    Expression<bool>? isPremium,
+    Expression<DateTime>? premiumUpdatedAt,
+    Expression<DateTime>? serverRetryUntil,
+    Expression<DateTime>? writeBlockedUntil,
+    Expression<String>? pauseReason,
+    Expression<bool>? isPremiumFloodWait,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (isPremium != null) 'is_premium': isPremium,
+      if (premiumUpdatedAt != null) 'premium_updated_at': premiumUpdatedAt,
+      if (serverRetryUntil != null) 'server_retry_until': serverRetryUntil,
+      if (writeBlockedUntil != null) 'write_blocked_until': writeBlockedUntil,
+      if (pauseReason != null) 'pause_reason': pauseReason,
+      if (isPremiumFloodWait != null)
+        'is_premium_flood_wait': isPremiumFloodWait,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  TelegramAccountStatesCompanion copyWith({
+    Value<BigInt>? accountId,
+    Value<bool>? isPremium,
+    Value<DateTime?>? premiumUpdatedAt,
+    Value<DateTime?>? serverRetryUntil,
+    Value<DateTime?>? writeBlockedUntil,
+    Value<String?>? pauseReason,
+    Value<bool>? isPremiumFloodWait,
+    Value<DateTime>? updatedAt,
+  }) {
+    return TelegramAccountStatesCompanion(
+      accountId: accountId ?? this.accountId,
+      isPremium: isPremium ?? this.isPremium,
+      premiumUpdatedAt: premiumUpdatedAt ?? this.premiumUpdatedAt,
+      serverRetryUntil: serverRetryUntil ?? this.serverRetryUntil,
+      writeBlockedUntil: writeBlockedUntil ?? this.writeBlockedUntil,
+      pauseReason: pauseReason ?? this.pauseReason,
+      isPremiumFloodWait: isPremiumFloodWait ?? this.isPremiumFloodWait,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<BigInt>(accountId.value);
+    }
+    if (isPremium.present) {
+      map['is_premium'] = Variable<bool>(isPremium.value);
+    }
+    if (premiumUpdatedAt.present) {
+      map['premium_updated_at'] = Variable<DateTime>(premiumUpdatedAt.value);
+    }
+    if (serverRetryUntil.present) {
+      map['server_retry_until'] = Variable<DateTime>(serverRetryUntil.value);
+    }
+    if (writeBlockedUntil.present) {
+      map['write_blocked_until'] = Variable<DateTime>(writeBlockedUntil.value);
+    }
+    if (pauseReason.present) {
+      map['pause_reason'] = Variable<String>(pauseReason.value);
+    }
+    if (isPremiumFloodWait.present) {
+      map['is_premium_flood_wait'] = Variable<bool>(isPremiumFloodWait.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TelegramAccountStatesCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('isPremium: $isPremium, ')
+          ..write('premiumUpdatedAt: $premiumUpdatedAt, ')
+          ..write('serverRetryUntil: $serverRetryUntil, ')
+          ..write('writeBlockedUntil: $writeBlockedUntil, ')
+          ..write('pauseReason: $pauseReason, ')
+          ..write('isPremiumFloodWait: $isPremiumFloodWait, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2151,6 +3000,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LabelsTable labels = $LabelsTable(this);
   late final $FilesTable files = $FilesTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $TelegramAccountStatesTable telegramAccountStates =
+      $TelegramAccountStatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2160,6 +3011,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     labels,
     files,
     appSettings,
+    telegramAccountStates,
   ];
 }
 
@@ -2776,6 +3628,11 @@ typedef $$FilesTableCreateCompanionBuilder =
       Value<String?> lastError,
       Value<DateTime?> nextRetryAt,
       Value<DateTime?> lastAttemptAt,
+      Value<int?> telegramErrorCode,
+      Value<String?> telegramErrorCategory,
+      Value<DateTime?> telegramRetryAfter,
+      Value<String?> lastTelegramOperation,
+      Value<bool> userActionRequired,
       Value<bool> isVaulted,
       Value<bool> isEncrypted,
       Value<int?> encryptionVersion,
@@ -2800,6 +3657,11 @@ typedef $$FilesTableUpdateCompanionBuilder =
       Value<String?> lastError,
       Value<DateTime?> nextRetryAt,
       Value<DateTime?> lastAttemptAt,
+      Value<int?> telegramErrorCode,
+      Value<String?> telegramErrorCategory,
+      Value<DateTime?> telegramRetryAfter,
+      Value<String?> lastTelegramOperation,
+      Value<bool> userActionRequired,
       Value<bool> isVaulted,
       Value<bool> isEncrypted,
       Value<int?> encryptionVersion,
@@ -2919,6 +3781,31 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
 
   ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
     column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get telegramErrorCode => $composableBuilder(
+    column: $table.telegramErrorCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get telegramErrorCategory => $composableBuilder(
+    column: $table.telegramErrorCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get telegramRetryAfter => $composableBuilder(
+    column: $table.telegramRetryAfter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastTelegramOperation => $composableBuilder(
+    column: $table.lastTelegramOperation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get userActionRequired => $composableBuilder(
+    column: $table.userActionRequired,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3073,6 +3960,31 @@ class $$FilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get telegramErrorCode => $composableBuilder(
+    column: $table.telegramErrorCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get telegramErrorCategory => $composableBuilder(
+    column: $table.telegramErrorCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get telegramRetryAfter => $composableBuilder(
+    column: $table.telegramRetryAfter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastTelegramOperation => $composableBuilder(
+    column: $table.lastTelegramOperation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get userActionRequired => $composableBuilder(
+    column: $table.userActionRequired,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isVaulted => $composableBuilder(
     column: $table.isVaulted,
     builder: (column) => ColumnOrderings(column),
@@ -3210,6 +4122,31 @@ class $$FilesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get telegramErrorCode => $composableBuilder(
+    column: $table.telegramErrorCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get telegramErrorCategory => $composableBuilder(
+    column: $table.telegramErrorCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get telegramRetryAfter => $composableBuilder(
+    column: $table.telegramRetryAfter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get lastTelegramOperation => $composableBuilder(
+    column: $table.lastTelegramOperation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get userActionRequired => $composableBuilder(
+    column: $table.userActionRequired,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isVaulted =>
       $composableBuilder(column: $table.isVaulted, builder: (column) => column);
 
@@ -3323,6 +4260,11 @@ class $$FilesTableTableManager
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime?> nextRetryAt = const Value.absent(),
                 Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<int?> telegramErrorCode = const Value.absent(),
+                Value<String?> telegramErrorCategory = const Value.absent(),
+                Value<DateTime?> telegramRetryAfter = const Value.absent(),
+                Value<String?> lastTelegramOperation = const Value.absent(),
+                Value<bool> userActionRequired = const Value.absent(),
                 Value<bool> isVaulted = const Value.absent(),
                 Value<bool> isEncrypted = const Value.absent(),
                 Value<int?> encryptionVersion = const Value.absent(),
@@ -3345,6 +4287,11 @@ class $$FilesTableTableManager
                 lastError: lastError,
                 nextRetryAt: nextRetryAt,
                 lastAttemptAt: lastAttemptAt,
+                telegramErrorCode: telegramErrorCode,
+                telegramErrorCategory: telegramErrorCategory,
+                telegramRetryAfter: telegramRetryAfter,
+                lastTelegramOperation: lastTelegramOperation,
+                userActionRequired: userActionRequired,
                 isVaulted: isVaulted,
                 isEncrypted: isEncrypted,
                 encryptionVersion: encryptionVersion,
@@ -3369,6 +4316,11 @@ class $$FilesTableTableManager
                 Value<String?> lastError = const Value.absent(),
                 Value<DateTime?> nextRetryAt = const Value.absent(),
                 Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<int?> telegramErrorCode = const Value.absent(),
+                Value<String?> telegramErrorCategory = const Value.absent(),
+                Value<DateTime?> telegramRetryAfter = const Value.absent(),
+                Value<String?> lastTelegramOperation = const Value.absent(),
+                Value<bool> userActionRequired = const Value.absent(),
                 Value<bool> isVaulted = const Value.absent(),
                 Value<bool> isEncrypted = const Value.absent(),
                 Value<int?> encryptionVersion = const Value.absent(),
@@ -3391,6 +4343,11 @@ class $$FilesTableTableManager
                 lastError: lastError,
                 nextRetryAt: nextRetryAt,
                 lastAttemptAt: lastAttemptAt,
+                telegramErrorCode: telegramErrorCode,
+                telegramErrorCategory: telegramErrorCategory,
+                telegramRetryAfter: telegramRetryAfter,
+                lastTelegramOperation: lastTelegramOperation,
+                userActionRequired: userActionRequired,
                 isVaulted: isVaulted,
                 isEncrypted: isEncrypted,
                 encryptionVersion: encryptionVersion,
@@ -3616,6 +4573,286 @@ typedef $$AppSettingsTableProcessedTableManager =
       AppSetting,
       PrefetchHooks Function()
     >;
+typedef $$TelegramAccountStatesTableCreateCompanionBuilder =
+    TelegramAccountStatesCompanion Function({
+      Value<BigInt> accountId,
+      Value<bool> isPremium,
+      Value<DateTime?> premiumUpdatedAt,
+      Value<DateTime?> serverRetryUntil,
+      Value<DateTime?> writeBlockedUntil,
+      Value<String?> pauseReason,
+      Value<bool> isPremiumFloodWait,
+      Value<DateTime> updatedAt,
+    });
+typedef $$TelegramAccountStatesTableUpdateCompanionBuilder =
+    TelegramAccountStatesCompanion Function({
+      Value<BigInt> accountId,
+      Value<bool> isPremium,
+      Value<DateTime?> premiumUpdatedAt,
+      Value<DateTime?> serverRetryUntil,
+      Value<DateTime?> writeBlockedUntil,
+      Value<String?> pauseReason,
+      Value<bool> isPremiumFloodWait,
+      Value<DateTime> updatedAt,
+    });
+
+class $$TelegramAccountStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $TelegramAccountStatesTable> {
+  $$TelegramAccountStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<BigInt> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPremium => $composableBuilder(
+    column: $table.isPremium,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get premiumUpdatedAt => $composableBuilder(
+    column: $table.premiumUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get serverRetryUntil => $composableBuilder(
+    column: $table.serverRetryUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get writeBlockedUntil => $composableBuilder(
+    column: $table.writeBlockedUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pauseReason => $composableBuilder(
+    column: $table.pauseReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isPremiumFloodWait => $composableBuilder(
+    column: $table.isPremiumFloodWait,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$TelegramAccountStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TelegramAccountStatesTable> {
+  $$TelegramAccountStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<BigInt> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isPremium => $composableBuilder(
+    column: $table.isPremium,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get premiumUpdatedAt => $composableBuilder(
+    column: $table.premiumUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get serverRetryUntil => $composableBuilder(
+    column: $table.serverRetryUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get writeBlockedUntil => $composableBuilder(
+    column: $table.writeBlockedUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pauseReason => $composableBuilder(
+    column: $table.pauseReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isPremiumFloodWait => $composableBuilder(
+    column: $table.isPremiumFloodWait,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TelegramAccountStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TelegramAccountStatesTable> {
+  $$TelegramAccountStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<BigInt> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isPremium =>
+      $composableBuilder(column: $table.isPremium, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get premiumUpdatedAt => $composableBuilder(
+    column: $table.premiumUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get serverRetryUntil => $composableBuilder(
+    column: $table.serverRetryUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get writeBlockedUntil => $composableBuilder(
+    column: $table.writeBlockedUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get pauseReason => $composableBuilder(
+    column: $table.pauseReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isPremiumFloodWait => $composableBuilder(
+    column: $table.isPremiumFloodWait,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$TelegramAccountStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TelegramAccountStatesTable,
+          TelegramAccountState,
+          $$TelegramAccountStatesTableFilterComposer,
+          $$TelegramAccountStatesTableOrderingComposer,
+          $$TelegramAccountStatesTableAnnotationComposer,
+          $$TelegramAccountStatesTableCreateCompanionBuilder,
+          $$TelegramAccountStatesTableUpdateCompanionBuilder,
+          (
+            TelegramAccountState,
+            BaseReferences<
+              _$AppDatabase,
+              $TelegramAccountStatesTable,
+              TelegramAccountState
+            >,
+          ),
+          TelegramAccountState,
+          PrefetchHooks Function()
+        > {
+  $$TelegramAccountStatesTableTableManager(
+    _$AppDatabase db,
+    $TelegramAccountStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TelegramAccountStatesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$TelegramAccountStatesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$TelegramAccountStatesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<BigInt> accountId = const Value.absent(),
+                Value<bool> isPremium = const Value.absent(),
+                Value<DateTime?> premiumUpdatedAt = const Value.absent(),
+                Value<DateTime?> serverRetryUntil = const Value.absent(),
+                Value<DateTime?> writeBlockedUntil = const Value.absent(),
+                Value<String?> pauseReason = const Value.absent(),
+                Value<bool> isPremiumFloodWait = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => TelegramAccountStatesCompanion(
+                accountId: accountId,
+                isPremium: isPremium,
+                premiumUpdatedAt: premiumUpdatedAt,
+                serverRetryUntil: serverRetryUntil,
+                writeBlockedUntil: writeBlockedUntil,
+                pauseReason: pauseReason,
+                isPremiumFloodWait: isPremiumFloodWait,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<BigInt> accountId = const Value.absent(),
+                Value<bool> isPremium = const Value.absent(),
+                Value<DateTime?> premiumUpdatedAt = const Value.absent(),
+                Value<DateTime?> serverRetryUntil = const Value.absent(),
+                Value<DateTime?> writeBlockedUntil = const Value.absent(),
+                Value<String?> pauseReason = const Value.absent(),
+                Value<bool> isPremiumFloodWait = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => TelegramAccountStatesCompanion.insert(
+                accountId: accountId,
+                isPremium: isPremium,
+                premiumUpdatedAt: premiumUpdatedAt,
+                serverRetryUntil: serverRetryUntil,
+                writeBlockedUntil: writeBlockedUntil,
+                pauseReason: pauseReason,
+                isPremiumFloodWait: isPremiumFloodWait,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$TelegramAccountStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TelegramAccountStatesTable,
+      TelegramAccountState,
+      $$TelegramAccountStatesTableFilterComposer,
+      $$TelegramAccountStatesTableOrderingComposer,
+      $$TelegramAccountStatesTableAnnotationComposer,
+      $$TelegramAccountStatesTableCreateCompanionBuilder,
+      $$TelegramAccountStatesTableUpdateCompanionBuilder,
+      (
+        TelegramAccountState,
+        BaseReferences<
+          _$AppDatabase,
+          $TelegramAccountStatesTable,
+          TelegramAccountState
+        >,
+      ),
+      TelegramAccountState,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3628,4 +4865,6 @@ class $AppDatabaseManager {
       $$FilesTableTableManager(_db, _db.files);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$TelegramAccountStatesTableTableManager get telegramAccountStates =>
+      $$TelegramAccountStatesTableTableManager(_db, _db.telegramAccountStates);
 }
