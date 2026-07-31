@@ -102,7 +102,7 @@ class _TeleVaultAppState extends ConsumerState<TeleVaultApp>
                             ? const MainScreen()
                             : const BucketSetupScreen(),
                         loading: () => const SplashScreen(),
-                        error: (_, __) => const BucketSetupScreen(),
+                        error: (_, _) => const BucketSetupScreen(),
                       ),
                 AuthStatus.enterPhone => const LoginScreen(),
                 AuthStatus.enterCode => const OtpScreen(),

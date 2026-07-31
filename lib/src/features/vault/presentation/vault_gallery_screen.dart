@@ -484,7 +484,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
     return Image.file(
       file,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) =>
+      errorBuilder: (_, _, _) =>
           const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
     );
   }
