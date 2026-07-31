@@ -11,8 +11,8 @@ Upstream metadata from the plugin package:
 
 TeleVault keeps this vendored copy so platform builds resolve the TDLib binding from a stable local path.
 
-- Android `libtdjson.so` binaries are stored under `android/src/main/jniLibs`.
+- Android `libtdjson.so` binaries are stored under `android/src/main/jniLibs`. They are built from TDLib 1.8.66 commit `022d60202e446ad1287b9fb68e687c8a0760788b` using the pinned recipe at `tool/android/tdlib/Dockerfile`.
 - iOS resolves `flutter_libtdjson` `1.8.65` through CocoaPods and links its static XCFramework into the Flutter plugin. Dart accesses those symbols through `DynamicLibrary.process()`.
 - The manual iOS workflow rejects missing runtime dependencies, verifies TDLib FFI symbols, and launches the app on an iPhone simulator before packaging an IPA.
 
-Before production distribution, verify native binary provenance, TDLib licensing requirements, Android 15+ 16 KB page-size compatibility, and Telegram login/upload behavior on physical iOS devices.
+Android source/toolchain provenance and SHA-256 hashes are recorded in `android/TDLIB_BUILD_PROVENANCE.txt`. The release verifier checks 16 KB ELF alignment and GNU RELRO for all packaged native libraries. Telegram login/upload behavior still requires release testing on physical Android and iOS devices.

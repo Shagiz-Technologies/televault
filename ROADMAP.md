@@ -4,8 +4,8 @@ This roadmap is intentionally conservative. TeleVault handles private media and 
 
 ## P0 - Release safety
 
-- Verify TDLib/libtdjson native binary provenance and licensing.
-- Verify Android 15+ 16 KB page-size compatibility for native libraries.
+- Run the documented TDLib provenance and 16 KB checks for every release candidate.
+- Validate each release candidate on a physical 16 KB Android device when available.
 - Review Android 14+ selected photos access behavior.
 - Review and minimize Android media permissions.
 - Add a Play Store release checklist.

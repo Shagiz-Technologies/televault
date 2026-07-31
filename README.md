@@ -87,7 +87,7 @@ At a high level, TeleVault scans Android photos/videos, records metadata locally
 - [x] Safe Uninstall metadata flow
 - [ ] Full polished media restore UX
 - [ ] Android 14+ selected photos access review
-- [ ] TDLib 16 KB page-size verification
+- [x] TDLib 16 KB page-size verification and reproducible Android provenance
 - [ ] All-media client-side encryption
 
 ## Privacy & Security
@@ -123,6 +123,8 @@ Prerequisites:
 - A Telegram API ID and API hash from Telegram's developer portal.
 - TDLib/libtdjson native binaries included under `third_party/libtdjson`.
 
+The reproducible Android release baseline is pinned in [`docs/android-release-16kb.md`](docs/android-release-16kb.md).
+
 ```bash
 flutter pub get
 flutter run \
@@ -151,9 +153,9 @@ Android 14+ selected-photos access (`READ_MEDIA_VISUAL_USER_SELECTED`) still nee
 <details>
 <summary>TDLib/libtdjson notes</summary>
 
-TeleVault uses the vendored `third_party/libtdjson` Flutter plugin for TDLib JSON/FFI integration. The vendored plugin metadata points to `https://github.com/up9cloud/flutter_libtdjson` and includes an MIT license. Native `libtdjson.so` binaries are included for Android ABIs.
+TeleVault uses the vendored `third_party/libtdjson` Flutter plugin for TDLib JSON/FFI integration. The vendored plugin metadata points to `https://github.com/up9cloud/flutter_libtdjson` and includes an MIT license. Android `libtdjson.so` binaries are reproducibly built from a pinned official TDLib source commit with NDK r28 and verified for 16 KB page-size compatibility.
 
-Before a Play Store production release, verify native binary provenance, TDLib licensing requirements, and Android 15+ 16 KB page-size compatibility.
+See [`docs/android-release-16kb.md`](docs/android-release-16kb.md) for exact source commits, toolchain versions, binary hashes, licenses, and verification commands.
 
 See [`NOTICE.md`](NOTICE.md) for third-party notes.
 
@@ -206,12 +208,13 @@ Never commit:
 ## Current limitations
 
 - Android is the only supported release target today.
+- Android builds are 64-bit only (`arm64-v8a` devices and `x86_64` emulators); 32-bit ARM/x86 are not packaged.
 - iOS is experimental for local feasibility testing only. See [`docs/IOS_FEASIBILITY.md`](docs/IOS_FEASIBILITY.md).
 - Normal non-vault uploads are not client-side encrypted by TeleVault.
 - Full polished media restore UX is not complete.
 - Google Drive backup code exists as an experimental prototype and should be removed or documented.
 - Play Store compliance review is not complete.
-- TDLib native binary provenance and 16 KB compatibility need verification.
+- A physical-device Telegram login and upload smoke test remains required for every release candidate.
 
 <details>
 <summary>More limitation details</summary>
@@ -230,7 +233,7 @@ Near-term release-readiness work is tracked in [`ROADMAP.md`](ROADMAP.md) and Gi
 
 | Area | Status |
 | --- | --- |
-| TDLib native binary provenance | Needs verification |
+| TDLib native binary provenance | Verified and release-gated |
 | Android 14+ selected photos access | Needs review |
 | Media permissions minimization | Needs review |
 | Full media restore UX | Planned |

@@ -13,10 +13,19 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
+val releaseSigningKeys = listOf("keyAlias", "keyPassword", "storePassword", "storeFile")
+val hasReleaseSigning = keystorePropertiesFile.exists()
+if (hasReleaseSigning) {
+    val missingKeys = releaseSigningKeys.filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+    require(missingKeys.isEmpty()) {
+        "android/key.properties is missing required values: ${missingKeys.joinToString()}"
+    }
+}
+
 android {
     namespace = "et.shagiz.tele_vault"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -29,29 +38,40 @@ android {
 
     defaultConfig {
         applicationId = "et.shagiz.tele_vault"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion  // We need to increase the minimum Android version because libraries like photo_manager and TDLib require modern APIs.
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Flutter's target list is 64-bit only, but transitive AARs can
+            // still contribute orphaned 32-bit native libraries.
+            excludes += setOf("**/armeabi-v7a/*.so", "**/x86/*.so")
+        }
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storePassword = keystoreProperties["storePassword"] as String?
-            val storeFilePath = keystoreProperties["storeFile"] as String?
-            if (storeFilePath != null) {
-                storeFile = file(storeFilePath)
+        if (hasReleaseSigning) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storePassword = keystoreProperties.getProperty("storePassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }

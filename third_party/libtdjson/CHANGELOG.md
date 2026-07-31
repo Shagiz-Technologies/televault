@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## TeleVault vendored build
+
+- Rebuilt Android `libtdjson.so` from TDLib 1.8.66 commit
+  `022d60202e446ad1287b9fb68e687c8a0760788b` with NDK 28.2.13676358 and
+  OpenSSL 3.5.7 LTS for 16 KB page-size compatibility.
+
 ## 0.2.2
 
 * Bump TDLib version to 1.8.47
