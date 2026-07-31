@@ -190,31 +190,35 @@ def parse_objdump_load_alignments(output: str) -> list[int]:
     return alignments
 
 
-def verify_elf(path: Path, readelf: Path, objdump: Path) -> tuple[list[int], bool, str]:
+def parse_relocation_sensitive_sections(output: str) -> list[str]:
+    if not re.search(r"^\s*Sections:\s*$", output, re.MULTILINE):
+        raise VerificationError("Unable to inspect ELF section headers")
+    return sorted(
+        set(
+            re.findall(
+                r"\.(?:got(?:\.plt)?|data\.rel\.ro|rel(?:a)?\.[^\s]+|init_array|fini_array)\b",
+                output,
+            )
+        )
+    )
+
+
+def verify_elf(path: Path, objdump: Path) -> tuple[list[int], bool, str]:
     program_headers = run([str(objdump), "-p", str(path)]).stdout
     alignments = parse_objdump_load_alignments(program_headers)
-    readelf_program_headers = run([str(readelf), "-lW", str(path)]).stdout
-    relro = bool(
-        re.search(r"^\s*RELRO\b", program_headers, re.MULTILINE)
-        or re.search(r"^\s*GNU_RELRO\b", readelf_program_headers, re.MULTILINE)
-    )
+    relro = bool(re.search(r"^\s*RELRO\b", program_headers, re.MULTILINE))
     if min(alignments) < MINIMUM_LOAD_ALIGNMENT:
         raise VerificationError(
             f"{path.name} has LOAD alignment {min(alignments):#x}; expected at least 0x4000"
         )
     relro_status = "enabled"
     if not relro:
-        sections = run([str(readelf), "-SW", str(path)]).stdout
-        if "Section Headers:" not in sections:
-            raise VerificationError("Unable to inspect ELF section headers")
-        relocation_sections = re.findall(
-            r"\.(?:got(?:\.plt)?|data\.rel\.ro|rel(?:a)?\.[^\s]+|init_array|fini_array)\b",
-            sections,
-        )
+        sections = run([str(objdump), "-h", str(path)]).stdout
+        relocation_sections = parse_relocation_sensitive_sections(sections)
         if relocation_sections:
             raise VerificationError(
                 f"{path.name} has relocation-sensitive sections without GNU_RELRO: "
-                f"{sorted(set(relocation_sections))}"
+                f"{relocation_sections}"
             )
         relro_status = "not-applicable-no-relocation-sections"
     return alignments, relro, relro_status
@@ -257,7 +261,6 @@ def main() -> int:
     parser.add_argument("--report", type=Path, default=Path("build/reports/android-16kb-inventory.json"))
     parser.add_argument("--zipalign")
     parser.add_argument("--aapt2")
-    parser.add_argument("--readelf")
     parser.add_argument("--objdump")
     args = parser.parse_args()
 
@@ -271,7 +274,6 @@ def main() -> int:
     origins = json.loads(args.origins.read_text(encoding="utf-8"))
     zipalign = find_android_tool("zipalign", args.zipalign)
     aapt2 = find_android_tool("aapt2", args.aapt2)
-    readelf = find_ndk_tool("readelf", args.readelf)
     objdump = find_ndk_tool("objdump", args.objdump)
 
     config = run(["java", "-jar", str(bundletool), "dump", "config", f"--bundle={aab}"]).stdout
@@ -329,7 +331,7 @@ def main() -> int:
                 library = native_root / entry
                 print(f"Verifying {entry}", flush=True)
                 try:
-                    alignments, relro, relro_status = verify_elf(library, readelf, objdump)
+                    alignments, relro, relro_status = verify_elf(library, objdump)
                 except VerificationError as error:
                     raise VerificationError(f"{entry}: {error}") from error
                 digest = sha256(library)

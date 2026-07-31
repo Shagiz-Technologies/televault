@@ -94,7 +94,6 @@ jobs:
           --bundletool "$RUNNER_TEMP/bundletool/bundletool.jar"
           --zipalign "$ANDROID_SDK_ROOT/build-tools/36.1.0/zipalign"
           --aapt2 "$ANDROID_SDK_ROOT/build-tools/36.1.0/aapt2"
-          --readelf "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           --objdump "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
 
       - name: Upload native inventory

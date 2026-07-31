@@ -9,6 +9,7 @@ from verify_16kb import (  # noqa: E402
     parse_badging,
     parse_load_alignments,
     parse_objdump_load_alignments,
+    parse_relocation_sensitive_sections,
     verify_provenance_digest,
 )
 
@@ -46,6 +47,30 @@ class Verify16KbTest(unittest.TestCase):
             "    LOAD off 0x4000 vaddr 0x4000 paddr 0x4000 align 2**16\n"
         )
         self.assertEqual(parse_objdump_load_alignments(output), [0x4000, 0x10000])
+
+    def test_parses_relocation_sensitive_objdump_sections(self) -> None:
+        output = (
+            "Sections:\n"
+            "Idx Name          Size     VMA              Type\n"
+            "  0 .text         00000010 0000000000000000 TEXT\n"
+            "  1 .got          00000008 0000000000000010 DATA\n"
+            "  2 .rela.dyn     00000018 0000000000000018 DATA\n"
+        )
+        self.assertEqual(
+            parse_relocation_sensitive_sections(output), [".got", ".rela.dyn"]
+        )
+
+    def test_accepts_objdump_sections_without_relocations(self) -> None:
+        output = (
+            "Sections:\n"
+            "Idx Name          Size     VMA              Type\n"
+            "  0 .text         00000010 0000000000000000 TEXT\n"
+        )
+        self.assertEqual(parse_relocation_sensitive_sections(output), [])
+
+    def test_rejects_unrecognized_objdump_sections(self) -> None:
+        with self.assertRaises(VerificationError):
+            parse_relocation_sensitive_sections("no section table")
 
     def test_accepts_reviewed_native_hash(self) -> None:
         verify_provenance_digest(

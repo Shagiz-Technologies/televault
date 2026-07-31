@@ -132,7 +132,7 @@ The verifier:
 4. Runs `zipalign -c -P 16 -v 4`.
 5. Confirms the generated package, minimum SDK, compile SDK, and target SDK.
 6. Uses NDK `llvm-objdump -p`, as documented by Android, to check every ELF LOAD segment for alignment of at least `0x4000`.
-7. Uses the NDK ELF tools to require GNU RELRO whenever a `.so` contains relocation-sensitive sections. Flutter's generated `libapp.so` has no such sections, so its missing RELRO header is recorded as not applicable rather than silently ignored.
+7. Uses NDK `llvm-objdump -p` and `llvm-objdump -h` to require GNU RELRO whenever a `.so` contains relocation-sensitive sections. Flutter's generated `libapp.so` has no such sections, so its missing RELRO header is recorded as not applicable rather than silently ignored.
 8. Rejects unknown native-library provenance and Android debug signing.
 9. Writes `build/reports/android-16kb-inventory.json`.
 
