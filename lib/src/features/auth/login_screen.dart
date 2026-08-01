@@ -6,6 +6,8 @@ import 'package:gap/gap.dart';
 import '../../core/presentation/responsive_layout.dart';
 import '../../core/presentation/tele_vault_ui.dart';
 import '../../core/presentation/televault_logo_mark.dart';
+import '../../core/config/app_runtime_environment.dart';
+import '../../core/services/review_environment_exit_service.dart';
 import '../../core/services/telegram_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../settings/presentation/privacy_policy_screen.dart';
@@ -22,6 +24,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneCtrl = TextEditingController();
   final _focusNode = FocusNode();
+  bool _returningToProduction = false;
 
   @override
   void initState() {
@@ -148,6 +151,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   style: const TextStyle(color: AppTheme.error, fontSize: 13),
                 ),
               ],
+              if (AppRuntimeEnvironment.isPlayStoreReview &&
+                  !AppRuntimeEnvironment.compileTimeReviewEnabled) ...[
+                Gap(AppResponsive.gap(context, 14, compact: 10)),
+                OutlinedButton.icon(
+                  onPressed: _returningToProduction
+                      ? null
+                      : _confirmReturnToProduction,
+                  icon: _returningToProduction
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.restart_alt_rounded),
+                  label: const Text('Return to normal Telegram'),
+                ),
+              ],
               Gap(AppResponsive.gap(context, 18, compact: 10)),
               Text(
                 'By continuing, you agree to the Terms of Service and acknowledge the Privacy Policy.',
@@ -200,5 +219,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmReturnToProduction() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Return to normal Telegram?'),
+        content: const Text(
+          'TeleVault will remove only Test Environment data, then reopen using your normal Telegram storage. Your normal TeleVault data will not be changed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Stay in Test Environment'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Return to normal'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _returningToProduction = true);
+    try {
+      await ref.read(reviewEnvironmentExitServiceProvider).returnToProduction();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _returningToProduction = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The Test Environment could not be cleared. Normal Telegram data was not opened.',
+          ),
+        ),
+      );
+    }
   }
 }

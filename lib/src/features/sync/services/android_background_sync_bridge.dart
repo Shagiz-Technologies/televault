@@ -26,6 +26,9 @@ class AndroidBackgroundSyncBridge {
     if (call.method != 'wakeSync') {
       throw MissingPluginException('Unknown background sync method');
     }
+    final arguments = call.arguments;
+    final namespace = arguments is Map ? arguments['namespace'] : null;
+    if (namespace != AppRuntimeEnvironment.workerNamespace) return false;
     final handler = _syncWakeHandler;
     if (handler == null) return false;
     try {
@@ -108,6 +111,7 @@ class AndroidBackgroundSyncBridge {
     final progressText = status.uploadingCount > 0 ? ' - $percent%' : '';
 
     return {
+      'namespace': AppRuntimeEnvironment.workerNamespace,
       'title': title,
       'text':
           '${status.completedCount}/${status.totalCount} complete'

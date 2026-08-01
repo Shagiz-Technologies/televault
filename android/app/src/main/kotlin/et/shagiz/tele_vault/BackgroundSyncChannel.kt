@@ -30,7 +30,10 @@ object BackgroundSyncChannel : MethodChannel.MethodCallHandler {
         }
     }
 
-    fun requestDartSync(onComplete: ((Boolean) -> Unit)? = null) {
+    fun requestDartSync(
+        namespace: String,
+        onComplete: ((Boolean) -> Unit)? = null,
+    ) {
         Handler(Looper.getMainLooper()).post {
             val activeChannel = channel
             if (activeChannel == null) {
@@ -39,7 +42,7 @@ object BackgroundSyncChannel : MethodChannel.MethodCallHandler {
             }
             activeChannel.invokeMethod(
                 "wakeSync",
-                null,
+                mapOf("namespace" to namespace),
                 object : MethodChannel.Result {
                     override fun success(result: Any?) {
                         onComplete?.invoke(result == true)

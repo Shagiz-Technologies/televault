@@ -178,6 +178,36 @@ class LocalAccountCleanupCoordinator {
     });
   }
 
+  Future<void> clearReviewEnvironment() {
+    if (!AppRuntimeEnvironment.isPlayStoreReview) {
+      throw StateError('Review cleanup cannot run in the production runtime.');
+    }
+    return _operationLock.synchronized(() async {
+      var marker = const _CleanupMarker(
+        stage: _CleanupStage.started,
+        preserveEncryptedVaultFiles: false,
+      );
+      await _writeMarker(marker);
+      try {
+        await _stopAccountWorkers();
+        marker = marker.copyWith(stage: _CleanupStage.workersStopped);
+        await _writeMarker(marker);
+        await _clearLocalState(
+          preserveEncryptedVaultFiles: false,
+          clearTdlib: true,
+          initialStage: marker.stage,
+        );
+        await _deleteMarker();
+      } catch (error) {
+        throw LocalAccountCleanupException(
+          LocalAccountCleanupErrorCode.localCleanupFailed,
+          'The Test Environment could not be cleared completely.',
+          cause: error,
+        );
+      }
+    });
+  }
+
   Future<void> bindCurrentAccount(String accountFingerprint) {
     return _operationLock.synchronized(() async {
       if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(accountFingerprint)) {
@@ -318,6 +348,9 @@ class LocalAccountCleanupCoordinator {
       final directory = io.Directory(path.join(root.path, directoryName));
       if (await directory.exists()) await directory.delete(recursive: true);
     }
+    // Review cleanup must never remove legacy production snapshots that may
+    // still exist directly under the shared system temporary directory.
+    if (AppRuntimeEnvironment.isPlayStoreReview) return;
     if (!await root.exists()) return;
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! io.File) continue;

@@ -50,18 +50,19 @@ class VaultPinService {
   static const _maxAttempts = 5;
   static const _lockoutDuration = Duration(minutes: 5);
 
-  static const _defaultSecureStorage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      storageNamespace: AppRuntimeEnvironment.vaultSecretStorageNamespace,
-      migrateWithBackup: true,
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.unlocked_this_device,
-    ),
-  );
-
   VaultPinService(this._db, {FlutterSecureStorage? secureStorage})
-    : _secureStorage = secureStorage ?? _defaultSecureStorage;
+    : _secureStorage =
+          secureStorage ??
+          FlutterSecureStorage(
+            aOptions: AndroidOptions(
+              storageNamespace:
+                  AppRuntimeEnvironment.vaultSecretStorageNamespace,
+              migrateWithBackup: true,
+            ),
+            iOptions: const IOSOptions(
+              accessibility: KeychainAccessibility.unlocked_this_device,
+            ),
+          );
 
   Future<bool> isPinConfigured() async {
     await migrateLegacyPinIfNeeded();

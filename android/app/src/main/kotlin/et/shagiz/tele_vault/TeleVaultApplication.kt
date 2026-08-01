@@ -13,6 +13,7 @@ class TeleVaultApplication : FlutterApplication() {
         super.onCreate()
 
         val engine = FlutterEngine(this)
+        RuntimeEnvironmentChannel.register(this, engine.dartExecutor.binaryMessenger)
         BackgroundSyncChannel.register(this, engine.dartExecutor.binaryMessenger)
         engine.dartExecutor.executeDartEntrypoint(
             io.flutter.embedding.engine.dart.DartExecutor.DartEntrypoint

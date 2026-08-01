@@ -343,14 +343,8 @@ class TelegramService implements TelegramGateway {
 
     const productionApiId = String.fromEnvironment('TELEGRAM_API_ID');
     const productionApiHash = String.fromEnvironment('TELEGRAM_API_HASH');
-    const reviewApiId = String.fromEnvironment('TELEGRAM_TEST_API_ID');
-    const reviewApiHash = String.fromEnvironment('TELEGRAM_TEST_API_HASH');
-    const apiIdString = AppRuntimeEnvironment.isPlayStoreReview
-        ? reviewApiId
-        : productionApiId;
-    const apiHash = AppRuntimeEnvironment.isPlayStoreReview
-        ? reviewApiHash
-        : productionApiHash;
+    const apiIdString = productionApiId;
+    const apiHash = productionApiHash;
     final apiId = int.tryParse(apiIdString) ?? 0;
 
     if (apiId <= 0 || apiHash.isEmpty) {
