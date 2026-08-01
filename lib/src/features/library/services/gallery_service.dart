@@ -1,26 +1,21 @@
-import 'package:photo_manager/photo_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:photo_manager/photo_manager.dart';
+
+import 'media_permission_service.dart';
 
 final galleryServiceProvider = Provider<GalleryService>((ref) {
   return GalleryService();
 });
 
 class GalleryService {
-  /// Request permission to access the gallery.
-  Future<PermissionState> requestPermission() async {
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
-    if (!ps.hasAccess) {
-      // Open settings if permanently denied? For now just return state.
-      return ps;
-    }
-    return ps;
-  }
-
   /// Get list of albums (AssetPathEntity).
-  Future<List<AssetPathEntity>> getAlbums() async {
+  Future<List<AssetPathEntity>> getAlbums({
+    MediaPermissionRequest request =
+        const MediaPermissionRequest.photosAndVideos(),
+  }) async {
     // Only fetch albums that contain images or video
     final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
-      type: RequestType.common, // Image + Video
+      type: request.requestType,
       hasAll: true, // "Recent" album
       filterOption: FilterOptionGroup(
         orders: [
@@ -45,11 +40,18 @@ class GalleryService {
   }
 
   /// Get "Recent" album directly (convenience method)
-  Future<AssetPathEntity?> getRecentAlbum() async {
-    final albums = await getAlbums();
+  Future<AssetPathEntity?> getRecentAlbum({
+    MediaPermissionRequest request =
+        const MediaPermissionRequest.photosAndVideos(),
+  }) async {
+    final albums = await getAlbums(request: request);
     if (albums.isNotEmpty) {
       return albums.first; // Usually "Recent" or "Recents" is first
     }
     return null;
+  }
+
+  Future<AssetEntity?> getAssetById(String assetId) {
+    return AssetEntity.fromId(assetId);
   }
 }

@@ -12,10 +12,13 @@ import '../../sync/services/file_uploader.dart';
 import '../../vault/services/vault_service.dart';
 import '../../vault/services/vault_migration_service.dart';
 import '../repositories/gallery_repository.dart';
+import '../services/media_permission_service.dart';
+import '../services/media_permission_policy.dart';
 
 class LibraryState {
   final bool isLoading;
-  final bool hasPermission;
+  final MediaPermissionStatus permissionStatus;
+  final MediaPermissionRequest permissionRequest;
   final AssetPathEntity? currentAlbum;
   final bool isAllPhotos;
   final List<AssetEntity> assets;
@@ -28,7 +31,8 @@ class LibraryState {
 
   const LibraryState({
     this.isLoading = true,
-    this.hasPermission = false,
+    this.permissionStatus = const MediaPermissionStatus.notDetermined(),
+    this.permissionRequest = const MediaPermissionRequest.photosAndVideos(),
     this.currentAlbum,
     this.isAllPhotos = true,
     this.assets = const [],
@@ -42,7 +46,8 @@ class LibraryState {
 
   LibraryState copyWith({
     bool? isLoading,
-    bool? hasPermission,
+    MediaPermissionStatus? permissionStatus,
+    MediaPermissionRequest? permissionRequest,
     AssetPathEntity? currentAlbum,
     bool? isAllPhotos,
     List<AssetEntity>? assets,
@@ -55,7 +60,8 @@ class LibraryState {
   }) {
     return LibraryState(
       isLoading: isLoading ?? this.isLoading,
-      hasPermission: hasPermission ?? this.hasPermission,
+      permissionStatus: permissionStatus ?? this.permissionStatus,
+      permissionRequest: permissionRequest ?? this.permissionRequest,
       currentAlbum: currentAlbum ?? this.currentAlbum,
       isAllPhotos: isAllPhotos ?? this.isAllPhotos,
       assets: assets ?? this.assets,
@@ -67,6 +73,8 @@ class LibraryState {
       assetLabels: assetLabels ?? this.assetLabels,
     );
   }
+
+  bool get hasPermission => permissionStatus.canReadMedia;
 }
 
 class MediaLabelInfo {
@@ -90,6 +98,7 @@ final libraryControllerProvider =
         ref.watch(databaseProvider),
         ref.watch(vaultServiceProvider),
         ref.watch(fileUploaderProvider),
+        ref.watch(mediaPermissionPolicyProvider),
       );
     });
 
@@ -98,26 +107,105 @@ class LibraryController extends StateNotifier<LibraryState> {
   final AppDatabase _db;
   final VaultService _vaultService;
   final FileUploader _uploader;
+  final MediaPermissionPolicy _permissionPolicy;
   StreamSubscription? _statusSub;
 
-  LibraryController(this._repo, this._db, this._vaultService, this._uploader)
-    : super(const LibraryState()) {
+  LibraryController(
+    this._repo,
+    this._db,
+    this._vaultService,
+    this._uploader,
+    this._permissionPolicy,
+  ) : super(const LibraryState()) {
     _init();
   }
 
   Future<void> _init() async {
-    final hasAccess = await _repo.requestPermission();
-    if (!hasAccess) {
-      state = state.copyWith(isLoading: false, hasPermission: false);
+    final request = await _resolvePermissionRequest();
+    final permission = await _repo.getPermissionStatus(request);
+    state = state.copyWith(
+      permissionRequest: request,
+      permissionStatus: permission,
+    );
+    if (!permission.canReadMedia) {
+      state = state.copyWith(isLoading: false, assets: const []);
       return;
     }
 
-    final album = await _repo.getRecentAlbum();
+    await _loadInitialAlbum();
+  }
+
+  Future<MediaPermissionStatus> requestMediaAccess() async {
+    final permission = await _repo.requestPermission(state.permissionRequest);
+    await _applyPermission(permission);
+    return permission;
+  }
+
+  Future<MediaPermissionStatus> updateSelectedAccess() async {
+    final permission = await _repo.updateSelectedAccess(
+      state.permissionRequest,
+    );
+    await _applyPermission(permission, forceReload: true);
+    return permission;
+  }
+
+  Future<MediaPermissionStatus> refreshPermission() async {
+    final request = await _resolvePermissionRequest();
+    final permission = await _repo.getPermissionStatus(request);
+    state = state.copyWith(permissionRequest: request);
+    await _applyPermission(
+      permission,
+      forceReload: permission.scope == MediaAccessScope.limitedAccess,
+    );
+    return permission;
+  }
+
+  Future<void> openMediaSettings() => _repo.openSettings();
+
+  Future<void> _applyPermission(
+    MediaPermissionStatus permission, {
+    bool forceReload = false,
+  }) async {
+    final previouslyReadable = state.permissionStatus.canReadMedia;
+    final scopeChanged = state.permissionStatus.scope != permission.scope;
+    final mediaTypesChanged =
+        state.permissionStatus.imageAccess != permission.imageAccess ||
+        state.permissionStatus.videoAccess != permission.videoAccess;
+    state = state.copyWith(permissionStatus: permission, isLoading: false);
+    if (!permission.canReadMedia) {
+      state = state.copyWith(
+        assets: const [],
+        assetStatus: const {},
+        assetLabels: const {},
+        currentPage: 0,
+        hasMore: false,
+      );
+      return;
+    }
+    if (forceReload ||
+        !previouslyReadable ||
+        scopeChanged ||
+        mediaTypesChanged) {
+      await _loadInitialAlbum();
+    }
+  }
+
+  Future<void> _loadInitialAlbum() async {
+    final album = await _repo.getRecentAlbum(request: state.permissionRequest);
     if (album != null) {
       await _loadAssets(album, page: 0, clearExisting: true);
     } else {
-      state = state.copyWith(isLoading: false, hasPermission: true);
+      state = state.copyWith(
+        isLoading: false,
+        assets: const [],
+        currentPage: 0,
+        hasMore: false,
+      );
     }
+  }
+
+  Future<MediaPermissionRequest> _resolvePermissionRequest() async {
+    return _permissionPolicy.activeRequest();
   }
 
   Future<void> _loadAssets(
@@ -151,7 +239,6 @@ class LibraryController extends StateNotifier<LibraryState> {
 
     state = state.copyWith(
       isLoading: false,
-      hasPermission: true,
       currentAlbum: album,
       assets: combinedAssets,
       currentPage: page,
@@ -313,11 +400,13 @@ class LibraryController extends StateNotifier<LibraryState> {
   }
 
   Future<void> refreshCurrentView() async {
-    final album = state.currentAlbum ?? await _repo.getRecentAlbum();
+    if (!state.permissionStatus.canReadMedia) return;
+    final album =
+        state.currentAlbum ??
+        await _repo.getRecentAlbum(request: state.permissionRequest);
     if (album == null) {
       state = state.copyWith(
         isLoading: false,
-        hasPermission: true,
         assets: const [],
         currentPage: 0,
         hasMore: false,

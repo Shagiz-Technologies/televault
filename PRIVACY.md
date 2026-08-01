@@ -35,7 +35,15 @@ No external analytics or telemetry SDK was found during the open-source preparat
 
 ## Permissions
 
-TeleVault requests media permissions to scan photos and videos, biometric permissions for app/vault unlock, and internet access for Telegram login/upload. `ACCESS_MEDIA_LOCATION` is privacy-sensitive and should be reviewed before production release.
+TeleVault requests photo and video permissions because continuous gallery
+discovery and automatic backup are core features. On Android 14 and later,
+users can grant selected-media access; TeleVault then scans only those items and
+labels discovery as partial. TeleVault does not request media location or all-
+files access. Biometric permissions support app/vault unlock, and internet
+access supports Telegram login and upload.
+
+The production application does not include Google Drive or Google Sign-In. An
+earlier unwired prototype was removed before release.
 
 ## User responsibility
 

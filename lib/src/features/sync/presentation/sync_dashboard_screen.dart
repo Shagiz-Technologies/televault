@@ -11,6 +11,9 @@ import '../../../core/database/file_sync_status.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../buckets/services/bucket_service.dart';
+import '../../library/presentation/widgets/media_access_notice.dart';
+import '../../library/services/media_permission_policy.dart';
+import '../../library/services/media_permission_service.dart';
 import '../../settings/services/settings_service.dart';
 import '../services/file_uploader.dart';
 import '../services/sync_constraints_service.dart';
@@ -24,7 +27,8 @@ class SyncDashboardScreen extends ConsumerStatefulWidget {
       _SyncDashboardScreenState();
 }
 
-class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
+class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
+    with WidgetsBindingObserver {
   bool _syncingNow = false;
   bool _retrying = false;
   bool _loadingControls = true;
@@ -36,10 +40,15 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
   StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
   Timer? _countdownTimer;
   TelegramReliabilityState _telegramState = const TelegramReliabilityState();
+  late Future<MediaPermissionStatus> _mediaPermissionStatus;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _mediaPermissionStatus = ref
+        .read(mediaPermissionPolicyProvider)
+        .activeStatus();
     final reliability = ref.read(telegramReliabilityServiceProvider);
     _telegramState = reliability.currentState;
     _telegramStateSub = reliability.states.listen((state) {
@@ -65,10 +74,22 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _constraintSub?.cancel();
     _telegramStateSub?.cancel();
     _countdownTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {
+        _mediaPermissionStatus = ref
+            .read(mediaPermissionPolicyProvider)
+            .activeStatus();
+      });
+    }
   }
 
   Future<void> _loadControls() async {
@@ -105,6 +126,27 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
       setState(() => _autoBackupEnabled = value);
     } finally {
       if (mounted) setState(() => _savingAutoBackup = false);
+    }
+  }
+
+  Future<void> _manageMediaAccess(MediaPermissionStatus status) async {
+    try {
+      final policy = ref.read(mediaPermissionPolicyProvider);
+      final service = ref.read(mediaPermissionServiceProvider);
+      final request = await policy.activeRequest();
+      if (status.canRequestAgain) {
+        await service.updateSelectedAccess(request);
+      } else {
+        await service.openSettings();
+      }
+      if (mounted) {
+        setState(() => _mediaPermissionStatus = policy.activeStatus());
+      }
+    } on MediaPermissionException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -213,6 +255,20 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen> {
                 ),
               ),
             const Gap(8),
+            FutureBuilder<MediaPermissionStatus>(
+              future: _mediaPermissionStatus,
+              builder: (context, snapshot) {
+                final status = snapshot.data;
+                if (status == null ||
+                    status.scope != MediaAccessScope.limitedAccess) {
+                  return const SizedBox.shrink();
+                }
+                return MediaAccessNotice(
+                  status: status,
+                  onManageAccess: () => _manageMediaAccess(status),
+                );
+              },
+            ),
             if (_telegramState.isBlockedAt(DateTime.now())) ...[
               _telegramPauseCard(context),
               const Gap(8),

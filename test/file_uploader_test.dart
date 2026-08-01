@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
 import 'package:tele_vault/src/core/database/file_sync_status.dart';
+import 'package:tele_vault/src/core/database/local_media_access_state.dart';
 import 'package:tele_vault/src/core/services/diagnostics_service.dart';
 import 'package:tele_vault/src/core/services/telegram_error.dart';
 import 'package:tele_vault/src/core/services/telegram_gateway.dart';
@@ -68,6 +69,7 @@ void main() {
     int size = 42,
     String? lastTelegramOperation,
     bool userActionRequired = false,
+    LocalMediaAccessState localAccessState = LocalMediaAccessState.available,
   }) {
     return db
         .into(db.files)
@@ -81,6 +83,7 @@ void main() {
             dateAdded: Value(dateAdded ?? DateTime.now()),
             lastTelegramOperation: Value(lastTelegramOperation),
             userActionRequired: Value(userActionRequired),
+            localMediaAccessState: Value(localAccessState.dbValue),
           ),
         );
   }
@@ -121,6 +124,22 @@ void main() {
       rows.singleWhere((row) => row.bucketId == videosBucket).status,
       FileSyncStatus.failed.dbValue,
     );
+  });
+
+  test('access-unavailable media is not uploaded or retried', () async {
+    final bucketId = await insertBucket('Selected photos', 1001);
+    await insertFile(
+      bucketId: bucketId,
+      path: '/not-currently-accessible/photo.jpg',
+      status: FileSyncStatus.pending,
+      localAccessState: LocalMediaAccessState.accessUnavailable,
+    );
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final row = await db.select(db.files).getSingle();
+
+    expect(row.status, FileSyncStatus.pending.dbValue);
+    expect(telegramGateway.requestCount('sendMessage'), 0);
   });
 
   test('upload loop sends older media first using inputFileLocal', () async {
