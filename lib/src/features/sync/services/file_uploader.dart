@@ -1046,7 +1046,21 @@ class FileUploader {
       if (!_messageCaption(message).contains(marker)) continue;
       final messageId = _extractInt(message['id']);
       if (messageId == null) continue;
-      if (message['sending_state'] == null) return messageId;
+      final rawSendingState = message['sending_state'];
+      if (rawSendingState == null) return messageId;
+      final sendingState = rawSendingState is Map
+          ? Map<String, dynamic>.from(rawSendingState)
+          : const <String, dynamic>{};
+      if (sendingState['@type'] == 'messageSendingStateFailed') {
+        final failure = TelegramErrorParser.parse(
+          sendingState,
+          operation: 'reconcile_upload_operation',
+          chatId: chatId,
+        );
+        if (failure?.retryAfter != null) throw failure!;
+        await _removeFailedUploadMessage(chatIdInt, messageId, chatId);
+        return null;
+      }
       throw TelegramError(
         code: null,
         tdlibMessage: 'A previous upload is still being finalized by Telegram',
@@ -1057,6 +1071,26 @@ class FileUploader {
       );
     }
     return null;
+  }
+
+  Future<void> _removeFailedUploadMessage(
+    int chatIdInt,
+    int messageId,
+    BigInt chatId,
+  ) async {
+    final response = await _telegramService.request({
+      '@type': 'deleteMessages',
+      'chat_id': chatIdInt,
+      'message_ids': [messageId],
+      'revoke': false,
+    }, timeout: const Duration(seconds: 20));
+    if (response['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'discard_failed_upload_operation',
+        chatId: chatId,
+      )!;
+    }
   }
 
   List<Map<String, dynamic>> _messageList(Map<String, dynamic> response) {

@@ -432,6 +432,26 @@ void main() {
     },
   );
 
+  test('retry discards a failed local message before sending again', () async {
+    final bucketId = await insertBucket('Photos', 1001);
+    final media = await tempMedia('retry-failed-message.jpg');
+    const operationId = '14e6ac27-cb83-4adb-a30e-7d9de74ebf38';
+    await insertFile(
+      bucketId: bucketId,
+      path: media.path,
+      status: FileSyncStatus.pending,
+      uploadOperationId: operationId,
+    );
+    telegramGateway.addFailedRemoteUpload(operationId, messageId: 811);
+
+    await uploader.drainQueueForTesting(ignoreConstraints: true);
+    final row = await db.select(db.files).getSingle();
+
+    expect(row.status, FileSyncStatus.synced.dbValue);
+    expect(telegramGateway.requestCount('deleteMessages'), 1);
+    expect(telegramGateway.requestCount('sendMessage'), 1);
+  });
+
   test(
     'Wi-Fi loss cancels the active automatic upload and keeps it pending',
     () async {
@@ -522,6 +542,27 @@ class _UploaderTelegramGateway implements TelegramGateway {
     });
   }
 
+  void addFailedRemoteUpload(String operationId, {required int messageId}) {
+    _remoteMessages.add({
+      '@type': 'message',
+      'id': messageId,
+      'chat_id': 1001,
+      'sending_state': {
+        '@type': 'messageSendingStateFailed',
+        'error': {'@type': 'error', 'code': 500, 'message': 'NETWORK'},
+        'can_retry': true,
+        'retry_after': 0,
+      },
+      'content': {
+        '@type': 'messageDocument',
+        'caption': {
+          '@type': 'formattedText',
+          'text': '#TeleVaultUpload:$operationId',
+        },
+      },
+    });
+  }
+
   Future<void> emitUploadProgress(String path, {required int fileId}) async {
     _updates.add({
       '@type': 'updateFile',
@@ -590,12 +631,19 @@ class _UploaderTelegramGateway implements TelegramGateway {
         'total_count': _remoteMessages.length,
         'messages': _remoteMessages,
       },
+      ('deleteMessages', _) => _deleteMessages(request),
       ('cancelUploadFile', _) => _cancelUpload(),
       ('sendMessage', _) => await _sendMessage(request),
       _ => throw UnimplementedError(
         'Unexpected Telegram request: ${request['@type']}',
       ),
     };
+  }
+
+  TelegramResult _deleteMessages(TelegramRequest request) {
+    final ids = (request['message_ids'] as List).whereType<int>().toSet();
+    _remoteMessages.removeWhere((message) => ids.contains(message['id']));
+    return const {'@type': 'ok'};
   }
 
   Future<TelegramResult> _sendMessage(TelegramRequest request) async {
