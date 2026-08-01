@@ -56,7 +56,13 @@ void main() {
       );
       final legacyV1 = io.File(path.join(root.path, 'legacy-v1.jpg.enc'));
       final legacyV2 = io.File(path.join(root.path, 'legacy-v2.jpg.enc'));
-      await _writeLegacy(legacyV1, plaintext, secret, version: 1);
+      await _writeLegacy(
+        legacyV1,
+        plaintext,
+        secret,
+        version: 1,
+        ivBytes: Uint8List.fromList([2, ...List<int>.filled(11, 7)]),
+      );
       await _writeLegacy(legacyV2, plaintext, secret, version: 2);
       await _insertLegacy(database, bucketId, legacyV1, version: 1);
       await _insertLegacy(database, bucketId, legacyV2, version: 2);
@@ -250,8 +256,11 @@ Future<void> _writeLegacy(
   Uint8List plaintext,
   String secret, {
   required int version,
+  Uint8List? ivBytes,
 }) async {
-  final iv = legacy.IV.fromSecureRandom(12);
+  final iv = ivBytes == null
+      ? legacy.IV.fromSecureRandom(12)
+      : legacy.IV(ivBytes);
   final output = BytesBuilder();
   late final legacy.Key key;
   if (version == 2) {

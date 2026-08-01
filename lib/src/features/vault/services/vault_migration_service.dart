@@ -116,7 +116,14 @@ class VaultMigrationService {
     io.File? candidate;
     var candidateCreatedHere = false;
     try {
-      plaintext = await _vaultService.decryptFile(source, legacySecret);
+      final recordedVersion = row.vaultFormatVersion ?? row.encryptionVersion;
+      plaintext = recordedVersion == 1 || recordedVersion == 2
+          ? await _vaultService.decryptLegacyFile(
+              source,
+              legacySecret,
+              formatVersion: recordedVersion!,
+            )
+          : await _vaultService.decryptFile(source, legacySecret);
       candidate = await _vaultService.destinationForObjectId(objectId);
       VaultEncryptionResult result;
       if (await candidate.exists()) {
