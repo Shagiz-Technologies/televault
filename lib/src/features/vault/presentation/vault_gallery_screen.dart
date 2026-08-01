@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
@@ -27,6 +28,17 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
   bool _bulkBusy = false;
   final Set<int> _selectedIds = {};
   final Map<int, Future<io.File?>> _previewFutures = {};
+  final Map<int, io.File> _previewPlaintextFiles = {};
+
+  @override
+  void dispose() {
+    final files = _previewPlaintextFiles.values.toList(growable: false);
+    _previewPlaintextFiles.clear();
+    for (final file in files) {
+      unawaited(_deletePlaintext(file));
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -495,7 +507,11 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
     try {
       final source = io.File(row.localPath);
       if (!await source.exists()) return null;
-      return ref.read(vaultServiceProvider).decryptFile(source, pin);
+      final decrypted = await ref
+          .read(vaultServiceProvider)
+          .decryptFile(source, pin);
+      _previewPlaintextFiles[row.id] = decrypted;
+      return decrypted;
     } catch (_) {
       return null;
     }
@@ -513,6 +529,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
       _busyFileId = rows.length == 1 ? rows.first.id : null;
       _bulkBusy = rows.length > 1;
     });
+    final temporaryFiles = <io.File>[];
     try {
       final service = ref.read(vaultServiceProvider);
       final files = <XFile>[];
@@ -522,6 +539,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
         final decrypted = row.isEncrypted
             ? await service.decryptFile(source, pin)
             : source;
+        if (row.isEncrypted) temporaryFiles.add(decrypted);
         files.add(XFile(decrypted.path));
       }
       if (files.isEmpty) {
@@ -534,6 +552,9 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Unable to decrypt/share: $e')));
     } finally {
+      for (final file in temporaryFiles) {
+        await _deletePlaintext(file);
+      }
       if (mounted) {
         setState(() {
           _busyFileId = null;
@@ -615,6 +636,8 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
         }
         await (db.delete(db.files)..where((t) => t.id.equals(row.id))).go();
         _previewFutures.remove(row.id);
+        final preview = _previewPlaintextFiles.remove(row.id);
+        if (preview != null) await _deletePlaintext(preview);
       }
       if (!mounted) return;
       _exitSelectionMode();
@@ -673,6 +696,14 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
             isEncrypted: const Value(false),
             encryptionVersion: const Value(null),
             ivB64: const Value(null),
+            vaultFormatVersion: const Value(null),
+            encryptedObjectId: const Value(null),
+            encryptedSize: const Value(null),
+            originalSize: const Value(null),
+            vaultIntegrityStatus: const Value('unknown'),
+            vaultMigrationStatus: const Value('notRequired'),
+            keyWrappingVersion: const Value(null),
+            lastVerifiedAt: const Value(null),
             lastError: const Value(null),
           ),
         );
@@ -680,6 +711,8 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
           await encryptedFile.delete();
         }
         _previewFutures.remove(row.id);
+        final preview = _previewPlaintextFiles.remove(row.id);
+        if (preview != null) await _deletePlaintext(preview);
         restored++;
       }
 
@@ -774,6 +807,14 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
       return null;
     }
     return result;
+  }
+
+  Future<void> _deletePlaintext(io.File file) async {
+    try {
+      await ref.read(vaultServiceProvider).deleteTemporaryPlaintext(file);
+    } on Object {
+      // Startup cleanup is the fallback if immediate deletion is interrupted.
+    }
   }
 
   bool _isImagePath(String path) {

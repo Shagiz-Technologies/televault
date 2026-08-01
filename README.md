@@ -82,7 +82,7 @@ At a high level, TeleVault scans Android photos/videos, records metadata locally
 - [x] Backup state indicators for queued, uploading, synced, failed, vaulted, and deleted-local items
 - [x] Bucket preferences for media type and sync behavior
 - [x] Vault lock/unlock support with a Vault PIN or password and device biometric authentication where supported
-- [x] Vault-protected media encryption
+- [x] Streaming authenticated vault encryption with a separate recovery key
 - [x] Metadata export/import
 - [x] Safe Uninstall metadata flow
 - [ ] Full polished media restore UX
@@ -101,6 +101,8 @@ Important boundaries:
 - Contributors must not add external telemetry without explicit user control, documentation, and review.
 - Telegram and TDLib still process Telegram login, channel access, and uploaded files.
 - Normal non-vault uploads are not client-side encrypted by TeleVault today.
+- Vault PIN/password and biometrics are local access controls. Portable v3
+  recovery requires the separately exported Vault Recovery Key.
 
 Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting guidance is in [`SECURITY.md`](SECURITY.md).
 
@@ -108,11 +110,17 @@ Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting gu
 
 | Data type | Current behavior |
 | --- | --- |
-| Vault-protected media | Encrypted by TeleVault as part of the vault flow. |
+| Vault-protected media | New objects use chunked AES-256-GCM v3 encryption with a random per-file key wrapped by the Vault Recovery Key. |
 | Metadata backup packages | Encrypted with a user passphrase and bound to the Telegram account recorded in the snapshot. |
 | Normal non-vault uploads | Not client-side encrypted by TeleVault in the current implementation. |
 
 If you need all-media client-side encryption, treat that as future work and do not assume it exists today.
+
+Record the Vault Recovery Key before relying on remote vault backups. Losing
+both the installed secure-storage copy and the exported key makes v3 vault
+objects unrecoverable; a short PIN or biometric cannot replace it. The
+container and migration design is documented in
+[`docs/vault-container-v3.md`](docs/vault-container-v3.md).
 
 ## Build from source
 
@@ -216,6 +224,8 @@ Never commit:
 - Google Drive backup code exists as an experimental prototype and should be removed or documented.
 - Play Store compliance review is not complete.
 - A physical-device Telegram login and upload smoke test remains required for every release candidate.
+- Legacy vault v1/v2 objects remain readable but should be migrated to v3 after
+  confirming a Vault Recovery Key.
 
 <details>
 <summary>More limitation details</summary>

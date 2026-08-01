@@ -13,6 +13,7 @@ import '../../buckets/services/bucket_service.dart';
 import '../../buckets/presentation/bucket_selector_sheet.dart';
 import '../../sync/presentation/sync_dashboard_screen.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
+import '../../vault/presentation/vault_recovery_key_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'about_screen.dart';
 import 'release_log_screen.dart';
@@ -98,6 +99,32 @@ class SettingsScreen extends ConsumerWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const SyncDashboardScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.key_rounded,
+              title: "Vault Recovery Key",
+              subtitle: "Export or import your portable recovery key",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (unlockContext) => VaultPinScreen(
+                      mode: VaultPinMode.unlock,
+                      onUnlock: (_) {
+                        Navigator.pop(unlockContext);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const VaultRecoveryKeyScreen(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },

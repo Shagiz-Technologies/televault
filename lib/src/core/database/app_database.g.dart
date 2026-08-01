@@ -1018,6 +1018,96 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _vaultFormatVersionMeta =
+      const VerificationMeta('vaultFormatVersion');
+  @override
+  late final GeneratedColumn<int> vaultFormatVersion = GeneratedColumn<int>(
+    'vault_format_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _encryptedObjectIdMeta = const VerificationMeta(
+    'encryptedObjectId',
+  );
+  @override
+  late final GeneratedColumn<String> encryptedObjectId =
+      GeneratedColumn<String>(
+        'encrypted_object_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _encryptedSizeMeta = const VerificationMeta(
+    'encryptedSize',
+  );
+  @override
+  late final GeneratedColumn<int> encryptedSize = GeneratedColumn<int>(
+    'encrypted_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _originalSizeMeta = const VerificationMeta(
+    'originalSize',
+  );
+  @override
+  late final GeneratedColumn<int> originalSize = GeneratedColumn<int>(
+    'original_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _vaultIntegrityStatusMeta =
+      const VerificationMeta('vaultIntegrityStatus');
+  @override
+  late final GeneratedColumn<String> vaultIntegrityStatus =
+      GeneratedColumn<String>(
+        'vault_integrity_status',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('unknown'),
+      );
+  static const VerificationMeta _vaultMigrationStatusMeta =
+      const VerificationMeta('vaultMigrationStatus');
+  @override
+  late final GeneratedColumn<String> vaultMigrationStatus =
+      GeneratedColumn<String>(
+        'vault_migration_status',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('notRequired'),
+      );
+  static const VerificationMeta _keyWrappingVersionMeta =
+      const VerificationMeta('keyWrappingVersion');
+  @override
+  late final GeneratedColumn<int> keyWrappingVersion = GeneratedColumn<int>(
+    'key_wrapping_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastVerifiedAtMeta = const VerificationMeta(
+    'lastVerifiedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastVerifiedAt =
+      GeneratedColumn<DateTime>(
+        'last_verified_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _deletedLocallyAtMeta = const VerificationMeta(
     'deletedLocallyAt',
   );
@@ -1081,6 +1171,14 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     isEncrypted,
     encryptionVersion,
     ivB64,
+    vaultFormatVersion,
+    encryptedObjectId,
+    encryptedSize,
+    originalSize,
+    vaultIntegrityStatus,
+    vaultMigrationStatus,
+    keyWrappingVersion,
+    lastVerifiedAt,
     deletedLocallyAt,
     labelId,
     dateAdded,
@@ -1273,6 +1371,78 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         ivB64.isAcceptableOrUnknown(data['iv_b64']!, _ivB64Meta),
       );
     }
+    if (data.containsKey('vault_format_version')) {
+      context.handle(
+        _vaultFormatVersionMeta,
+        vaultFormatVersion.isAcceptableOrUnknown(
+          data['vault_format_version']!,
+          _vaultFormatVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('encrypted_object_id')) {
+      context.handle(
+        _encryptedObjectIdMeta,
+        encryptedObjectId.isAcceptableOrUnknown(
+          data['encrypted_object_id']!,
+          _encryptedObjectIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('encrypted_size')) {
+      context.handle(
+        _encryptedSizeMeta,
+        encryptedSize.isAcceptableOrUnknown(
+          data['encrypted_size']!,
+          _encryptedSizeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('original_size')) {
+      context.handle(
+        _originalSizeMeta,
+        originalSize.isAcceptableOrUnknown(
+          data['original_size']!,
+          _originalSizeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('vault_integrity_status')) {
+      context.handle(
+        _vaultIntegrityStatusMeta,
+        vaultIntegrityStatus.isAcceptableOrUnknown(
+          data['vault_integrity_status']!,
+          _vaultIntegrityStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('vault_migration_status')) {
+      context.handle(
+        _vaultMigrationStatusMeta,
+        vaultMigrationStatus.isAcceptableOrUnknown(
+          data['vault_migration_status']!,
+          _vaultMigrationStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('key_wrapping_version')) {
+      context.handle(
+        _keyWrappingVersionMeta,
+        keyWrappingVersion.isAcceptableOrUnknown(
+          data['key_wrapping_version']!,
+          _keyWrappingVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_verified_at')) {
+      context.handle(
+        _lastVerifiedAtMeta,
+        lastVerifiedAt.isAcceptableOrUnknown(
+          data['last_verified_at']!,
+          _lastVerifiedAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('deleted_locally_at')) {
       context.handle(
         _deletedLocallyAtMeta,
@@ -1399,6 +1569,38 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.string,
         data['${effectivePrefix}iv_b64'],
       ),
+      vaultFormatVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}vault_format_version'],
+      ),
+      encryptedObjectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}encrypted_object_id'],
+      ),
+      encryptedSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}encrypted_size'],
+      ),
+      originalSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}original_size'],
+      ),
+      vaultIntegrityStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_integrity_status'],
+      )!,
+      vaultMigrationStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vault_migration_status'],
+      )!,
+      keyWrappingVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}key_wrapping_version'],
+      ),
+      lastVerifiedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_verified_at'],
+      ),
       deletedLocallyAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}deleted_locally_at'],
@@ -1444,6 +1646,14 @@ class File extends DataClass implements Insertable<File> {
   final bool isEncrypted;
   final int? encryptionVersion;
   final String? ivB64;
+  final int? vaultFormatVersion;
+  final String? encryptedObjectId;
+  final int? encryptedSize;
+  final int? originalSize;
+  final String vaultIntegrityStatus;
+  final String vaultMigrationStatus;
+  final int? keyWrappingVersion;
+  final DateTime? lastVerifiedAt;
   final DateTime? deletedLocallyAt;
   final int? labelId;
   final DateTime dateAdded;
@@ -1471,6 +1681,14 @@ class File extends DataClass implements Insertable<File> {
     required this.isEncrypted,
     this.encryptionVersion,
     this.ivB64,
+    this.vaultFormatVersion,
+    this.encryptedObjectId,
+    this.encryptedSize,
+    this.originalSize,
+    required this.vaultIntegrityStatus,
+    required this.vaultMigrationStatus,
+    this.keyWrappingVersion,
+    this.lastVerifiedAt,
     this.deletedLocallyAt,
     this.labelId,
     required this.dateAdded,
@@ -1526,6 +1744,26 @@ class File extends DataClass implements Insertable<File> {
     }
     if (!nullToAbsent || ivB64 != null) {
       map['iv_b64'] = Variable<String>(ivB64);
+    }
+    if (!nullToAbsent || vaultFormatVersion != null) {
+      map['vault_format_version'] = Variable<int>(vaultFormatVersion);
+    }
+    if (!nullToAbsent || encryptedObjectId != null) {
+      map['encrypted_object_id'] = Variable<String>(encryptedObjectId);
+    }
+    if (!nullToAbsent || encryptedSize != null) {
+      map['encrypted_size'] = Variable<int>(encryptedSize);
+    }
+    if (!nullToAbsent || originalSize != null) {
+      map['original_size'] = Variable<int>(originalSize);
+    }
+    map['vault_integrity_status'] = Variable<String>(vaultIntegrityStatus);
+    map['vault_migration_status'] = Variable<String>(vaultMigrationStatus);
+    if (!nullToAbsent || keyWrappingVersion != null) {
+      map['key_wrapping_version'] = Variable<int>(keyWrappingVersion);
+    }
+    if (!nullToAbsent || lastVerifiedAt != null) {
+      map['last_verified_at'] = Variable<DateTime>(lastVerifiedAt);
     }
     if (!nullToAbsent || deletedLocallyAt != null) {
       map['deleted_locally_at'] = Variable<DateTime>(deletedLocallyAt);
@@ -1588,6 +1826,26 @@ class File extends DataClass implements Insertable<File> {
       ivB64: ivB64 == null && nullToAbsent
           ? const Value.absent()
           : Value(ivB64),
+      vaultFormatVersion: vaultFormatVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vaultFormatVersion),
+      encryptedObjectId: encryptedObjectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(encryptedObjectId),
+      encryptedSize: encryptedSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(encryptedSize),
+      originalSize: originalSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalSize),
+      vaultIntegrityStatus: Value(vaultIntegrityStatus),
+      vaultMigrationStatus: Value(vaultMigrationStatus),
+      keyWrappingVersion: keyWrappingVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(keyWrappingVersion),
+      lastVerifiedAt: lastVerifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastVerifiedAt),
       deletedLocallyAt: deletedLocallyAt == null && nullToAbsent
           ? const Value.absent()
           : Value(deletedLocallyAt),
@@ -1633,6 +1891,20 @@ class File extends DataClass implements Insertable<File> {
       isEncrypted: serializer.fromJson<bool>(json['isEncrypted']),
       encryptionVersion: serializer.fromJson<int?>(json['encryptionVersion']),
       ivB64: serializer.fromJson<String?>(json['ivB64']),
+      vaultFormatVersion: serializer.fromJson<int?>(json['vaultFormatVersion']),
+      encryptedObjectId: serializer.fromJson<String?>(
+        json['encryptedObjectId'],
+      ),
+      encryptedSize: serializer.fromJson<int?>(json['encryptedSize']),
+      originalSize: serializer.fromJson<int?>(json['originalSize']),
+      vaultIntegrityStatus: serializer.fromJson<String>(
+        json['vaultIntegrityStatus'],
+      ),
+      vaultMigrationStatus: serializer.fromJson<String>(
+        json['vaultMigrationStatus'],
+      ),
+      keyWrappingVersion: serializer.fromJson<int?>(json['keyWrappingVersion']),
+      lastVerifiedAt: serializer.fromJson<DateTime?>(json['lastVerifiedAt']),
       deletedLocallyAt: serializer.fromJson<DateTime?>(
         json['deletedLocallyAt'],
       ),
@@ -1671,6 +1943,14 @@ class File extends DataClass implements Insertable<File> {
       'isEncrypted': serializer.toJson<bool>(isEncrypted),
       'encryptionVersion': serializer.toJson<int?>(encryptionVersion),
       'ivB64': serializer.toJson<String?>(ivB64),
+      'vaultFormatVersion': serializer.toJson<int?>(vaultFormatVersion),
+      'encryptedObjectId': serializer.toJson<String?>(encryptedObjectId),
+      'encryptedSize': serializer.toJson<int?>(encryptedSize),
+      'originalSize': serializer.toJson<int?>(originalSize),
+      'vaultIntegrityStatus': serializer.toJson<String>(vaultIntegrityStatus),
+      'vaultMigrationStatus': serializer.toJson<String>(vaultMigrationStatus),
+      'keyWrappingVersion': serializer.toJson<int?>(keyWrappingVersion),
+      'lastVerifiedAt': serializer.toJson<DateTime?>(lastVerifiedAt),
       'deletedLocallyAt': serializer.toJson<DateTime?>(deletedLocallyAt),
       'labelId': serializer.toJson<int?>(labelId),
       'dateAdded': serializer.toJson<DateTime>(dateAdded),
@@ -1701,6 +1981,14 @@ class File extends DataClass implements Insertable<File> {
     bool? isEncrypted,
     Value<int?> encryptionVersion = const Value.absent(),
     Value<String?> ivB64 = const Value.absent(),
+    Value<int?> vaultFormatVersion = const Value.absent(),
+    Value<String?> encryptedObjectId = const Value.absent(),
+    Value<int?> encryptedSize = const Value.absent(),
+    Value<int?> originalSize = const Value.absent(),
+    String? vaultIntegrityStatus,
+    String? vaultMigrationStatus,
+    Value<int?> keyWrappingVersion = const Value.absent(),
+    Value<DateTime?> lastVerifiedAt = const Value.absent(),
     Value<DateTime?> deletedLocallyAt = const Value.absent(),
     Value<int?> labelId = const Value.absent(),
     DateTime? dateAdded,
@@ -1744,6 +2032,24 @@ class File extends DataClass implements Insertable<File> {
         ? encryptionVersion.value
         : this.encryptionVersion,
     ivB64: ivB64.present ? ivB64.value : this.ivB64,
+    vaultFormatVersion: vaultFormatVersion.present
+        ? vaultFormatVersion.value
+        : this.vaultFormatVersion,
+    encryptedObjectId: encryptedObjectId.present
+        ? encryptedObjectId.value
+        : this.encryptedObjectId,
+    encryptedSize: encryptedSize.present
+        ? encryptedSize.value
+        : this.encryptedSize,
+    originalSize: originalSize.present ? originalSize.value : this.originalSize,
+    vaultIntegrityStatus: vaultIntegrityStatus ?? this.vaultIntegrityStatus,
+    vaultMigrationStatus: vaultMigrationStatus ?? this.vaultMigrationStatus,
+    keyWrappingVersion: keyWrappingVersion.present
+        ? keyWrappingVersion.value
+        : this.keyWrappingVersion,
+    lastVerifiedAt: lastVerifiedAt.present
+        ? lastVerifiedAt.value
+        : this.lastVerifiedAt,
     deletedLocallyAt: deletedLocallyAt.present
         ? deletedLocallyAt.value
         : this.deletedLocallyAt,
@@ -1801,6 +2107,30 @@ class File extends DataClass implements Insertable<File> {
           ? data.encryptionVersion.value
           : this.encryptionVersion,
       ivB64: data.ivB64.present ? data.ivB64.value : this.ivB64,
+      vaultFormatVersion: data.vaultFormatVersion.present
+          ? data.vaultFormatVersion.value
+          : this.vaultFormatVersion,
+      encryptedObjectId: data.encryptedObjectId.present
+          ? data.encryptedObjectId.value
+          : this.encryptedObjectId,
+      encryptedSize: data.encryptedSize.present
+          ? data.encryptedSize.value
+          : this.encryptedSize,
+      originalSize: data.originalSize.present
+          ? data.originalSize.value
+          : this.originalSize,
+      vaultIntegrityStatus: data.vaultIntegrityStatus.present
+          ? data.vaultIntegrityStatus.value
+          : this.vaultIntegrityStatus,
+      vaultMigrationStatus: data.vaultMigrationStatus.present
+          ? data.vaultMigrationStatus.value
+          : this.vaultMigrationStatus,
+      keyWrappingVersion: data.keyWrappingVersion.present
+          ? data.keyWrappingVersion.value
+          : this.keyWrappingVersion,
+      lastVerifiedAt: data.lastVerifiedAt.present
+          ? data.lastVerifiedAt.value
+          : this.lastVerifiedAt,
       deletedLocallyAt: data.deletedLocallyAt.present
           ? data.deletedLocallyAt.value
           : this.deletedLocallyAt,
@@ -1835,6 +2165,14 @@ class File extends DataClass implements Insertable<File> {
           ..write('isEncrypted: $isEncrypted, ')
           ..write('encryptionVersion: $encryptionVersion, ')
           ..write('ivB64: $ivB64, ')
+          ..write('vaultFormatVersion: $vaultFormatVersion, ')
+          ..write('encryptedObjectId: $encryptedObjectId, ')
+          ..write('encryptedSize: $encryptedSize, ')
+          ..write('originalSize: $originalSize, ')
+          ..write('vaultIntegrityStatus: $vaultIntegrityStatus, ')
+          ..write('vaultMigrationStatus: $vaultMigrationStatus, ')
+          ..write('keyWrappingVersion: $keyWrappingVersion, ')
+          ..write('lastVerifiedAt: $lastVerifiedAt, ')
           ..write('deletedLocallyAt: $deletedLocallyAt, ')
           ..write('labelId: $labelId, ')
           ..write('dateAdded: $dateAdded')
@@ -1867,6 +2205,14 @@ class File extends DataClass implements Insertable<File> {
     isEncrypted,
     encryptionVersion,
     ivB64,
+    vaultFormatVersion,
+    encryptedObjectId,
+    encryptedSize,
+    originalSize,
+    vaultIntegrityStatus,
+    vaultMigrationStatus,
+    keyWrappingVersion,
+    lastVerifiedAt,
     deletedLocallyAt,
     labelId,
     dateAdded,
@@ -1898,6 +2244,14 @@ class File extends DataClass implements Insertable<File> {
           other.isEncrypted == this.isEncrypted &&
           other.encryptionVersion == this.encryptionVersion &&
           other.ivB64 == this.ivB64 &&
+          other.vaultFormatVersion == this.vaultFormatVersion &&
+          other.encryptedObjectId == this.encryptedObjectId &&
+          other.encryptedSize == this.encryptedSize &&
+          other.originalSize == this.originalSize &&
+          other.vaultIntegrityStatus == this.vaultIntegrityStatus &&
+          other.vaultMigrationStatus == this.vaultMigrationStatus &&
+          other.keyWrappingVersion == this.keyWrappingVersion &&
+          other.lastVerifiedAt == this.lastVerifiedAt &&
           other.deletedLocallyAt == this.deletedLocallyAt &&
           other.labelId == this.labelId &&
           other.dateAdded == this.dateAdded);
@@ -1927,6 +2281,14 @@ class FilesCompanion extends UpdateCompanion<File> {
   final Value<bool> isEncrypted;
   final Value<int?> encryptionVersion;
   final Value<String?> ivB64;
+  final Value<int?> vaultFormatVersion;
+  final Value<String?> encryptedObjectId;
+  final Value<int?> encryptedSize;
+  final Value<int?> originalSize;
+  final Value<String> vaultIntegrityStatus;
+  final Value<String> vaultMigrationStatus;
+  final Value<int?> keyWrappingVersion;
+  final Value<DateTime?> lastVerifiedAt;
   final Value<DateTime?> deletedLocallyAt;
   final Value<int?> labelId;
   final Value<DateTime> dateAdded;
@@ -1954,6 +2316,14 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.isEncrypted = const Value.absent(),
     this.encryptionVersion = const Value.absent(),
     this.ivB64 = const Value.absent(),
+    this.vaultFormatVersion = const Value.absent(),
+    this.encryptedObjectId = const Value.absent(),
+    this.encryptedSize = const Value.absent(),
+    this.originalSize = const Value.absent(),
+    this.vaultIntegrityStatus = const Value.absent(),
+    this.vaultMigrationStatus = const Value.absent(),
+    this.keyWrappingVersion = const Value.absent(),
+    this.lastVerifiedAt = const Value.absent(),
     this.deletedLocallyAt = const Value.absent(),
     this.labelId = const Value.absent(),
     this.dateAdded = const Value.absent(),
@@ -1982,6 +2352,14 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.isEncrypted = const Value.absent(),
     this.encryptionVersion = const Value.absent(),
     this.ivB64 = const Value.absent(),
+    this.vaultFormatVersion = const Value.absent(),
+    this.encryptedObjectId = const Value.absent(),
+    this.encryptedSize = const Value.absent(),
+    this.originalSize = const Value.absent(),
+    this.vaultIntegrityStatus = const Value.absent(),
+    this.vaultMigrationStatus = const Value.absent(),
+    this.keyWrappingVersion = const Value.absent(),
+    this.lastVerifiedAt = const Value.absent(),
     this.deletedLocallyAt = const Value.absent(),
     this.labelId = const Value.absent(),
     this.dateAdded = const Value.absent(),
@@ -2013,6 +2391,14 @@ class FilesCompanion extends UpdateCompanion<File> {
     Expression<bool>? isEncrypted,
     Expression<int>? encryptionVersion,
     Expression<String>? ivB64,
+    Expression<int>? vaultFormatVersion,
+    Expression<String>? encryptedObjectId,
+    Expression<int>? encryptedSize,
+    Expression<int>? originalSize,
+    Expression<String>? vaultIntegrityStatus,
+    Expression<String>? vaultMigrationStatus,
+    Expression<int>? keyWrappingVersion,
+    Expression<DateTime>? lastVerifiedAt,
     Expression<DateTime>? deletedLocallyAt,
     Expression<int>? labelId,
     Expression<DateTime>? dateAdded,
@@ -2045,6 +2431,18 @@ class FilesCompanion extends UpdateCompanion<File> {
       if (isEncrypted != null) 'is_encrypted': isEncrypted,
       if (encryptionVersion != null) 'encryption_version': encryptionVersion,
       if (ivB64 != null) 'iv_b64': ivB64,
+      if (vaultFormatVersion != null)
+        'vault_format_version': vaultFormatVersion,
+      if (encryptedObjectId != null) 'encrypted_object_id': encryptedObjectId,
+      if (encryptedSize != null) 'encrypted_size': encryptedSize,
+      if (originalSize != null) 'original_size': originalSize,
+      if (vaultIntegrityStatus != null)
+        'vault_integrity_status': vaultIntegrityStatus,
+      if (vaultMigrationStatus != null)
+        'vault_migration_status': vaultMigrationStatus,
+      if (keyWrappingVersion != null)
+        'key_wrapping_version': keyWrappingVersion,
+      if (lastVerifiedAt != null) 'last_verified_at': lastVerifiedAt,
       if (deletedLocallyAt != null) 'deleted_locally_at': deletedLocallyAt,
       if (labelId != null) 'label_id': labelId,
       if (dateAdded != null) 'date_added': dateAdded,
@@ -2075,6 +2473,14 @@ class FilesCompanion extends UpdateCompanion<File> {
     Value<bool>? isEncrypted,
     Value<int?>? encryptionVersion,
     Value<String?>? ivB64,
+    Value<int?>? vaultFormatVersion,
+    Value<String?>? encryptedObjectId,
+    Value<int?>? encryptedSize,
+    Value<int?>? originalSize,
+    Value<String>? vaultIntegrityStatus,
+    Value<String>? vaultMigrationStatus,
+    Value<int?>? keyWrappingVersion,
+    Value<DateTime?>? lastVerifiedAt,
     Value<DateTime?>? deletedLocallyAt,
     Value<int?>? labelId,
     Value<DateTime>? dateAdded,
@@ -2105,6 +2511,14 @@ class FilesCompanion extends UpdateCompanion<File> {
       isEncrypted: isEncrypted ?? this.isEncrypted,
       encryptionVersion: encryptionVersion ?? this.encryptionVersion,
       ivB64: ivB64 ?? this.ivB64,
+      vaultFormatVersion: vaultFormatVersion ?? this.vaultFormatVersion,
+      encryptedObjectId: encryptedObjectId ?? this.encryptedObjectId,
+      encryptedSize: encryptedSize ?? this.encryptedSize,
+      originalSize: originalSize ?? this.originalSize,
+      vaultIntegrityStatus: vaultIntegrityStatus ?? this.vaultIntegrityStatus,
+      vaultMigrationStatus: vaultMigrationStatus ?? this.vaultMigrationStatus,
+      keyWrappingVersion: keyWrappingVersion ?? this.keyWrappingVersion,
+      lastVerifiedAt: lastVerifiedAt ?? this.lastVerifiedAt,
       deletedLocallyAt: deletedLocallyAt ?? this.deletedLocallyAt,
       labelId: labelId ?? this.labelId,
       dateAdded: dateAdded ?? this.dateAdded,
@@ -2189,6 +2603,34 @@ class FilesCompanion extends UpdateCompanion<File> {
     if (ivB64.present) {
       map['iv_b64'] = Variable<String>(ivB64.value);
     }
+    if (vaultFormatVersion.present) {
+      map['vault_format_version'] = Variable<int>(vaultFormatVersion.value);
+    }
+    if (encryptedObjectId.present) {
+      map['encrypted_object_id'] = Variable<String>(encryptedObjectId.value);
+    }
+    if (encryptedSize.present) {
+      map['encrypted_size'] = Variable<int>(encryptedSize.value);
+    }
+    if (originalSize.present) {
+      map['original_size'] = Variable<int>(originalSize.value);
+    }
+    if (vaultIntegrityStatus.present) {
+      map['vault_integrity_status'] = Variable<String>(
+        vaultIntegrityStatus.value,
+      );
+    }
+    if (vaultMigrationStatus.present) {
+      map['vault_migration_status'] = Variable<String>(
+        vaultMigrationStatus.value,
+      );
+    }
+    if (keyWrappingVersion.present) {
+      map['key_wrapping_version'] = Variable<int>(keyWrappingVersion.value);
+    }
+    if (lastVerifiedAt.present) {
+      map['last_verified_at'] = Variable<DateTime>(lastVerifiedAt.value);
+    }
     if (deletedLocallyAt.present) {
       map['deleted_locally_at'] = Variable<DateTime>(deletedLocallyAt.value);
     }
@@ -2227,6 +2669,14 @@ class FilesCompanion extends UpdateCompanion<File> {
           ..write('isEncrypted: $isEncrypted, ')
           ..write('encryptionVersion: $encryptionVersion, ')
           ..write('ivB64: $ivB64, ')
+          ..write('vaultFormatVersion: $vaultFormatVersion, ')
+          ..write('encryptedObjectId: $encryptedObjectId, ')
+          ..write('encryptedSize: $encryptedSize, ')
+          ..write('originalSize: $originalSize, ')
+          ..write('vaultIntegrityStatus: $vaultIntegrityStatus, ')
+          ..write('vaultMigrationStatus: $vaultMigrationStatus, ')
+          ..write('keyWrappingVersion: $keyWrappingVersion, ')
+          ..write('lastVerifiedAt: $lastVerifiedAt, ')
           ..write('deletedLocallyAt: $deletedLocallyAt, ')
           ..write('labelId: $labelId, ')
           ..write('dateAdded: $dateAdded')
@@ -3637,6 +4087,14 @@ typedef $$FilesTableCreateCompanionBuilder =
       Value<bool> isEncrypted,
       Value<int?> encryptionVersion,
       Value<String?> ivB64,
+      Value<int?> vaultFormatVersion,
+      Value<String?> encryptedObjectId,
+      Value<int?> encryptedSize,
+      Value<int?> originalSize,
+      Value<String> vaultIntegrityStatus,
+      Value<String> vaultMigrationStatus,
+      Value<int?> keyWrappingVersion,
+      Value<DateTime?> lastVerifiedAt,
       Value<DateTime?> deletedLocallyAt,
       Value<int?> labelId,
       Value<DateTime> dateAdded,
@@ -3666,6 +4124,14 @@ typedef $$FilesTableUpdateCompanionBuilder =
       Value<bool> isEncrypted,
       Value<int?> encryptionVersion,
       Value<String?> ivB64,
+      Value<int?> vaultFormatVersion,
+      Value<String?> encryptedObjectId,
+      Value<int?> encryptedSize,
+      Value<int?> originalSize,
+      Value<String> vaultIntegrityStatus,
+      Value<String> vaultMigrationStatus,
+      Value<int?> keyWrappingVersion,
+      Value<DateTime?> lastVerifiedAt,
       Value<DateTime?> deletedLocallyAt,
       Value<int?> labelId,
       Value<DateTime> dateAdded,
@@ -3826,6 +4292,46 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
 
   ColumnFilters<String> get ivB64 => $composableBuilder(
     column: $table.ivB64,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get vaultFormatVersion => $composableBuilder(
+    column: $table.vaultFormatVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get encryptedObjectId => $composableBuilder(
+    column: $table.encryptedObjectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get encryptedSize => $composableBuilder(
+    column: $table.encryptedSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get originalSize => $composableBuilder(
+    column: $table.originalSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultIntegrityStatus => $composableBuilder(
+    column: $table.vaultIntegrityStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vaultMigrationStatus => $composableBuilder(
+    column: $table.vaultMigrationStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get keyWrappingVersion => $composableBuilder(
+    column: $table.keyWrappingVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastVerifiedAt => $composableBuilder(
+    column: $table.lastVerifiedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4005,6 +4511,46 @@ class $$FilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get vaultFormatVersion => $composableBuilder(
+    column: $table.vaultFormatVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get encryptedObjectId => $composableBuilder(
+    column: $table.encryptedObjectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get encryptedSize => $composableBuilder(
+    column: $table.encryptedSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get originalSize => $composableBuilder(
+    column: $table.originalSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultIntegrityStatus => $composableBuilder(
+    column: $table.vaultIntegrityStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vaultMigrationStatus => $composableBuilder(
+    column: $table.vaultMigrationStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get keyWrappingVersion => $composableBuilder(
+    column: $table.keyWrappingVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastVerifiedAt => $composableBuilder(
+    column: $table.lastVerifiedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get deletedLocallyAt => $composableBuilder(
     column: $table.deletedLocallyAt,
     builder: (column) => ColumnOrderings(column),
@@ -4163,6 +4709,46 @@ class $$FilesTableAnnotationComposer
   GeneratedColumn<String> get ivB64 =>
       $composableBuilder(column: $table.ivB64, builder: (column) => column);
 
+  GeneratedColumn<int> get vaultFormatVersion => $composableBuilder(
+    column: $table.vaultFormatVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get encryptedObjectId => $composableBuilder(
+    column: $table.encryptedObjectId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get encryptedSize => $composableBuilder(
+    column: $table.encryptedSize,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get originalSize => $composableBuilder(
+    column: $table.originalSize,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get vaultIntegrityStatus => $composableBuilder(
+    column: $table.vaultIntegrityStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get vaultMigrationStatus => $composableBuilder(
+    column: $table.vaultMigrationStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get keyWrappingVersion => $composableBuilder(
+    column: $table.keyWrappingVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastVerifiedAt => $composableBuilder(
+    column: $table.lastVerifiedAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get deletedLocallyAt => $composableBuilder(
     column: $table.deletedLocallyAt,
     builder: (column) => column,
@@ -4269,6 +4855,14 @@ class $$FilesTableTableManager
                 Value<bool> isEncrypted = const Value.absent(),
                 Value<int?> encryptionVersion = const Value.absent(),
                 Value<String?> ivB64 = const Value.absent(),
+                Value<int?> vaultFormatVersion = const Value.absent(),
+                Value<String?> encryptedObjectId = const Value.absent(),
+                Value<int?> encryptedSize = const Value.absent(),
+                Value<int?> originalSize = const Value.absent(),
+                Value<String> vaultIntegrityStatus = const Value.absent(),
+                Value<String> vaultMigrationStatus = const Value.absent(),
+                Value<int?> keyWrappingVersion = const Value.absent(),
+                Value<DateTime?> lastVerifiedAt = const Value.absent(),
                 Value<DateTime?> deletedLocallyAt = const Value.absent(),
                 Value<int?> labelId = const Value.absent(),
                 Value<DateTime> dateAdded = const Value.absent(),
@@ -4296,6 +4890,14 @@ class $$FilesTableTableManager
                 isEncrypted: isEncrypted,
                 encryptionVersion: encryptionVersion,
                 ivB64: ivB64,
+                vaultFormatVersion: vaultFormatVersion,
+                encryptedObjectId: encryptedObjectId,
+                encryptedSize: encryptedSize,
+                originalSize: originalSize,
+                vaultIntegrityStatus: vaultIntegrityStatus,
+                vaultMigrationStatus: vaultMigrationStatus,
+                keyWrappingVersion: keyWrappingVersion,
+                lastVerifiedAt: lastVerifiedAt,
                 deletedLocallyAt: deletedLocallyAt,
                 labelId: labelId,
                 dateAdded: dateAdded,
@@ -4325,6 +4927,14 @@ class $$FilesTableTableManager
                 Value<bool> isEncrypted = const Value.absent(),
                 Value<int?> encryptionVersion = const Value.absent(),
                 Value<String?> ivB64 = const Value.absent(),
+                Value<int?> vaultFormatVersion = const Value.absent(),
+                Value<String?> encryptedObjectId = const Value.absent(),
+                Value<int?> encryptedSize = const Value.absent(),
+                Value<int?> originalSize = const Value.absent(),
+                Value<String> vaultIntegrityStatus = const Value.absent(),
+                Value<String> vaultMigrationStatus = const Value.absent(),
+                Value<int?> keyWrappingVersion = const Value.absent(),
+                Value<DateTime?> lastVerifiedAt = const Value.absent(),
                 Value<DateTime?> deletedLocallyAt = const Value.absent(),
                 Value<int?> labelId = const Value.absent(),
                 Value<DateTime> dateAdded = const Value.absent(),
@@ -4352,6 +4962,14 @@ class $$FilesTableTableManager
                 isEncrypted: isEncrypted,
                 encryptionVersion: encryptionVersion,
                 ivB64: ivB64,
+                vaultFormatVersion: vaultFormatVersion,
+                encryptedObjectId: encryptedObjectId,
+                encryptedSize: encryptedSize,
+                originalSize: originalSize,
+                vaultIntegrityStatus: vaultIntegrityStatus,
+                vaultMigrationStatus: vaultMigrationStatus,
+                keyWrappingVersion: keyWrappingVersion,
+                lastVerifiedAt: lastVerifiedAt,
                 deletedLocallyAt: deletedLocallyAt,
                 labelId: labelId,
                 dateAdded: dateAdded,

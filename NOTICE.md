@@ -25,4 +25,11 @@ Native Android `libtdjson.so` binaries are built from pinned official TDLib sour
 
 The Android TDLib build statically links OpenSSL 3.5.7 LTS. Its Apache License 2.0 is included at `third_party/libtdjson/OPENSSL_LICENSE.txt`.
 
+## Cryptography package
+
+Vault v3 uses the maintained Dart `cryptography` package for AES-256-GCM and
+HKDF-HMAC-SHA256. The package is distributed under the Apache License 2.0 and
+is resolved through pub.dev; no additional native cryptography binary is
+vendored by TeleVault.
+
 iOS builds resolve the upstream `flutter_libtdjson` `1.8.65` CocoaPod, which provides the TDLib `1.8.65` static XCFramework. The native binary is downloaded by CocoaPods during the macOS build and is not committed to this repository. Physical-device Telegram login, upload, and restore still require release validation before iOS can be declared production-supported.
