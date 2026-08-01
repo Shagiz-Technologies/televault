@@ -7,9 +7,7 @@ void main() {
   testWidgets('privacy summary states the Telegram and encryption boundaries', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: PrivacyPolicyScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: PrivacyPolicyScreen()));
 
     expect(find.textContaining('not affiliated'), findsOneWidget);
     expect(
@@ -23,12 +21,13 @@ void main() {
   testWidgets('terms summary avoids unconditional storage guarantees', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: TermsSummaryScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: TermsSummaryScreen()));
 
     expect(find.textContaining('Android may defer'), findsOneWidget);
-    expect(find.textContaining('not client-side end-to-end encrypted'), findsOneWidget);
+    expect(
+      find.textContaining('not client-side end-to-end encrypted'),
+      findsOneWidget,
+    );
     expect(find.textContaining('independent backup'), findsOneWidget);
   });
 }
