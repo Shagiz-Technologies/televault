@@ -12,17 +12,17 @@ A release is not production-ready until every P0 item is complete against the ex
 - [x] No `MANAGE_EXTERNAL_STORAGE` or `ACCESS_MEDIA_LOCATION` permission.
 - [x] Android 14+ selected-media access is implemented and represented as partial access.
 - [x] Unused Google Drive and Google Sign-In production integrations are removed.
-- [ ] Persistent Android work can resume pending automatic backups after process death without creating a second TDLib client or queue processor.
-- [ ] Wi-Fi-only uploads stop or pause safely when Wi-Fi is lost during an active transfer.
-- [ ] A crash after Telegram accepts a message cannot create an untracked duplicate on restart.
+- [x] Unique WorkManager jobs wake the existing Drift queue after process death, while runtime leases prevent a second TDLib client or queue processor in the process.
+- [x] Wi-Fi-only uploads request TDLib cancellation when connectivity is lost and return unconfirmed work to `pending` without consuming a retry.
+- [x] Each upload has a persisted operation ID; restart reconciliation searches the bucket before sending again.
 - [ ] Final physical-device login, upload, Vault, logout, and recovery smoke test passes.
 - [ ] Representative multi-gigabyte media and low-disk-space behavior are verified.
 
 ## P0 — reviewer access
 
-- [ ] An isolated Telegram Test DC review build exists.
-- [ ] Review mode uses separate TDLib, Drift, cache, and secure-storage namespaces.
-- [ ] A persistent `Telegram Test Environment` indicator is visible.
+- [x] An isolated Telegram Test DC review build mode exists behind `TELEVAULT_PLAY_REVIEW=true`.
+- [x] Review mode uses separate TDLib, Drift, cache, secure-storage, worker, and cleanup namespaces.
+- [x] A persistent `Telegram Test Environment` indicator is visible.
 - [ ] Reusable reviewer credentials and exact steps are entered privately in Play Console.
 - [ ] The Play-generated APKs from the submitted AAB are tested with the reviewer flow.
 
@@ -32,7 +32,7 @@ A release is not production-ready until every P0 item is complete against the ex
 - [x] Terms and Privacy are accessible before Telegram login.
 - [x] Store listing copy avoids unlimited-storage, total-privacy, universal-encryption, and guaranteed-background claims.
 - [x] Photo/video permission declaration matches the current manifest and core use.
-- [x] Foreground-service status is documented as not currently declared.
+- [x] The declared `dataSync` foreground service, notification, timeout handling, and WorkManager recovery are documented accurately.
 - [ ] Public Privacy, Terms, Support, Data & Deletion, and Security pages contain no placeholder contact values and match the final app.
 - [ ] Data safety answers are completed from the final dependency and network inventory.
 - [ ] Content rating, target audience, ads declaration, app access, and account/data deletion sections are completed in Play Console.
@@ -51,6 +51,15 @@ flutter build appbundle --release \
   --target-platform=android-arm64,android-x64 \
   --dart-define=TELEGRAM_API_ID=<release-secret> \
   --dart-define=TELEGRAM_API_HASH=<release-secret>
+```
+
+Build reviewer mode separately with Test DC values:
+
+```bash
+flutter build appbundle --release \
+  --dart-define=TELEVAULT_PLAY_REVIEW=true \
+  --dart-define=TELEGRAM_TEST_API_ID=<test-dc-api-id> \
+  --dart-define=TELEGRAM_TEST_API_HASH=<test-dc-api-hash>
 ```
 
 Then run the existing API 36, 16 KB, merged-manifest, dependency, and secret/artifact verification. Record the commit SHA, version code, AAB SHA-256, signing-certificate fingerprints, and Play Console track.

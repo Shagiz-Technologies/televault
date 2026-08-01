@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../config/app_runtime_environment.dart';
 import 'tables.dart';
 
 // Import the generated code (this file doesn't exist yet, we will generate it next)
@@ -18,7 +19,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,6 +91,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 11) {
         await m.addColumn(files, files.localMediaAccessState);
       }
+      if (from < 12) {
+        await m.addColumn(files, files.uploadOperationId);
+      }
       await _createPerformanceIndexes();
     },
   );
@@ -113,15 +117,19 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_files_vault_migration ON files (is_vaulted, vault_migration_status)',
     );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_files_upload_operation ON files (bucket_id, upload_operation_id)',
+    );
   }
 }
 
 // Helper function to open the connection securely
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    // Put the database file, called db.sqlite, in the documents folder
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = io.File(p.join(dbFolder.path, 'tele_vault.sqlite'));
+    final file = io.File(
+      p.join(dbFolder.path, AppRuntimeEnvironment.databaseFileName),
+    );
     return NativeDatabase.createInBackground(file);
   });
 }

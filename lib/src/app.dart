@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/config/app_runtime_environment.dart';
 import 'core/presentation/splash_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_controller.dart';
@@ -79,11 +80,18 @@ class _TeleVaultAppState extends ConsumerState<TeleVaultApp>
           darkTheme: AppTheme.darkTheme,
           builder: (context, child) {
             final mediaQuery = MediaQuery.of(context);
-            return MediaQuery(
+            final app = MediaQuery(
               data: mediaQuery.copyWith(
                 textScaler: TextScaler.linear(textScale),
               ),
               child: child ?? const SizedBox.shrink(),
+            );
+            if (!AppRuntimeEnvironment.isPlayStoreReview) return app;
+            return Banner(
+              message: 'TELEGRAM TEST ENVIRONMENT',
+              location: BannerLocation.topEnd,
+              color: AppTheme.warning,
+              child: app,
             );
           },
           home: Consumer(

@@ -107,10 +107,10 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
             _requireCurrentForBiometricRecovery);
 
     return Scaffold(
-      backgroundColor: isSet ? AppTheme.paper : AppTheme.secure,
+      backgroundColor: AppTheme.paper,
       appBar: AppBar(
-        backgroundColor: isSet ? AppTheme.paper : AppTheme.secure,
-        foregroundColor: isSet ? AppTheme.ink : Colors.white,
+        backgroundColor: AppTheme.paper,
+        foregroundColor: AppTheme.ink,
         title: Text(
           setupRequired
               ? 'Protect your Vault'
@@ -122,17 +122,11 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
       ),
       body: Container(
         decoration: BoxDecoration(
-          gradient: isSet
-              ? const RadialGradient(
-                  center: Alignment(-0.9, -1),
-                  radius: 1.2,
-                  colors: [Color(0xFFF0F8FE), AppTheme.paper],
-                )
-              : const RadialGradient(
-                  center: Alignment.topCenter,
-                  radius: 1.1,
-                  colors: [AppTheme.secureSurface, AppTheme.secure],
-                ),
+          gradient: const RadialGradient(
+            center: Alignment(-0.9, -1),
+            radius: 1.2,
+            colors: [Color(0xFFF0F8FE), AppTheme.paper],
+          ),
         ),
         child: ListView(
           padding: AppResponsive.pagePaddingWithBottomSafe(
@@ -166,9 +160,9 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
             Text(
               isSet ? 'Choose one simple way in' : 'Your private media',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: isSet ? AppTheme.ink : Colors.white,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: AppTheme.ink),
             ),
             const SizedBox(height: 6),
             Text(
@@ -176,10 +170,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                   ? 'Phone security can help you recover access later.'
                   : 'Unlock to decrypt and view your Vault.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isSet ? AppTheme.inkMuted : Colors.white70,
-                height: 1.35,
-              ),
+              style: TextStyle(color: AppTheme.inkMuted, height: 1.35),
             ),
             const SizedBox(height: 20),
             if (setupRequired) ...[
@@ -365,7 +356,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
                     'Confirmation is hidden because the new value is visible.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: AppTheme.inkMuted, fontSize: 12),
                   ),
                 ),
             ] else ...[
@@ -384,7 +375,10 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                     Expanded(child: Divider()),
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text('or', style: TextStyle(color: Colors.grey)),
+                      child: Text(
+                        'or',
+                        style: TextStyle(color: AppTheme.inkMuted),
+                      ),
                     ),
                     Expanded(child: Divider()),
                   ],
@@ -446,7 +440,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
                   'Phone Security uses your device screen lock, fingerprint, or face unlock and previews encrypted items on this device.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(color: AppTheme.inkMuted, fontSize: 12),
                 ),
               ),
           ],

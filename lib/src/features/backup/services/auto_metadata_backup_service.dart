@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_gateway.dart';
@@ -53,6 +54,20 @@ class AutoMetadataRestoreResult {
   });
 }
 
+class AutoMetadataBackupStatus {
+  final int uploadedSinceBackup;
+  final int backupEveryFiles;
+  final DateTime? lastBackupAt;
+  final String? lastError;
+
+  const AutoMetadataBackupStatus({
+    required this.uploadedSinceBackup,
+    required this.backupEveryFiles,
+    required this.lastBackupAt,
+    required this.lastError,
+  });
+}
+
 class AutoMetadataBackupService {
   final AppDatabase _db;
   final TelegramGateway _telegram;
@@ -73,6 +88,7 @@ class AutoMetadataBackupService {
   static const _keyUploadedSinceBackup = 'metadata_uploaded_since_backup';
   static const _keyBackupEveryFiles = 'metadata_backup_every_files';
   static const _keyLastBackupAt = 'metadata_last_backup_at';
+  static const _keyLastError = 'metadata_last_backup_error';
   static const _keyVerifiedSnapshots = 'metadata_verified_snapshots_v5';
   static const _captionPrefix = 'TeleVault Metadata Backup';
   static const remoteSnapshotRetention = 2;
@@ -117,6 +133,16 @@ class AutoMetadataBackupService {
     return DateTime.tryParse(await _getSetting(_keyLastBackupAt) ?? '');
   }
 
+  Future<AutoMetadataBackupStatus> getStatus() async {
+    return AutoMetadataBackupStatus(
+      uploadedSinceBackup:
+          int.tryParse(await _getSetting(_keyUploadedSinceBackup) ?? '') ?? 0,
+      backupEveryFiles: await getBackupEveryFiles(),
+      lastBackupAt: await getLastBackupAt(),
+      lastError: await _getSetting(_keyLastError),
+    );
+  }
+
   Future<void> noteMediaUploadCompleted() async {
     final current = int.tryParse(
       await _getSetting(_keyUploadedSinceBackup) ?? '',
@@ -126,7 +152,7 @@ class AutoMetadataBackupService {
 
     final threshold = await getBackupEveryFiles();
     if (next < threshold) return;
-    unawaited(_triggerBackup(reason: 'upload_threshold'));
+    await _triggerBackup(reason: 'upload_threshold');
   }
 
   Future<void> _retryThresholdBackup() async {
@@ -145,10 +171,17 @@ class AutoMetadataBackupService {
     _automaticBackupQueued = true;
     try {
       await backupNow(reason: reason);
-    } on TelegramError {
+    } on TelegramError catch (error) {
+      await _setSetting(_keyLastError, error.userMessage);
       // Exact waits remain persisted by the shared write coordinator. The
       // threshold count is intentionally retained for the resume event.
+    } on MetadataBackupException catch (error) {
+      await _setSetting(_keyLastError, error.message);
     } catch (_) {
+      await _setSetting(
+        _keyLastError,
+        'Metadata backup did not finish. TeleVault will retry after another successful upload.',
+      );
       // Automatic metadata backup is retried by the next completed upload or
       // explicit user action; background failures must not escape unawaited.
     } finally {
@@ -188,6 +221,7 @@ class AutoMetadataBackupService {
       await _setSetting(_keyLastMessageId, messageId.toString());
       await _setSetting(_keyLastBackupAt, completedAt.toIso8601String());
       await _setSetting(_keyUploadedSinceBackup, '0');
+      await _setSetting(_keyLastError, '');
       await _saveVerifiedSnapshots(history);
       await _pruneVerifiedSnapshots(history);
 
@@ -701,7 +735,10 @@ class AutoMetadataBackupService {
     }
     final temporaryRoot = await _temporaryDirectoryProvider();
     final temporaryDirectory = io.Directory(
-      path.join(temporaryRoot.path, 'televault_metadata_downloads'),
+      path.join(
+        temporaryRoot.path,
+        AppRuntimeEnvironment.cacheDirectory('televault_metadata_downloads'),
+      ),
     );
     await temporaryDirectory.create(recursive: true);
     final copy = io.File(

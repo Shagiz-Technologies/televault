@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
+
 final vaultRecoveryServiceProvider = Provider<VaultRecoveryService>((ref) {
   return VaultRecoveryService();
 });
@@ -40,7 +42,7 @@ abstract interface class VaultSecretStore {
 class FlutterVaultSecretStore implements VaultSecretStore {
   static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
-      storageNamespace: 'tele_vault_vault_recovery',
+      storageNamespace: AppRuntimeEnvironment.vaultRecoveryStorageNamespace,
       migrateWithBackup: true,
     ),
     iOptions: IOSOptions(

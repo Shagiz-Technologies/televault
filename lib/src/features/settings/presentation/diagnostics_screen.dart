@@ -14,7 +14,7 @@ class DiagnosticsScreen extends ConsumerWidget {
     final diagnostics = ref.watch(diagnosticsServiceProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.paper,
       appBar: AppBar(title: const Text('Diagnostics')),
       body: StreamBuilder<Map<String, int>>(
         stream: diagnostics.watchMetrics(),
@@ -39,7 +39,7 @@ class DiagnosticsScreen extends ConsumerWidget {
             children: [
               const Text(
                 'Operational counters only. No media content is collected.',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppTheme.inkMuted),
               ),
               const Gap(16),
               _metricTile(
@@ -100,6 +100,7 @@ class DiagnosticsScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outline),
       ),
       child: ListTile(
         leading: CircleAvatar(

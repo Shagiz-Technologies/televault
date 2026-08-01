@@ -881,6 +881,18 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _uploadOperationIdMeta = const VerificationMeta(
+    'uploadOperationId',
+  );
+  @override
+  late final GeneratedColumn<String> uploadOperationId =
+      GeneratedColumn<String>(
+        'upload_operation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _remoteStateVerifiedMeta =
       const VerificationMeta('remoteStateVerified');
   @override
@@ -1200,6 +1212,7 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     bucketId,
     telegramMessageId,
     telegramFileId,
+    uploadOperationId,
     remoteStateVerified,
     status,
     retryCount,
@@ -1319,6 +1332,15 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         telegramFileId.isAcceptableOrUnknown(
           data['telegram_file_id']!,
           _telegramFileIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('upload_operation_id')) {
+      context.handle(
+        _uploadOperationIdMeta,
+        uploadOperationId.isAcceptableOrUnknown(
+          data['upload_operation_id']!,
+          _uploadOperationIdMeta,
         ),
       );
     }
@@ -1592,6 +1614,10 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.int,
         data['${effectivePrefix}telegram_file_id'],
       ),
+      uploadOperationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}upload_operation_id'],
+      ),
       remoteStateVerified: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}remote_state_verified'],
@@ -1717,6 +1743,7 @@ class File extends DataClass implements Insertable<File> {
   final int bucketId;
   final int? telegramMessageId;
   final int? telegramFileId;
+  final String? uploadOperationId;
   final bool remoteStateVerified;
   final int status;
   final int retryCount;
@@ -1755,6 +1782,7 @@ class File extends DataClass implements Insertable<File> {
     required this.bucketId,
     this.telegramMessageId,
     this.telegramFileId,
+    this.uploadOperationId,
     required this.remoteStateVerified,
     required this.status,
     required this.retryCount,
@@ -1803,6 +1831,9 @@ class File extends DataClass implements Insertable<File> {
     }
     if (!nullToAbsent || telegramFileId != null) {
       map['telegram_file_id'] = Variable<int>(telegramFileId);
+    }
+    if (!nullToAbsent || uploadOperationId != null) {
+      map['upload_operation_id'] = Variable<String>(uploadOperationId);
     }
     map['remote_state_verified'] = Variable<bool>(remoteStateVerified);
     map['status'] = Variable<int>(status);
@@ -1888,6 +1919,9 @@ class File extends DataClass implements Insertable<File> {
       telegramFileId: telegramFileId == null && nullToAbsent
           ? const Value.absent()
           : Value(telegramFileId),
+      uploadOperationId: uploadOperationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(uploadOperationId),
       remoteStateVerified: Value(remoteStateVerified),
       status: Value(status),
       retryCount: Value(retryCount),
@@ -1970,6 +2004,9 @@ class File extends DataClass implements Insertable<File> {
       bucketId: serializer.fromJson<int>(json['bucketId']),
       telegramMessageId: serializer.fromJson<int?>(json['telegramMessageId']),
       telegramFileId: serializer.fromJson<int?>(json['telegramFileId']),
+      uploadOperationId: serializer.fromJson<String?>(
+        json['uploadOperationId'],
+      ),
       remoteStateVerified: serializer.fromJson<bool>(
         json['remoteStateVerified'],
       ),
@@ -2029,6 +2066,7 @@ class File extends DataClass implements Insertable<File> {
       'bucketId': serializer.toJson<int>(bucketId),
       'telegramMessageId': serializer.toJson<int?>(telegramMessageId),
       'telegramFileId': serializer.toJson<int?>(telegramFileId),
+      'uploadOperationId': serializer.toJson<String?>(uploadOperationId),
       'remoteStateVerified': serializer.toJson<bool>(remoteStateVerified),
       'status': serializer.toJson<int>(status),
       'retryCount': serializer.toJson<int>(retryCount),
@@ -2074,6 +2112,7 @@ class File extends DataClass implements Insertable<File> {
     int? bucketId,
     Value<int?> telegramMessageId = const Value.absent(),
     Value<int?> telegramFileId = const Value.absent(),
+    Value<String?> uploadOperationId = const Value.absent(),
     bool? remoteStateVerified,
     int? status,
     int? retryCount,
@@ -2116,6 +2155,9 @@ class File extends DataClass implements Insertable<File> {
     telegramFileId: telegramFileId.present
         ? telegramFileId.value
         : this.telegramFileId,
+    uploadOperationId: uploadOperationId.present
+        ? uploadOperationId.value
+        : this.uploadOperationId,
     remoteStateVerified: remoteStateVerified ?? this.remoteStateVerified,
     status: status ?? this.status,
     retryCount: retryCount ?? this.retryCount,
@@ -2190,6 +2232,9 @@ class File extends DataClass implements Insertable<File> {
       telegramFileId: data.telegramFileId.present
           ? data.telegramFileId.value
           : this.telegramFileId,
+      uploadOperationId: data.uploadOperationId.present
+          ? data.uploadOperationId.value
+          : this.uploadOperationId,
       remoteStateVerified: data.remoteStateVerified.present
           ? data.remoteStateVerified.value
           : this.remoteStateVerified,
@@ -2273,6 +2318,7 @@ class File extends DataClass implements Insertable<File> {
           ..write('bucketId: $bucketId, ')
           ..write('telegramMessageId: $telegramMessageId, ')
           ..write('telegramFileId: $telegramFileId, ')
+          ..write('uploadOperationId: $uploadOperationId, ')
           ..write('remoteStateVerified: $remoteStateVerified, ')
           ..write('status: $status, ')
           ..write('retryCount: $retryCount, ')
@@ -2316,6 +2362,7 @@ class File extends DataClass implements Insertable<File> {
     bucketId,
     telegramMessageId,
     telegramFileId,
+    uploadOperationId,
     remoteStateVerified,
     status,
     retryCount,
@@ -2358,6 +2405,7 @@ class File extends DataClass implements Insertable<File> {
           other.bucketId == this.bucketId &&
           other.telegramMessageId == this.telegramMessageId &&
           other.telegramFileId == this.telegramFileId &&
+          other.uploadOperationId == this.uploadOperationId &&
           other.remoteStateVerified == this.remoteStateVerified &&
           other.status == this.status &&
           other.retryCount == this.retryCount &&
@@ -2398,6 +2446,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   final Value<int> bucketId;
   final Value<int?> telegramMessageId;
   final Value<int?> telegramFileId;
+  final Value<String?> uploadOperationId;
   final Value<bool> remoteStateVerified;
   final Value<int> status;
   final Value<int> retryCount;
@@ -2436,6 +2485,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.bucketId = const Value.absent(),
     this.telegramMessageId = const Value.absent(),
     this.telegramFileId = const Value.absent(),
+    this.uploadOperationId = const Value.absent(),
     this.remoteStateVerified = const Value.absent(),
     this.status = const Value.absent(),
     this.retryCount = const Value.absent(),
@@ -2475,6 +2525,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     required int bucketId,
     this.telegramMessageId = const Value.absent(),
     this.telegramFileId = const Value.absent(),
+    this.uploadOperationId = const Value.absent(),
     this.remoteStateVerified = const Value.absent(),
     this.status = const Value.absent(),
     this.retryCount = const Value.absent(),
@@ -2517,6 +2568,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Expression<int>? bucketId,
     Expression<int>? telegramMessageId,
     Expression<int>? telegramFileId,
+    Expression<String>? uploadOperationId,
     Expression<bool>? remoteStateVerified,
     Expression<int>? status,
     Expression<int>? retryCount,
@@ -2557,6 +2609,7 @@ class FilesCompanion extends UpdateCompanion<File> {
       if (bucketId != null) 'bucket_id': bucketId,
       if (telegramMessageId != null) 'telegram_message_id': telegramMessageId,
       if (telegramFileId != null) 'telegram_file_id': telegramFileId,
+      if (uploadOperationId != null) 'upload_operation_id': uploadOperationId,
       if (remoteStateVerified != null)
         'remote_state_verified': remoteStateVerified,
       if (status != null) 'status': status,
@@ -2607,6 +2660,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Value<int>? bucketId,
     Value<int?>? telegramMessageId,
     Value<int?>? telegramFileId,
+    Value<String?>? uploadOperationId,
     Value<bool>? remoteStateVerified,
     Value<int>? status,
     Value<int>? retryCount,
@@ -2647,6 +2701,7 @@ class FilesCompanion extends UpdateCompanion<File> {
       bucketId: bucketId ?? this.bucketId,
       telegramMessageId: telegramMessageId ?? this.telegramMessageId,
       telegramFileId: telegramFileId ?? this.telegramFileId,
+      uploadOperationId: uploadOperationId ?? this.uploadOperationId,
       remoteStateVerified: remoteStateVerified ?? this.remoteStateVerified,
       status: status ?? this.status,
       retryCount: retryCount ?? this.retryCount,
@@ -2715,6 +2770,9 @@ class FilesCompanion extends UpdateCompanion<File> {
     }
     if (telegramFileId.present) {
       map['telegram_file_id'] = Variable<int>(telegramFileId.value);
+    }
+    if (uploadOperationId.present) {
+      map['upload_operation_id'] = Variable<String>(uploadOperationId.value);
     }
     if (remoteStateVerified.present) {
       map['remote_state_verified'] = Variable<bool>(remoteStateVerified.value);
@@ -2821,6 +2879,7 @@ class FilesCompanion extends UpdateCompanion<File> {
           ..write('bucketId: $bucketId, ')
           ..write('telegramMessageId: $telegramMessageId, ')
           ..write('telegramFileId: $telegramFileId, ')
+          ..write('uploadOperationId: $uploadOperationId, ')
           ..write('remoteStateVerified: $remoteStateVerified, ')
           ..write('status: $status, ')
           ..write('retryCount: $retryCount, ')
@@ -4242,6 +4301,7 @@ typedef $$FilesTableCreateCompanionBuilder =
       required int bucketId,
       Value<int?> telegramMessageId,
       Value<int?> telegramFileId,
+      Value<String?> uploadOperationId,
       Value<bool> remoteStateVerified,
       Value<int> status,
       Value<int> retryCount,
@@ -4282,6 +4342,7 @@ typedef $$FilesTableUpdateCompanionBuilder =
       Value<int> bucketId,
       Value<int?> telegramMessageId,
       Value<int?> telegramFileId,
+      Value<String?> uploadOperationId,
       Value<bool> remoteStateVerified,
       Value<int> status,
       Value<int> retryCount,
@@ -4405,6 +4466,11 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
 
   ColumnFilters<int> get telegramFileId => $composableBuilder(
     column: $table.telegramFileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uploadOperationId => $composableBuilder(
+    column: $table.uploadOperationId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4639,6 +4705,11 @@ class $$FilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get uploadOperationId => $composableBuilder(
+    column: $table.uploadOperationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get remoteStateVerified => $composableBuilder(
     column: $table.remoteStateVerified,
     builder: (column) => ColumnOrderings(column),
@@ -4860,6 +4931,11 @@ class $$FilesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get uploadOperationId => $composableBuilder(
+    column: $table.uploadOperationId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get remoteStateVerified => $composableBuilder(
     column: $table.remoteStateVerified,
     builder: (column) => column,
@@ -5061,6 +5137,7 @@ class $$FilesTableTableManager
                 Value<int> bucketId = const Value.absent(),
                 Value<int?> telegramMessageId = const Value.absent(),
                 Value<int?> telegramFileId = const Value.absent(),
+                Value<String?> uploadOperationId = const Value.absent(),
                 Value<bool> remoteStateVerified = const Value.absent(),
                 Value<int> status = const Value.absent(),
                 Value<int> retryCount = const Value.absent(),
@@ -5099,6 +5176,7 @@ class $$FilesTableTableManager
                 bucketId: bucketId,
                 telegramMessageId: telegramMessageId,
                 telegramFileId: telegramFileId,
+                uploadOperationId: uploadOperationId,
                 remoteStateVerified: remoteStateVerified,
                 status: status,
                 retryCount: retryCount,
@@ -5139,6 +5217,7 @@ class $$FilesTableTableManager
                 required int bucketId,
                 Value<int?> telegramMessageId = const Value.absent(),
                 Value<int?> telegramFileId = const Value.absent(),
+                Value<String?> uploadOperationId = const Value.absent(),
                 Value<bool> remoteStateVerified = const Value.absent(),
                 Value<int> status = const Value.absent(),
                 Value<int> retryCount = const Value.absent(),
@@ -5177,6 +5256,7 @@ class $$FilesTableTableManager
                 bucketId: bucketId,
                 telegramMessageId: telegramMessageId,
                 telegramFileId: telegramFileId,
+                uploadOperationId: uploadOperationId,
                 remoteStateVerified: remoteStateVerified,
                 status: status,
                 retryCount: retryCount,

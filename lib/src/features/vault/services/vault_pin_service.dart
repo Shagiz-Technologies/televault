@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 
@@ -51,7 +52,7 @@ class VaultPinService {
 
   static const _defaultSecureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(
-      storageNamespace: 'tele_vault_vault_secret',
+      storageNamespace: AppRuntimeEnvironment.vaultSecretStorageNamespace,
       migrateWithBackup: true,
     ),
     iOptions: IOSOptions(

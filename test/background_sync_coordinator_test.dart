@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
@@ -106,12 +106,25 @@ void main() {
         bucketId,
         const SyncPreferences(autoBackupEnabled: true),
       );
+      await db
+          .into(db.files)
+          .insert(
+            FilesCompanion.insert(
+              localPath: '/demo/pending-refresh.jpg',
+              folderName: 'Camera',
+              size: 100,
+              bucketId: bucketId,
+              status: Value(FileSyncStatus.pending.dbValue),
+            ),
+          );
 
       await coordinator.start();
+      await _waitUntil(() => bridge.startCount == 1);
       expect(bridge.startCount, 1);
 
       bridge.running = false;
       await coordinator.refresh();
+      await _waitUntil(() => bridge.startCount == 2);
 
       expect(bridge.startCount, 2);
       expect(bridge.running, isTrue);
@@ -132,13 +145,26 @@ void main() {
       bucketId,
       const SyncPreferences(autoBackupEnabled: true),
     );
+    await db
+        .into(db.files)
+        .insert(
+          FilesCompanion.insert(
+            localPath: '/demo/pending-retry.jpg',
+            folderName: 'Camera',
+            size: 100,
+            bucketId: bucketId,
+            status: Value(FileSyncStatus.pending.dbValue),
+          ),
+        );
     bridge.startFailuresRemaining = 1;
 
     await coordinator.start();
+    await _waitUntil(() => bridge.startCount == 1);
     expect(bridge.startCount, 1);
     expect(bridge.running, isFalse);
 
     await coordinator.refresh();
+    await _waitUntil(() => bridge.startCount == 2);
 
     expect(bridge.startCount, 2);
     expect(bridge.running, isTrue);
@@ -172,10 +198,8 @@ void main() {
     constraints.blockReason = 'Waiting for Wi-Fi';
 
     await coordinator.start();
+    await _waitUntil(() => bridge.startPauseReasons.isNotEmpty);
     expect(bridge.startPauseReasons.last, 'Waiting for Wi-Fi');
-    await _waitUntil(
-      () => bridge.updatePauseReasons.contains('Waiting for Wi-Fi'),
-    );
 
     constraints.blockReason = null;
     constraints.emitChange();
@@ -233,10 +257,10 @@ void main() {
         );
 
     await coordinator.start();
-    await _waitUntil(() => bridge.updates.isNotEmpty);
+    await _waitUntil(() => bridge.startedStatuses.isNotEmpty);
 
-    expect(bridge.updates.last.totalCount, 1);
-    expect(bridge.updates.last.totalBytes, 100);
+    expect(bridge.startedStatuses.last.totalCount, 1);
+    expect(bridge.startedStatuses.last.totalBytes, 100);
   });
 
   test(
@@ -262,6 +286,52 @@ void main() {
       expect(nativeWakeCount, 1);
     },
   );
+
+  test('restart recovery schedules one Wi-Fi constrained worker', () async {
+    final bucketId = await db
+        .into(db.buckets)
+        .insert(
+          BucketsCompanion.insert(
+            chatId: BigInt.from(1001),
+            name: 'Photos',
+            isActive: const Value(true),
+          ),
+        );
+    await settings.seedBucketSyncPreferences(
+      bucketId,
+      const SyncPreferences(autoBackupEnabled: true, wifiOnly: true),
+    );
+
+    await coordinator.start();
+
+    expect(bridge.persistentConfigureCount, 1);
+    expect(bridge.lastPersistentWifiOnly, isTrue);
+    expect(await bridge.emitSyncWake(), isTrue);
+    expect(nativeWakeCount, 1);
+  });
+
+  test('logout cancels persistent work and removes the Dart wake', () async {
+    final bucketId = await db
+        .into(db.buckets)
+        .insert(
+          BucketsCompanion.insert(
+            chatId: BigInt.from(1001),
+            name: 'Photos',
+            isActive: const Value(true),
+          ),
+        );
+    await settings.seedBucketSyncPreferences(
+      bucketId,
+      const SyncPreferences(autoBackupEnabled: true),
+    );
+    await coordinator.start();
+
+    await coordinator.stopForAccountCleanup();
+
+    expect(bridge.persistentCancelCount, 1);
+    expect(bridge.syncWakeHandler, isNull);
+    expect(bridge.running, isFalse);
+  });
 }
 
 Future<void> _waitUntil(bool Function() condition) async {
@@ -280,12 +350,16 @@ class _FakeBackgroundSyncBridge extends AndroidBackgroundSyncBridge {
   int stopCount = 0;
   bool running = false;
   final updates = <SyncStatusSnapshot>[];
+  final startedStatuses = <SyncStatusSnapshot>[];
   final startPauseReasons = <String?>[];
   final updatePauseReasons = <String?>[];
-  Future<void> Function()? syncWakeHandler;
+  int persistentConfigureCount = 0;
+  int persistentCancelCount = 0;
+  bool? lastPersistentWifiOnly;
+  Future<bool> Function()? syncWakeHandler;
 
   @override
-  void setSyncWakeHandler(Future<void> Function() handler) {
+  void setSyncWakeHandler(Future<bool> Function() handler) {
     syncWakeHandler = handler;
   }
 
@@ -294,8 +368,19 @@ class _FakeBackgroundSyncBridge extends AndroidBackgroundSyncBridge {
     syncWakeHandler = null;
   }
 
-  Future<void> emitSyncWake() async {
-    await syncWakeHandler?.call();
+  Future<bool> emitSyncWake() async {
+    return await syncWakeHandler?.call() ?? false;
+  }
+
+  @override
+  Future<void> configurePersistentWork({required bool wifiOnly}) async {
+    persistentConfigureCount++;
+    lastPersistentWifiOnly = wifiOnly;
+  }
+
+  @override
+  Future<void> cancelPersistentWork() async {
+    persistentCancelCount++;
   }
 
   @override
@@ -309,6 +394,7 @@ class _FakeBackgroundSyncBridge extends AndroidBackgroundSyncBridge {
       throw StateError('Native service start failed');
     }
     running = true;
+    startedStatuses.add(status);
     startPauseReasons.add(pauseReason);
   }
 

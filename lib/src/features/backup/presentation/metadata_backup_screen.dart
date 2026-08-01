@@ -36,6 +36,8 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   int _autoMetadataEveryFiles =
       AutoMetadataBackupService.defaultBackupEveryFiles;
   DateTime? _lastMetadataBackupAt;
+  int _uploadedSinceMetadataBackup = 0;
+  String? _metadataBackupError;
   SafeUninstallStep? _safeUninstallStep;
   String? _safeUninstallStatus;
 
@@ -47,12 +49,15 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
 
   Future<void> _loadAutoMetadataSettings() async {
     final service = ref.read(autoMetadataBackupServiceProvider);
-    final interval = await service.getBackupEveryFiles();
-    final lastBackupAt = await service.getLastBackupAt();
+    final status = await service.getStatus();
     if (!mounted) return;
     setState(() {
-      _autoMetadataEveryFiles = interval;
-      _lastMetadataBackupAt = lastBackupAt;
+      _autoMetadataEveryFiles = status.backupEveryFiles;
+      _lastMetadataBackupAt = status.lastBackupAt;
+      _uploadedSinceMetadataBackup = status.uploadedSinceBackup;
+      _metadataBackupError = status.lastError?.trim().isEmpty == true
+          ? null
+          : status.lastError;
     });
   }
 
@@ -119,6 +124,47 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
                   ],
                 ),
               ),
+              if (_metadataBackupError != null) ...[
+                const Gap(12),
+                TeleVaultCard(
+                  color: AppTheme.warningSoft,
+                  borderColor: AppTheme.warning,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Automatic backup needs attention',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const Gap(6),
+                      Text(
+                        _metadataBackupError!,
+                        style: const TextStyle(
+                          color: AppTheme.inkMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      const Gap(8),
+                      Text(
+                        '$_uploadedSinceMetadataBackup confirmed uploads are waiting for the next metadata backup.',
+                        style: const TextStyle(
+                          color: AppTheme.ink,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Gap(8),
+                      TextButton.icon(
+                        onPressed: _metadataBackupNow
+                            ? null
+                            : _runMetadataBackupNow,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Try metadata backup now'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Gap(14),
               SizedBox(
                 width: double.infinity,
@@ -462,11 +508,13 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Metadata backed up: ${result.messageId}')),
       );
+      await _loadAutoMetadataSettings();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Metadata backup failed: ${_safeError(error)}')),
       );
+      await _loadAutoMetadataSettings();
     } finally {
       if (mounted) setState(() => _metadataBackupNow = false);
     }
