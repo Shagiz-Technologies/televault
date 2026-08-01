@@ -469,8 +469,11 @@ class _UploaderTelegramGateway implements TelegramGateway {
     if (activeSends > maxConcurrentSends) maxConcurrentSends = activeSends;
     if (!firstSendStarted.isCompleted) firstSendStarted.complete();
     final content = request['input_message_content'] as Map<String, dynamic>;
-    final inputFile =
+    final media =
         (content['document'] ?? content['photo'] ?? content['video'])
+            as Map<String, dynamic>;
+    final inputFile =
+        (media['document'] ?? media['photo'] ?? media['video'])
             as Map<String, dynamic>;
     uploadedPaths.add(inputFile['path']?.toString() ?? '');
     sentInputFileTypes.add(inputFile['@type']?.toString() ?? '');

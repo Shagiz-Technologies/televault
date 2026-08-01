@@ -12,6 +12,7 @@ import '../../../core/database/local_media_access_state.dart';
 import '../../../core/services/diagnostics_service.dart';
 import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_gateway.dart';
+import '../../../core/services/telegram_message_content.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../backup/services/auto_metadata_backup_service.dart';
@@ -867,7 +868,7 @@ class FileUploader {
       file,
       preferences.uploadFormat,
       uploadPath,
-      {'@type': 'inputFileLocal', 'path': uploadPath},
+      TelegramMessageContent.localFile(uploadPath),
     );
     return _telegramReliability.sendMessageAndWait(
       operation: 'upload_media',
@@ -883,49 +884,22 @@ class FileUploader {
     String uploadPath,
     Map<String, dynamic> inputFile,
   ) {
-    final caption = {
-      '@type': 'formattedText',
-      'text':
-          uploadFormat == SyncUploadFormat.compressedMedia &&
-              _isCompressibleMedia(file)
-          ? 'Backed up by TeleVault (compressed media)'
-          : 'Backed up by TeleVault',
-    };
+    final caption =
+        uploadFormat == SyncUploadFormat.compressedMedia &&
+            _isCompressibleMedia(file)
+        ? 'Backed up by TeleVault (compressed media)'
+        : 'Backed up by TeleVault';
     if (uploadFormat == SyncUploadFormat.compressedMedia &&
         _isCompressibleMedia(file)) {
       if (_isImagePath(uploadPath)) {
-        return {
-          '@type': 'inputMessagePhoto',
-          'photo': inputFile,
-          'thumbnail': null,
-          'added_sticker_file_ids': <int>[],
-          'width': 0,
-          'height': 0,
-          'caption': caption,
-        };
+        return TelegramMessageContent.photo(file: inputFile, caption: caption);
       }
       if (_isVideoPath(uploadPath)) {
-        return {
-          '@type': 'inputMessageVideo',
-          'video': inputFile,
-          'thumbnail': null,
-          'added_sticker_file_ids': <int>[],
-          'duration': 0,
-          'width': 0,
-          'height': 0,
-          'supports_streaming': true,
-          'caption': caption,
-        };
+        return TelegramMessageContent.video(file: inputFile, caption: caption);
       }
     }
 
-    return {
-      '@type': 'inputMessageDocument',
-      'document': inputFile,
-      'thumbnail': null,
-      'disable_content_type_detection': false,
-      'caption': caption,
-    };
+    return TelegramMessageContent.document(file: inputFile, caption: caption);
   }
 
   bool _isCompressibleMedia(File file) {

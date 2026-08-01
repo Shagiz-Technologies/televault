@@ -11,6 +11,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_gateway.dart';
 import '../../../core/services/telegram_error.dart';
+import '../../../core/services/telegram_message_content.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import 'metadata_backup_service.dart';
@@ -494,13 +495,10 @@ class AutoMetadataBackupService {
     return _telegramReliability.sendMessageAndWait(
       operation: 'upload_metadata',
       chatId: chatId,
-      inputMessageContent: {
-        '@type': 'inputMessageDocument',
-        'document': {'@type': 'inputFileLocal', 'path': snapshot.path},
-        'thumbnail': null,
-        'disable_content_type_detection': false,
-        'caption': {'@type': 'formattedText', 'text': captionText},
-      },
+      inputMessageContent: TelegramMessageContent.document(
+        file: TelegramMessageContent.localFile(snapshot.path),
+        caption: captionText,
+      ),
       timeout: const Duration(minutes: 5),
     );
   }

@@ -121,7 +121,8 @@ class _FakeTelegramGateway implements TelegramGateway {
   Future<TelegramResult> _sendMessage(TelegramRequest request) async {
     final content = request['input_message_content'] as Map<String, dynamic>;
     final document = content['document'] as Map<String, dynamic>;
-    _uploadedPath = document['path'] as String?;
+    final inputFile = document['document'] as Map<String, dynamic>;
+    _uploadedPath = inputFile['path'] as String?;
     final update = <String, dynamic>{
       '@type': 'updateMessageSendSucceeded',
       'old_message_id': 100,

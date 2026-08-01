@@ -164,7 +164,10 @@ void main() {
     );
     final content = send['input_message_content'] as Map<String, dynamic>;
     final document = content['document'] as Map<String, dynamic>;
-    expect(document['@type'], 'inputFileLocal');
+    expect(document['@type'], 'inputDocument');
+    expect(document['disable_content_type_detection'], isTrue);
+    final inputFile = document['document'] as Map<String, dynamic>;
+    expect(inputFile['@type'], 'inputFileLocal');
   });
 }
 
