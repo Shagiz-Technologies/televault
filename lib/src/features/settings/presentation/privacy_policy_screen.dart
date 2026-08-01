@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
+import 'terms_summary_screen.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
   const PrivacyPolicyScreen({super.key});
@@ -11,7 +11,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
     final year = DateTime.now().year;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Privacy Policy')),
+      appBar: AppBar(title: const Text('Privacy & Data')),
       body: SingleChildScrollView(
         padding: AppResponsive.pagePaddingWithBottomSafe(
           context,
@@ -23,7 +23,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'TeleVault Privacy Policy',
+              'TeleVault Privacy Summary',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -32,61 +32,72 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Last updated: $year',
+              'Last updated: August 1, $year',
               style: TextStyle(color: Colors.grey[400], fontSize: 14),
             ),
             const SizedBox(height: 24),
-
-            _buildSection(
-              'The Short Version',
-              'Your photos and videos go to your own private Telegram channels. We do not run a secret server full of your selfies. Honestly, we are too broke for that infrastructure, and your privacy benefits from our budget situation.',
+            _section(
+              'Who provides the app',
+              'TeleVault is developed by Shagiz Technologies. It is an independent project and is not affiliated with, endorsed by, or sponsored by Telegram.',
             ),
-
-            _buildSection(
-              'What We Collect',
-              'TeleVault keeps local metadata on your device so it can remember what is pending, uploaded, failed, vaulted, or restored. Your actual media is not collected by us. It is backed up to Telegram storage that belongs to your account.',
+            _section(
+              'Data stored on your device',
+              'TeleVault stores local bucket records, media identifiers, paths exposed by Android, labels, upload and retry status, Telegram message references, settings, vault state, and local diagnostics in application-private storage. TDLib separately stores the Telegram session and cache in application-private storage.',
             ),
-
-            _buildSection(
-              'What We Do Not Do',
-              'We do not sell your data. We do not rent it. We do not feed it to an AI model and call it innovation. We are not one of those companies casually training models on your private memories while smiling in a policy document.',
+            _section(
+              'Data sent to Telegram',
+              'When backup is enabled, selected photos, videos, and encrypted metadata snapshots are sent through TDLib to Telegram channels associated with your authenticated Telegram account. Telegram and TDLib process login, channels, messages, file transfer, storage, and retrieval. TeleVault does not operate a separate media-storage backend.',
             ),
-
-            _buildSection(
-              'Telegram Storage',
-              'TeleVault uses Telegram TDLib to talk to Telegram. Your backups live in private Telegram channels controlled by your Telegram account. Telegram is the storage provider; TeleVault is the tool that organizes the backup flow.',
+            _section(
+              'Encryption boundaries',
+              'Normal non-vault photos and videos are not client-side end-to-end encrypted by TeleVault before upload. Files intentionally processed through the Vault use authenticated TeleVault client-side encryption. Metadata snapshots use their documented encrypted format. A private Telegram channel does not prevent Telegram from processing its contents.',
             ),
-
-            _buildSection(
-              'Vault Security',
-              'Vault items are encrypted before upload. Your Vault password is stored as a salted hash on-device, not as plain text. Phone Security can be used to unlock or reset access when configured.',
+            _section(
+              'Vault Recovery Key',
+              'The Vault PIN, password, or device biometric controls local access. Portable Vault recovery uses a separate high-entropy Recovery Key. Keep an exported copy private. Losing both the installed secure-storage copy and your exported key can make Vault backups unrecoverable.',
             ),
-
-            _buildSection(
-              'Your Control',
-              'You can delete local metadata, remove backed-up items, change buckets, export metadata, or stop using the app. If you uninstall without a Safe Uninstall backup, Android may remove local app data, because Android does not care about our feelings.',
+            _section(
+              'Android permissions',
+              'Photo and video permission is used to discover, display, organize, and back up media. On Android 14 and later, selected-media access limits TeleVault to the items you choose. Internet access is used for Telegram. Biometric permissions support optional app and Vault access. TeleVault does not request all-files access or media-location access.',
             ),
-
-            const SizedBox(height: 28),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    '\u00A9 $year Copyright',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '\u121B\u1214\u122D \u123B\u120B\u120D \u1213\u12E5 \u1263\u12DD',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSansEthiopic(
-                      fontSize: 8,
-                      color: Colors.grey[500],
-                      fontWeight: FontWeight.w600,
+            _section(
+              'Background backup',
+              'Android may delay, pause, or stop background work because of network, battery, device-vendor, or operating-system restrictions. TeleVault cannot guarantee immediate or uninterrupted background backup. Verify important uploads before deleting local originals.',
+            ),
+            _section(
+              'Retention and deletion',
+              'Logging out removes account-scoped local metadata, caches, temporary exports, access secrets, and the TDLib session, subject to the options shown during logout. Uninstalling normally removes local application data. Logout and uninstall do not automatically delete Telegram channels, uploaded files, messages, or metadata snapshots. Delete remote content through Telegram or supported TeleVault controls.',
+            ),
+            _section(
+              'Analytics and advertising',
+              'The current production implementation does not include advertising SDKs or an external analytics SDK. Local diagnostics are used for operational troubleshooting and should not intentionally include authentication secrets or private media content.',
+            ),
+            _section(
+              'Support and security',
+              'Use the TeleVault GitHub issue forms for non-sensitive support. Never post Telegram login codes, passwords, API credentials, session files, private media, database files, Recovery Keys, or unredacted logs publicly. Report security vulnerabilities through the repository private vulnerability-reporting channel.',
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.description_outlined),
+                label: const Text('Read Terms of Service'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TermsSummaryScreen(),
                     ),
-                  ),
-                ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: Text(
+                '© $year Shagiz Technologies',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
               ),
             ),
           ],
@@ -95,7 +106,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSection(String title, String content) {
+  static Widget _section(String title, String content) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
