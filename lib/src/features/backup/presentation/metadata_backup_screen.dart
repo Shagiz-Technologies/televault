@@ -8,6 +8,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/presentation/secure_text_dialog.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
+import '../../../core/presentation/televault_logo_mark.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
@@ -33,6 +35,8 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   bool _metadataBackupNow = false;
   int _autoMetadataEveryFiles =
       AutoMetadataBackupService.defaultBackupEveryFiles;
+  DateTime? _lastMetadataBackupAt;
+  SafeUninstallStep? _safeUninstallStep;
   String? _safeUninstallStatus;
 
   @override
@@ -42,199 +46,232 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   }
 
   Future<void> _loadAutoMetadataSettings() async {
-    final interval = await ref
-        .read(autoMetadataBackupServiceProvider)
-        .getBackupEveryFiles();
+    final service = ref.read(autoMetadataBackupServiceProvider);
+    final interval = await service.getBackupEveryFiles();
+    final lastBackupAt = await service.getLastBackupAt();
     if (!mounted) return;
-    setState(() => _autoMetadataEveryFiles = interval);
+    setState(() {
+      _autoMetadataEveryFiles = interval;
+      _lastMetadataBackupAt = lastBackupAt;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Metadata Backup')),
-      body: ResponsivePage(
-        maxWidth: 560,
-        centerVertically: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Metadata is protected by your TeleVault Recovery Key and bound to your Telegram account. Manual exports also require their passphrase.',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const Gap(20),
-            _metadataAutoBackupCard(),
-            const Gap(10),
-            _actionCard(
-              icon: Icons.upload_file,
-              title: 'Export Metadata Snapshot',
-              subtitle: 'Recovery key + passphrase protected .tvmeta',
-              loading: _exporting,
-              onTap: _exporting ? null : _exportMetadata,
-            ),
-            const Gap(10),
-            _actionCard(
-              icon: Icons.download_rounded,
-              title: 'Import Metadata Snapshot',
-              subtitle:
-                  'Requires the original recovery key, account, and passphrase',
-              loading: _importing,
-              onTap: _importing ? null : _importMetadata,
-            ),
-            const Gap(10),
-            _actionCard(
-              icon: Icons.health_and_safety_outlined,
-              title: 'Safe Uninstall Backup',
-              subtitle:
-                  'Pauses auto-backup, finishes the current upload, then saves metadata',
-              loading: _safeUninstallBackingUp,
-              onTap: _safeUninstallBackingUp ? null : _safeUninstallBackup,
-            ),
-            if (_safeUninstallStatus != null) ...[
-              const Gap(12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Text(
-                  _safeUninstallStatus!,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
-                ),
+      appBar: AppBar(title: const Text('Metadata backup')),
+      body: TeleVaultPage(
+        safeTop: false,
+        safeBottom: false,
+        child: ResponsivePage(
+          maxWidth: 560,
+          centerVertically: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _MetadataHero(
+                lastBackupAt: _lastMetadataBackupAt,
+                running: _metadataBackupNow || _safeUninstallBackingUp,
               ),
-              if (_safeUninstallCompleted) ...[
-                const Gap(8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _resumeBackupAfterSafeUninstall,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Resume auto-backup'),
+              const Gap(14),
+              const Center(
+                child: Text(
+                  'Keeps your TeleVault map recoverable.\n'
+                  'It does not upload your media again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.ink,
+                    fontSize: 13,
+                    height: 1.45,
                   ),
                 ),
+              ),
+              const Gap(14),
+              TeleVaultCard(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  children: [
+                    _MetadataSettingRow(
+                      icon: Icons.ios_share_rounded,
+                      color: AppTheme.primary,
+                      title: 'Backup every',
+                      value: '$_autoMetadataEveryFiles uploads',
+                      loading: _savingAutoMetadataInterval,
+                      onTap: _savingAutoMetadataInterval
+                          ? null
+                          : _editAutoMetadataInterval,
+                    ),
+                    const Divider(height: 1, indent: 48),
+                    _MetadataSettingRow(
+                      icon: Icons.lock_outline_rounded,
+                      color: AppTheme.success,
+                      title: 'Encrypted package',
+                      trailingIcon: Icons.check_circle_rounded,
+                      onTap: _showManualTools,
+                    ),
+                    const Divider(height: 1, indent: 48),
+                    const _MetadataSettingRow(
+                      icon: Icons.person_outline_rounded,
+                      color: AppTheme.warning,
+                      title: 'Current account only',
+                      trailingIcon: Icons.check_circle_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              const Gap(14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _metadataBackupNow || _safeUninstallBackingUp
+                      ? null
+                      : _runMetadataBackupNow,
+                  icon: _metadataBackupNow
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.shield_outlined),
+                  label: Text(
+                    _metadataBackupNow ? 'Backing up...' : 'Back up now',
+                  ),
+                ),
+              ),
+              const Gap(10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.error,
+                    side: const BorderSide(color: AppTheme.error),
+                  ),
+                  onPressed: _safeUninstallBackingUp || _metadataBackupNow
+                      ? null
+                      : _safeUninstallBackup,
+                  icon: _safeUninstallBackingUp
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.delete_outline_rounded),
+                  label: const Text('Safe Uninstall'),
+                ),
+              ),
+              const Gap(9),
+              const Center(
+                child: Text(
+                  'Pause after the current upload,\n'
+                  'save metadata last, then guide me.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.inkMuted,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              if (_safeUninstallStatus != null) ...[
+                const Gap(12),
+                _SafeUninstallProgressCard(
+                  status: _safeUninstallStatus!,
+                  progress: _safeUninstallProgress,
+                  completed: _safeUninstallCompleted,
+                ),
+                if (_safeUninstallCompleted) ...[
+                  const Gap(8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _resumeBackupAfterSafeUninstall,
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Resume auto-backup'),
+                    ),
+                  ),
+                ],
               ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _metadataAutoBackupCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.cloud_done_outlined, color: AppTheme.primary),
-              const Gap(12),
-              const Expanded(
-                child: Text(
-                  'Automatic Metadata Backup',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: _savingAutoMetadataInterval
-                    ? null
-                    : _editAutoMetadataInterval,
-                child: Text('Every $_autoMetadataEveryFiles'),
-              ),
-            ],
-          ),
-          const Gap(6),
-          const Text(
-            'Updates a private “TeleVault” Telegram channel after successful uploads, so a fresh install can restore metadata after login.',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-          const Gap(10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: _metadataBackupNow ? null : _runMetadataBackupNow,
-              icon: _metadataBackupNow
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.backup_outlined),
-              label: Text(_metadataBackupNow ? 'Backing up...' : 'Back up now'),
-            ),
-          ),
-        ],
-      ),
-    );
+  double get _safeUninstallProgress {
+    return switch (_safeUninstallStep) {
+      SafeUninstallStep.uploadingMedia => 0.35,
+      SafeUninstallStep.exportingMetadata => 0.65,
+      SafeUninstallStep.uploadingMetadata => 0.85,
+      SafeUninstallStep.complete => 1,
+      _ => 0.12,
+    };
   }
 
-  Widget _actionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool loading,
-    required VoidCallback? onTap,
-  }) {
-    return Material(
-      color: AppTheme.surface,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(icon, color: AppTheme.primary),
-              const Gap(12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Gap(4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
+  Future<void> _showManualTools() {
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          AppResponsive.bottomSafeGap(sheetContext, extra: 16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Encrypted metadata package',
+              style: Theme.of(sheetContext).textTheme.titleLarge,
+            ),
+            const Gap(6),
+            const Text(
+              'Manual packages require the same Telegram account and your passphrase.',
+              style: TextStyle(color: AppTheme.inkMuted),
+            ),
+            const Gap(14),
+            TeleVaultCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  TeleVaultSettingsTile(
+                    icon: Icons.upload_file_rounded,
+                    title: 'Export package',
+                    subtitle: 'Create and share an encrypted .tvmeta file',
+                    trailing: _exporting
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : null,
+                    onTap: _exporting
+                        ? null
+                        : () {
+                            Navigator.pop(sheetContext);
+                            _exportMetadata();
+                          },
+                  ),
+                  const Divider(height: 1, indent: 60),
+                  TeleVaultSettingsTile(
+                    icon: Icons.download_rounded,
+                    title: 'Import package',
+                    subtitle: 'Restore a package made by this account',
+                    trailing: _importing
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : null,
+                    onTap: _importing
+                        ? null
+                        : () {
+                            Navigator.pop(sheetContext);
+                            _importMetadata();
+                          },
+                  ),
+                ],
               ),
-              if (loading)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  size: 14,
-                  color: Colors.grey,
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -351,15 +388,17 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
           .createSafeUninstallBackup(
             onStep: (step) {
               if (!mounted) return;
-              setState(
-                () => _safeUninstallStatus = _safeUninstallStepText(step),
-              );
+              setState(() {
+                _safeUninstallStep = step;
+                _safeUninstallStatus = _safeUninstallStepText(step);
+              });
             },
           );
 
       if (!mounted) return;
       setState(() {
         _safeUninstallCompleted = true;
+        _safeUninstallStep = SafeUninstallStep.complete;
         _safeUninstallStatus =
             'Safe Uninstall metadata backup completed. Metadata message id: ${result.messageId}. Pending media will resume later if you reinstall or resume auto-backup.';
       });
@@ -390,6 +429,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
     if (!mounted) return;
     setState(() {
       _safeUninstallCompleted = false;
+      _safeUninstallStep = null;
       _safeUninstallStatus = 'Auto-backup resumed.';
     });
     ScaffoldMessenger.of(
@@ -403,7 +443,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       SafeUninstallStep.uploadingMedia =>
         'Auto-backup is paused. Waiting for the current upload to finish...',
       SafeUninstallStep.exportingMetadata =>
-        'Creating a Recovery-Key protected account-bound snapshot...',
+        'Creating the latest account-bound metadata snapshot...',
       SafeUninstallStep.uploadingMetadata =>
         'Uploading metadata to the private TeleVault metadata channel...',
       SafeUninstallStep.complete => 'Safe Uninstall backup completed.',
@@ -507,4 +547,236 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       hideConfirmationWhenVisible: false,
     );
   }
+}
+
+class _MetadataHero extends StatelessWidget {
+  final DateTime? lastBackupAt;
+  final bool running;
+
+  const _MetadataHero({required this.lastBackupAt, required this.running});
+
+  @override
+  Widget build(BuildContext context) {
+    return TeleVaultCard(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 14),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  color: AppTheme.primarySoft,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.dns_rounded,
+                  color: AppTheme.primary,
+                  size: 42,
+                ),
+              ),
+              const Gap(12),
+              Row(
+                children: List.generate(
+                  4,
+                  (_) => Container(
+                    width: 7,
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    color: AppTheme.primary,
+                  ),
+                ),
+              ),
+              const Gap(12),
+              const Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  TeleVaultLogoMark(size: 78, shadow: false),
+                  Positioned(
+                    right: -4,
+                    bottom: -4,
+                    child: TeleVaultIconBadge(
+                      icon: Icons.lock_rounded,
+                      color: AppTheme.success,
+                      backgroundColor: AppTheme.successSoft,
+                      size: 31,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const Gap(18),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (running)
+                const SizedBox.square(
+                  dimension: 17,
+                  child: CircularProgressIndicator(strokeWidth: 2.3),
+                )
+              else
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppTheme.success,
+                  size: 18,
+                ),
+              const Gap(6),
+              Flexible(
+                child: Text(
+                  running
+                      ? 'Updating recovery copy...'
+                      : lastBackupAt == null
+                      ? 'Ready for your first recovery copy'
+                      : 'Up to date · ${_metadataRelativeTime(lastBackupAt!)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataSettingRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String? value;
+  final IconData? trailingIcon;
+  final bool loading;
+  final VoidCallback? onTap;
+
+  const _MetadataSettingRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    this.value,
+    this.trailingIcon,
+    this.loading = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      minTileHeight: 52,
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13),
+      leading: Icon(icon, color: color, size: 22),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+      trailing: loading
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (value != null)
+                  Text(
+                    value!,
+                    style: const TextStyle(
+                      color: AppTheme.ink,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                if (value != null && onTap != null) const Gap(4),
+                if (trailingIcon != null)
+                  Icon(trailingIcon, color: AppTheme.success, size: 19)
+                else if (onTap != null)
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.inkMuted,
+                    size: 20,
+                  ),
+              ],
+            ),
+      onTap: onTap,
+    );
+  }
+}
+
+class _SafeUninstallProgressCard extends StatelessWidget {
+  final String status;
+  final double progress;
+  final bool completed;
+
+  const _SafeUninstallProgressCard({
+    required this.status,
+    required this.progress,
+    required this.completed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TeleVaultCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          TeleVaultIconBadge(
+            icon: completed ? Icons.check_rounded : Icons.cloud_upload_outlined,
+            color: completed ? AppTheme.success : AppTheme.primary,
+            size: 42,
+          ),
+          const Gap(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  status,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.ink,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Gap(7),
+                LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  borderRadius: BorderRadius.circular(999),
+                  color: completed ? AppTheme.success : AppTheme.primary,
+                ),
+              ],
+            ),
+          ),
+          const Gap(10),
+          Text(
+            '${(progress * 100).round()}%',
+            style: const TextStyle(
+              color: AppTheme.ink,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _metadataRelativeTime(DateTime time) {
+  final difference = DateTime.now().difference(time);
+  if (difference.isNegative || difference.inMinutes < 1) return 'just now';
+  if (difference.inMinutes < 60) return '${difference.inMinutes} min ago';
+  if (difference.inHours < 24) return '${difference.inHours} hr ago';
+  if (difference.inDays < 7) return '${difference.inDays} d ago';
+  return '${time.day}/${time.month}/${time.year}';
 }

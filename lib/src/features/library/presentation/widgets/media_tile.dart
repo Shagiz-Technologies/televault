@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 import '../../../../core/database/file_sync_status.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../library_controller.dart';
 
 class MediaTile extends StatelessWidget {
@@ -28,103 +29,124 @@ class MediaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveSyncStatus = syncStatus ?? FileSyncStatus.pending.dbValue;
 
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. Image Thumbnail
-          AssetEntityImage(
-            asset,
-            isOriginal: false,
-            thumbnailSize: const ThumbnailSize.square(300),
-            fit: BoxFit.cover,
-            opacity: isSelected ? const AlwaysStoppedAnimation(0.7) : null,
-          ),
-
-          // 2. Selection Overlay (Top Right)
-          if (selectionMode)
-            Positioned(
-              top: 6,
-              right: 6,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? Colors.blue : Colors.transparent,
-                  border: Border.all(
-                    color: Colors.white,
-                    width: isSelected ? 0 : 2,
-                  ),
-                ),
-                child: isSelected
-                    ? const Icon(Icons.check, size: 16, color: Colors.white)
-                    : const SizedBox(width: 20, height: 20),
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: asset.type == AssetType.video ? 'Video' : 'Photo',
+      child: Material(
+        color: AppTheme.paperMuted,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1. Image Thumbnail
+              AssetEntityImage(
+                asset,
+                isOriginal: false,
+                thumbnailSize: const ThumbnailSize.square(300),
+                fit: BoxFit.cover,
+                opacity: isSelected ? const AlwaysStoppedAnimation(0.7) : null,
               ),
-            ),
 
-          // 3. Duration Badge for Videos (Bottom Left)
-          if (asset.type == AssetType.video &&
-              asset.videoDuration.inSeconds > 0)
-            Positioned(
-              bottom: label == null ? 4 : 26,
-              left: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _formatDuration(asset.videoDuration),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-
-          // 4. Sync Status Icon
-          Positioned(
-            top: selectionMode ? null : 6,
-            bottom: selectionMode ? 6 : null,
-            right: 6,
-            child: _buildSyncStatusBadge(effectiveSyncStatus),
-          ),
-
-          if (label != null)
-            Positioned(
-              left: 4,
-              bottom: 4,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 58),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _parseColor(label!.colorHex).withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.22),
-                      blurRadius: 5,
-                      offset: const Offset(0, 2),
+              // 2. Selection Overlay (Top Right)
+              if (selectionMode)
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Container(
+                    width: 23,
+                    height: 23,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? AppTheme.primary
+                          : Colors.black.withValues(alpha: 0.22),
+                      border: Border.all(
+                        color: Colors.white,
+                        width: isSelected ? 1.5 : 2,
+                      ),
                     ),
-                  ],
-                ),
-                child: Text(
-                  _badgeText(label!),
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    height: 1.0,
+                    child: isSelected
+                        ? const Icon(Icons.check, size: 15, color: Colors.white)
+                        : null,
                   ),
                 ),
+
+              // 3. Duration Badge for Videos (Bottom Left)
+              if (asset.type == AssetType.video &&
+                  asset.videoDuration.inSeconds > 0)
+                Positioned(
+                  bottom: label == null ? 6 : 28,
+                  left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Text(
+                      _formatDuration(asset.videoDuration),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 4. Sync Status Icon
+              Positioned(
+                top: selectionMode ? null : 6,
+                bottom: selectionMode ? 6 : null,
+                right: 6,
+                child: _buildSyncStatusBadge(effectiveSyncStatus),
               ),
-            ),
-        ],
+
+              if (label != null)
+                Positioned(
+                  left: 6,
+                  bottom: 6,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 64),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _parseColor(label!.colorHex),
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      _badgeText(label!),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -134,19 +156,16 @@ class MediaTile extends StatelessWidget {
       label: _syncStatusLabel(status),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 26,
-        height: 26,
+        width: 24,
+        height: 24,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.62),
+          color: AppTheme.surface.withValues(alpha: 0.94),
           shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.18),
-            width: 0.8,
-          ),
+          border: Border.all(color: AppTheme.outline, width: 0.8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
+              color: Colors.black.withValues(alpha: 0.14),
               blurRadius: 8,
               offset: const Offset(0, 3),
             ),
@@ -178,37 +197,37 @@ class MediaTile extends StatelessWidget {
         height: 14,
         child: CircularProgressIndicator(
           strokeWidth: 2.2,
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
         ),
       );
     }
     if (status == FileSyncStatus.synced.dbValue) {
       return const Icon(
         Icons.check_circle_rounded,
-        color: Color(0xFF5BE37D),
+        color: AppTheme.success,
         size: 18,
       );
     }
     if (status == FileSyncStatus.failed.dbValue) {
-      return const Icon(
-        Icons.error_rounded,
-        color: Color(0xFFFF6B6B),
-        size: 18,
-      );
+      return const Icon(Icons.error_rounded, color: AppTheme.error, size: 18);
     }
     if (status == FileSyncStatus.deletedLocal.dbValue) {
       return const Icon(
         Icons.cloud_off_rounded,
-        color: Color(0xFFFFC55C),
+        color: AppTheme.warning,
         size: 18,
       );
     }
     if (status == FileSyncStatus.vaultedEncrypted.dbValue) {
-      return const Icon(Icons.lock_rounded, color: Color(0xFF6EE7F9), size: 17);
+      return const Icon(
+        Icons.lock_rounded,
+        color: AppTheme.encrypted,
+        size: 17,
+      );
     }
     return const Icon(
       Icons.cloud_upload_outlined,
-      color: Colors.white,
+      color: AppTheme.primary,
       size: 17,
     );
   }

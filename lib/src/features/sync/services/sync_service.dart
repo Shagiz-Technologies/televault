@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
 
@@ -60,16 +61,30 @@ class SyncService {
 
   void startSyncLoop() {
     _syncTimer?.cancel();
-    _constraintsSub ??= _constraintsService.watchConstraintChanges().listen((
-      _,
-    ) {
-      scanAndEnqueue();
-      _uploader.wake();
-    });
-    scanAndEnqueue();
+    _constraintsSub ??= _constraintsService.watchConstraintChanges().listen(
+      (_) => _triggerAutomaticSync(),
+      onError: (Object _, StackTrace _) {
+        debugPrint('Unable to observe automatic sync constraints.');
+      },
+    );
+    _triggerAutomaticSync();
     _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      scanAndEnqueue();
+      _triggerAutomaticSync();
     });
+  }
+
+  void _triggerAutomaticSync() {
+    unawaited(runAutomaticSyncFromBackground());
+  }
+
+  Future<void> runAutomaticSyncFromBackground() async {
+    try {
+      await scanAndEnqueue();
+      final bucketId = (await _getActiveBucket())?.id;
+      if (bucketId != null) _uploader.wake(bucketId: bucketId);
+    } catch (_) {
+      debugPrint('Automatic media scan could not complete.');
+    }
   }
 
   void stopSyncLoop() {
@@ -96,7 +111,7 @@ class SyncService {
   Future<void> scanAndEnqueue({bool ignoreConstraints = false}) async {
     await _scanAndEnqueue(
       ignoreConstraints: ignoreConstraints,
-      activeOnly: ignoreConstraints,
+      activeOnly: true,
     );
   }
 
@@ -318,7 +333,7 @@ class SyncService {
     );
 
     if (newCount > 0) {
-      _uploader.wake();
+      _uploader.wake(bucketId: bucketId);
     }
     return true;
   }

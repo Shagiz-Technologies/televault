@@ -1,23 +1,28 @@
 import 'dart:async';
+import 'dart:io' as io;
 
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:photo_manager/photo_manager.dart';
+import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
-import '../../../core/database/app_database.dart' show Bucket;
-import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
+import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../buckets/presentation/bucket_selector_sheet.dart';
 import '../../buckets/services/bucket_service.dart';
 import '../../library/presentation/widgets/media_access_notice.dart';
 import '../../library/services/media_permission_policy.dart';
 import '../../library/services/media_permission_service.dart';
+import '../../settings/presentation/sync_preferences_screen.dart';
 import '../../settings/services/settings_service.dart';
 import '../services/file_uploader.dart';
 import '../services/sync_constraints_service.dart';
 import '../services/sync_service.dart';
+import '../services/sync_status_service.dart';
 
 class SyncDashboardScreen extends ConsumerStatefulWidget {
   const SyncDashboardScreen({super.key});
@@ -31,11 +36,10 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
     with WidgetsBindingObserver {
   bool _syncingNow = false;
   bool _retrying = false;
-  bool _loadingControls = true;
   bool _savingAutoBackup = false;
-  bool _autoBackupEnabled = true;
-  bool _constraintsAllowed = true;
-  Bucket? _activeBucket;
+  bool _oldestFirst = true;
+  String? _constraintBlockReason;
+  int? _constraintBucketId;
   StreamSubscription? _constraintSub;
   StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
   Timer? _countdownTimer;
@@ -62,14 +66,15 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
     _constraintSub = ref
         .read(syncConstraintsServiceProvider)
         .watchConstraintChanges()
-        .listen((_) async {
-          final allowed = await ref
-              .read(syncConstraintsServiceProvider)
-              .canRunAutomaticSync(bucketId: _activeBucket?.id);
-          if (!mounted) return;
-          setState(() => _constraintsAllowed = allowed);
-        });
-    _loadControls();
+        .listen(
+          (_) => _refreshConstraintReason(_constraintBucketId),
+          onError: (_, _) {
+            if (!mounted) return;
+            setState(() {
+              _constraintBlockReason = 'Waiting for device status';
+            });
+          },
+        );
   }
 
   @override
@@ -89,43 +94,6 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
             .read(mediaPermissionPolicyProvider)
             .activeStatus();
       });
-    }
-  }
-
-  Future<void> _loadControls() async {
-    final settings = ref.read(settingsServiceProvider);
-    final constraints = ref.read(syncConstraintsServiceProvider);
-    final activeBucket = await ref
-        .read(bucketServiceProvider)
-        .getActiveBucket();
-    final autoBackup = await settings.isAutoBackupEnabled(
-      bucketId: activeBucket?.id,
-    );
-    final allowed = await constraints.canRunAutomaticSync(
-      bucketId: activeBucket?.id,
-    );
-    if (!mounted) return;
-    setState(() {
-      _activeBucket = activeBucket;
-      _autoBackupEnabled = autoBackup;
-      _constraintsAllowed = allowed;
-      _loadingControls = false;
-    });
-  }
-
-  Future<void> _toggleAutoBackup(bool value) async {
-    setState(() => _savingAutoBackup = true);
-    try {
-      await ref
-          .read(settingsServiceProvider)
-          .setAutoBackup(value, bucketId: _activeBucket?.id);
-      if (value) {
-        await ref.read(syncServiceProvider).syncNow(ignoreConstraints: false);
-      }
-      if (!mounted) return;
-      setState(() => _autoBackupEnabled = value);
-    } finally {
-      if (mounted) setState(() => _savingAutoBackup = false);
     }
   }
 
@@ -150,309 +118,367 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
     }
   }
 
+  Future<void> _refreshConstraintReason(int? bucketId) async {
+    final blockReason = bucketId == null
+        ? null
+        : await ref
+              .read(syncConstraintsServiceProvider)
+              .automaticSyncBlockReason(bucketId: bucketId);
+    if (!mounted || bucketId != _constraintBucketId) return;
+    setState(() => _constraintBlockReason = blockReason);
+  }
+
+  Future<void> _toggleAutoBackup(bool value, int bucketId) async {
+    setState(() => _savingAutoBackup = true);
+    try {
+      await ref
+          .read(settingsServiceProvider)
+          .setAutoBackup(value, bucketId: bucketId);
+      if (value) {
+        await ref.read(syncServiceProvider).syncNow(ignoreConstraints: false);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to update backup right now')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingAutoBackup = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final db = ref.watch(databaseProvider);
-    final uploader = ref.watch(fileUploaderProvider);
+    final activeBucketAsync = ref.watch(activeBucketProvider);
+    final activeBucket = activeBucketAsync.asData?.value;
+    final activeBucketId = activeBucket?.id;
+    final preferencesAsync = activeBucketId == null
+        ? null
+        : ref.watch(bucketSyncPreferencesProvider(activeBucketId));
+    final autoBackupEnabled =
+        preferencesAsync?.asData?.value.autoBackupEnabled ?? false;
+    final loadingControls =
+        activeBucketAsync.isLoading || (preferencesAsync?.isLoading ?? false);
+    final statusAsync = ref.watch(bucketSyncStatusProvider(activeBucketId));
+    final status =
+        statusAsync.asData?.value ?? const SyncStatusSnapshot.empty();
+    final AsyncValue<List<BackupActivityItem>> activityAsync =
+        activeBucketId == null
+        ? const AsyncData([])
+        : ref.watch(
+            bucketBackupActivityProvider((
+              bucketId: activeBucketId,
+              oldestFirst: _oldestFirst,
+            )),
+          );
+    final activity =
+        activityAsync.asData?.value ?? const <BackupActivityItem>[];
+    final featuredItem = _featuredActivity(activity);
 
-    final activeBucketId = _activeBucket?.id;
-    final countsStream = activeBucketId == null
-        ? db
-              .customSelect(
-                '''
-                  SELECT status, COUNT(*) AS c
-                  FROM files
-                  GROUP BY status
-                  ''',
-                readsFrom: {db.files},
-              )
-              .watch()
-        : db
-              .customSelect(
-                '''
-                  SELECT status, COUNT(*) AS c
-                  FROM files
-                  WHERE bucket_id = ?
-                  GROUP BY status
-                  ''',
-                variables: [Variable.withInt(activeBucketId)],
-                readsFrom: {db.files},
-              )
-              .watch();
+    if (_constraintBucketId != activeBucketId) {
+      _constraintBucketId = activeBucketId;
+      _constraintBlockReason = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshConstraintReason(activeBucketId);
+      });
+    }
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Sync Dashboard')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_loadingControls)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(minHeight: 2),
-              )
-            else
-              Card(
-                color: AppTheme.surface,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _activeBucket == null
-                                  ? 'Auto Backup'
-                                  : 'Auto Backup: ${_activeBucket!.name}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Switch(
-                            value: _autoBackupEnabled,
-                            onChanged: _savingAutoBackup
-                                ? null
-                                : _toggleAutoBackup,
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Icon(
-                            _constraintsAllowed
-                                ? Icons.check_circle_outline
-                                : Icons.pause_circle_outline,
-                            size: 16,
-                            color: _constraintsAllowed
-                                ? Colors.green
-                                : Colors.orange,
-                          ),
-                          const Gap(8),
-                          Expanded(
-                            child: Text(
-                              _constraintsAllowed
-                                  ? 'Sync constraints satisfied'
-                                  : 'Waiting for Wi-Fi or charging state',
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _loadControls,
-                            child: const Text('Refresh'),
-                          ),
-                        ],
-                      ),
-                    ],
+      appBar: AppBar(
+        title: const Text('Backup Status'),
+        actions: [
+          IconButton(
+            tooltip: 'Sync preferences',
+            onPressed: activeBucketId == null
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SyncPreferencesScreen(),
+                    ),
                   ),
+            icon: const Icon(Icons.settings_outlined),
+          ),
+          const SizedBox(width: 6),
+        ],
+      ),
+      body: TeleVaultPage(
+        safeTop: false,
+        safeBottom: false,
+        child: RefreshIndicator(
+          onRefresh: _startManualSync,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppResponsive.pagePaddingWithBottomSafe(
+              context,
+              horizontal: 16,
+              top: 8,
+              bottomExtra: 18,
+            ),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _BucketPill(
+                  name: activeBucket?.name ?? 'No active bucket',
+                  available: activeBucket != null,
+                  onTap: _showBucketSelector,
                 ),
               ),
-            const Gap(8),
-            FutureBuilder<MediaPermissionStatus>(
-              future: _mediaPermissionStatus,
-              builder: (context, snapshot) {
-                final status = snapshot.data;
-                if (status == null ||
-                    status.scope != MediaAccessScope.limitedAccess) {
-                  return const SizedBox.shrink();
-                }
-                return MediaAccessNotice(
-                  status: status,
-                  onManageAccess: () => _manageMediaAccess(status),
-                );
-              },
-            ),
-            if (_telegramState.isBlockedAt(DateTime.now())) ...[
-              _telegramPauseCard(context),
-              const Gap(8),
-            ],
-            StreamBuilder<List<QueryRow>>(
-              stream: countsStream,
-              builder: (context, snapshot) {
-                final rows = snapshot.data ?? const <QueryRow>[];
-                final map = <int, int>{};
-                for (final row in rows) {
-                  map[row.read<int>('status')] = row.read<int>('c');
-                }
-
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+              FutureBuilder<MediaPermissionStatus>(
+                future: _mediaPermissionStatus,
+                builder: (context, snapshot) {
+                  final permission = snapshot.data;
+                  if (permission == null ||
+                      permission.scope != MediaAccessScope.limitedAccess) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: MediaAccessNotice(
+                      status: permission,
+                      onManageAccess: () => _manageMediaAccess(permission),
+                    ),
+                  );
+                },
+              ),
+              const Gap(14),
+              TeleVaultCard(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                   children: [
-                    _statPill(
-                      'Pending',
-                      map[FileSyncStatus.pending.dbValue] ?? 0,
-                      Colors.orange,
+                    _BackupHero(
+                      status: status,
+                      loading: statusAsync.isLoading,
+                      item: featuredItem,
                     ),
-                    _statPill(
-                      'Uploading',
-                      map[FileSyncStatus.uploading.dbValue] ?? 0,
-                      Colors.blue,
-                    ),
-                    _statPill(
-                      'Synced',
-                      map[FileSyncStatus.synced.dbValue] ?? 0,
-                      Colors.green,
-                    ),
-                    _statPill(
-                      'Failed',
-                      map[FileSyncStatus.failed.dbValue] ?? 0,
-                      Colors.redAccent,
-                    ),
+                    if (_constraintBlockReason != null) ...[
+                      const Gap(12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TeleVaultStatusPill(
+                          label: _constraintBlockReason!,
+                          icon: Icons.pause_circle_outline_rounded,
+                          color: AppTheme.warning,
+                          compact: true,
+                        ),
+                      ),
+                    ],
+                    const Gap(16),
+                    _MetricsGrid(status: status),
                   ],
-                );
-              },
-            ),
-            const Gap(16),
-            StreamBuilder<Map<String, double>>(
-              stream: uploader.progress,
-              builder: (context, snapshot) {
-                final active = snapshot.data ?? const <String, double>{};
-                if (active.isEmpty) {
-                  return const SizedBox.shrink();
-                }
-
-                return Card(
-                  color: AppTheme.surface,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: active.entries.take(4).map((entry) {
-                        final fileName = entry.key.split(RegExp(r'[/\\]')).last;
-                        final pct = (entry.value * 100).toStringAsFixed(0);
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      fileName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    '$pct%',
-                                    style: const TextStyle(
-                                      color: AppTheme.primary,
-                                    ),
-                                  ),
-                                ],
+                ),
+              ),
+              const Gap(14),
+              if (_telegramState.isBlockedAt(DateTime.now())) ...[
+                _telegramPauseCard(context),
+                const Gap(14),
+              ],
+              _StorageCard(status: status),
+              const Gap(14),
+              TeleVaultCard(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(14, 12, 14, 8),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Activity',
+                              style: TextStyle(
+                                color: AppTheme.ink,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
                               ),
-                              const Gap(4),
-                              LinearProgressIndicator(
-                                value: entry.value,
-                                backgroundColor: Colors.white10,
-                                color: AppTheme.primary,
+                            ),
+                          ),
+                          PopupMenuButton<bool>(
+                            tooltip: 'Activity order',
+                            initialValue: _oldestFirst,
+                            onSelected: (value) {
+                              setState(() => _oldestFirst = value);
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: true,
+                                child: Text('Oldest first'),
+                              ),
+                              PopupMenuItem(
+                                value: false,
+                                child: Text('Newest first'),
                               ),
                             ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                );
-              },
-            ),
-            const Gap(12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _syncingNow
-                        ? null
-                        : () async {
-                            setState(() => _syncingNow = true);
-                            try {
-                              await ref.read(syncServiceProvider).syncNow();
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Manual sync started'),
-                                ),
-                              );
-                            } finally {
-                              if (mounted) {
-                                setState(() => _syncingNow = false);
-                              }
-                            }
-                          },
-                    icon: const Icon(Icons.sync),
-                    label: Text(_syncingNow ? 'Syncing...' : 'Sync Now'),
-                  ),
-                ),
-                const Gap(12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed:
-                        _retrying || _telegramState.isBlockedAt(DateTime.now())
-                        ? null
-                        : () async {
-                            setState(() => _retrying = true);
-                            try {
-                              final retried = await ref
-                                  .read(fileUploaderProvider)
-                                  .retryFailed(bucketId: _activeBucket?.id);
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Retried $retried failed item(s)',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _oldestFirst
+                                      ? 'Oldest first'
+                                      : 'Newest first',
+                                  style: const TextStyle(
+                                    color: AppTheme.inkMuted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              );
-                            } finally {
-                              if (mounted) {
-                                setState(() => _retrying = false);
-                              }
-                            }
-                          },
-                    icon: const Icon(Icons.refresh),
-                    label: Text(_retrying ? 'Retrying...' : 'Retry Failed'),
-                  ),
+                                const Gap(2),
+                                const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: AppTheme.inkMuted,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (activityAsync.isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    else if (activity.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(18, 10, 18, 22),
+                        child: Text(
+                          'No backup activity for this bucket yet.',
+                          style: TextStyle(color: AppTheme.inkMuted),
+                        ),
+                      )
+                    else
+                      ...activity.map(
+                        (item) => _BackupActivityTile(
+                          item: item,
+                          activeProgress:
+                              item.status == FileSyncStatus.uploading
+                              ? status.activeUploadProgress
+                              : null,
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              const Gap(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          loadingControls ||
+                              activeBucketId == null ||
+                              _savingAutoBackup
+                          ? null
+                          : () => _toggleAutoBackup(
+                              !autoBackupEnabled,
+                              activeBucketId,
+                            ),
+                      icon: Icon(
+                        autoBackupEnabled
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                      label: Text(autoBackupEnabled ? 'Pause' : 'Resume'),
+                    ),
+                  ),
+                  const Gap(10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          _retrying ||
+                              status.failedCount == 0 ||
+                              _telegramState.isBlockedAt(DateTime.now())
+                          ? null
+                          : () => _retryFailed(
+                              activeBucketId,
+                              activeBucket?.name,
+                            ),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: Text(
+                        _retrying
+                            ? 'Retrying...'
+                            : 'Retry ${status.failedCount}',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Gap(14),
+              _LiveBackupBanner(
+                status: status,
+                autoBackupEnabled: autoBackupEnabled,
+                syncingNow: _syncingNow,
+                onTap: _syncingNow ? null : _startManualSync,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _statPill(String label, int count, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          const Gap(8),
-          Text(
-            '$count',
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
-          ),
-        ],
-      ),
+  BackupActivityItem? _featuredActivity(List<BackupActivityItem> activity) {
+    for (final item in activity) {
+      if (item.status == FileSyncStatus.uploading) return item;
+    }
+    for (final item in activity) {
+      if (item.status == FileSyncStatus.pending) return item;
+    }
+    return activity.isEmpty ? null : activity.first;
+  }
+
+  Future<void> _showBucketSelector() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const BucketSelectorSheet(),
     );
+    if (mounted) {
+      await ref.read(syncServiceProvider).syncNow(ignoreConstraints: false);
+    }
+  }
+
+  Future<void> _startManualSync() async {
+    if (_syncingNow) return;
+    setState(() => _syncingNow = true);
+    try {
+      await ref.read(syncServiceProvider).syncNow();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Backup scan started')));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to start backup right now')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncingNow = false);
+    }
+  }
+
+  Future<void> _retryFailed(int? bucketId, String? bucketName) async {
+    setState(() => _retrying = true);
+    try {
+      final retried = await ref
+          .read(fileUploaderProvider)
+          .retryFailed(bucketId: bucketId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            bucketName == null
+                ? 'Retrying $retried failed item(s)'
+                : 'Retrying $retried failed item(s) to $bucketName',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   Widget _telegramPauseCard(BuildContext context) {
@@ -469,49 +495,626 @@ class _SyncDashboardScreenState extends ConsumerState<SyncDashboardScreen>
       TimeOfDay.fromDateTime(blockedUntil.toLocal()),
       alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
     );
-    return Card(
-      color: Colors.orange.withValues(alpha: 0.12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.schedule_rounded, color: Colors.orange),
-            const Gap(10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Telegram uploads paused',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+    return TeleVaultCard(
+      color: AppTheme.warning.withValues(alpha: 0.10),
+      borderColor: AppTheme.warning.withValues(alpha: 0.35),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.schedule_rounded, color: AppTheme.warning),
+          const Gap(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Telegram uploads paused',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const Gap(3),
+                Text(
+                  _telegramState.pauseReason ??
+                      'Telegram requested a temporary wait.',
+                  style: const TextStyle(color: AppTheme.inkMuted),
+                ),
+                const Gap(3),
+                Text(
+                  'Resumes at $resumeTime ($countdown)',
+                  style: const TextStyle(
+                    color: AppTheme.warning,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const Gap(3),
-                  Text(
-                    _telegramState.pauseReason ??
-                        'Telegram required a retry wait',
-                    style: const TextStyle(color: Colors.orangeAccent),
-                  ),
-                  const Gap(3),
-                  Text(
-                    'Resumes at $resumeTime ($countdown)',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  if (_telegramState.isPremiumFloodWait &&
-                      !_telegramState.isPremium)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Telegram Premium may remove this specific limitation.',
-                        style: TextStyle(color: Colors.orangeAccent),
-                      ),
-                    ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BucketPill extends StatelessWidget {
+  final String name;
+  final bool available;
+  final VoidCallback onTap;
+
+  const _BucketPill({
+    required this.name,
+    required this.available,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.surface,
+      shape: const StadiumBorder(side: BorderSide(color: AppTheme.outline)),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.circle,
+                color: available ? AppTheme.success : AppTheme.inkMuted,
+                size: 10,
+              ),
+              const Gap(7),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Gap(4),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: AppTheme.inkMuted,
+                size: 18,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _BackupHero extends StatelessWidget {
+  final SyncStatusSnapshot status;
+  final bool loading;
+  final BackupActivityItem? item;
+
+  const _BackupHero({
+    required this.status,
+    required this.loading,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = status.totalCount == 0 ? 0.0 : status.overallProgress;
+    final isUploading = status.uploadingCount > 0;
+    final featuredItem = item;
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: 142,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CircularProgressIndicator(
+                value: loading ? null : progress,
+                strokeWidth: 9,
+                strokeCap: StrokeCap.round,
+                backgroundColor: AppTheme.paperMuted,
+              ),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      loading ? '...' : '${(progress * 100).round()}%',
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(fontSize: 36, fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      isUploading
+                          ? 'Uploading'
+                          : status.pendingCount > 0
+                          ? 'Waiting'
+                          : 'Protected',
+                      style: const TextStyle(
+                        color: AppTheme.inkMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '${status.completedCount} of ${status.totalCount}',
+                      style: const TextStyle(
+                        color: AppTheme.ink,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Gap(18),
+        Expanded(
+          child: Column(
+            children: [
+              _BackupThumbnail(item: item, size: 100),
+              const Gap(8),
+              Text(
+                featuredItem == null
+                    ? 'Ready'
+                    : '${_mediaKind(featuredItem.localPath)} · '
+                          '${formatSyncBytes(featuredItem.size)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.inkMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricsGrid extends StatelessWidget {
+  final SyncStatusSnapshot status;
+
+  const _MetricsGrid({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = [
+      (
+        'Queued',
+        status.pendingCount,
+        Icons.hourglass_bottom_rounded,
+        AppTheme.primary,
+      ),
+      (
+        'Uploading',
+        status.uploadingCount,
+        Icons.arrow_upward_rounded,
+        AppTheme.success,
+      ),
+      (
+        'Failed',
+        status.failedCount,
+        Icons.warning_amber_rounded,
+        AppTheme.error,
+      ),
+      (
+        'Complete',
+        status.completedCount,
+        Icons.check_circle_outline_rounded,
+        AppTheme.success,
+      ),
+    ];
+    return Row(
+      children: [
+        for (var index = 0; index < metrics.length; index++) ...[
+          if (index > 0) const Gap(7),
+          Expanded(
+            child: _MetricTile(
+              label: metrics[index].$1,
+              count: metrics[index].$2,
+              icon: metrics[index].$3,
+              color: metrics[index].$4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final String label;
+  final int count;
+  final IconData icon;
+  final Color color;
+
+  const _MetricTile({
+    required this.label,
+    required this.count,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: AppTheme.outline),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 19),
+          const Gap(4),
+          Text(
+            '$count',
+            style: const TextStyle(
+              color: AppTheme.ink,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.fade,
+            style: const TextStyle(
+              color: AppTheme.inkMuted,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StorageCard extends StatelessWidget {
+  final SyncStatusSnapshot status;
+
+  const _StorageCard({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    return TeleVaultCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Storage',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                '${formatSyncBytes(status.completedBytes)} protected',
+                style: const TextStyle(
+                  color: AppTheme.success,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const Gap(8),
+          LinearProgressIndicator(
+            value: status.totalCount == 0 ? 0 : status.overallProgress,
+            minHeight: 7,
+            borderRadius: BorderRadius.circular(999),
+            color: AppTheme.success,
+          ),
+          const Gap(7),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${formatSyncBytes(status.completedBytes)} of this bucket is confirmed on Telegram',
+              style: const TextStyle(color: AppTheme.inkMuted, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackupActivityTile extends StatelessWidget {
+  final BackupActivityItem item;
+  final double? activeProgress;
+
+  const _BackupActivityTile({required this.item, this.activeProgress});
+
+  @override
+  Widget build(BuildContext context) {
+    final appearance = _statusAppearance(item.status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppTheme.outline)),
+      ),
+      child: Row(
+        children: [
+          _BackupThumbnail(item: item, size: 46),
+          const Gap(10),
+          if (item.status == FileSyncStatus.uploading)
+            SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(
+                value: activeProgress,
+                strokeWidth: 3,
+                backgroundColor: AppTheme.paperMuted,
+              ),
+            )
+          else
+            Icon(appearance.$1, color: appearance.$2, size: 23),
+          const Gap(9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_mediaKind(item.localPath)} · ${formatSyncBytes(item.size)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  appearance.$3,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: appearance.$2,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Gap(8),
+          Text(
+            _relativeTime(item.lastAttemptAt ?? item.dateAdded),
+            style: const TextStyle(color: AppTheme.inkMuted, fontSize: 9),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveBackupBanner extends StatelessWidget {
+  final SyncStatusSnapshot status;
+  final bool autoBackupEnabled;
+  final bool syncingNow;
+  final VoidCallback? onTap;
+
+  const _LiveBackupBanner({
+    required this.status,
+    required this.autoBackupEnabled,
+    required this.syncingNow,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final uploading = status.uploadingCount > 0;
+    final title = syncingNow
+        ? 'TeleVault · Scanning'
+        : uploading
+        ? 'TeleVault · Backing up ${status.completedCount}/${status.totalCount}'
+        : autoBackupEnabled
+        ? 'TeleVault · Watching for new media'
+        : 'TeleVault · Backup paused';
+    return TeleVaultCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      child: Row(
+        children: [
+          const TeleVaultIconBadge(
+            icon: Icons.send_rounded,
+            color: AppTheme.primary,
+            size: 42,
+          ),
+          const Gap(10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Gap(2),
+                Text(
+                  '${formatSyncBytes(status.completedBytes)} complete · Tap to sync now',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.inkMuted,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            uploading ? Icons.circle : Icons.circle_outlined,
+            color: uploading || autoBackupEnabled
+                ? AppTheme.success
+                : AppTheme.warning,
+            size: 10,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackupThumbnail extends StatefulWidget {
+  final BackupActivityItem? item;
+  final double size;
+
+  const _BackupThumbnail({required this.item, required this.size});
+
+  @override
+  State<_BackupThumbnail> createState() => _BackupThumbnailState();
+}
+
+class _BackupThumbnailState extends State<_BackupThumbnail> {
+  Future<AssetEntity?>? _asset;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAsset();
+  }
+
+  @override
+  void didUpdateWidget(covariant _BackupThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item?.assetId != widget.item?.assetId) {
+      _loadAsset();
+    }
+  }
+
+  void _loadAsset() {
+    final assetId = widget.item?.assetId;
+    _asset = assetId == null ? Future.value() : AssetEntity.fromId(assetId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: widget.size,
+      height: widget.size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppTheme.paperMuted,
+        borderRadius: BorderRadius.circular(widget.size > 60 ? 18 : 12),
+        border: Border.all(color: AppTheme.outline),
+      ),
+      child: FutureBuilder<AssetEntity?>(
+        future: _asset,
+        builder: (context, snapshot) {
+          final asset = snapshot.data;
+          if (asset != null) {
+            return AssetEntityImage(
+              asset,
+              isOriginal: false,
+              thumbnailSize: ThumbnailSize.square(
+                (widget.size * MediaQuery.devicePixelRatioOf(context))
+                    .round()
+                    .clamp(120, 600),
+              ),
+              fit: BoxFit.cover,
+            );
+          }
+          final item = widget.item;
+          if (item != null && _isImagePath(item.localPath)) {
+            return Image.file(
+              io.File(item.localPath),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => _placeholder(item.localPath),
+            );
+          }
+          return _placeholder(item?.localPath);
+        },
+      ),
+    );
+  }
+
+  Widget _placeholder(String? path) {
+    return Icon(
+      path != null && _isVideoPath(path)
+          ? Icons.videocam_outlined
+          : Icons.photo_outlined,
+      color: AppTheme.inkMuted,
+      size: widget.size * 0.42,
+    );
+  }
+}
+
+(IconData, Color, String) _statusAppearance(FileSyncStatus status) {
+  return switch (status) {
+    FileSyncStatus.pending => (
+      Icons.hourglass_bottom_rounded,
+      AppTheme.primary,
+      'Queued',
+    ),
+    FileSyncStatus.uploading => (
+      Icons.arrow_upward_rounded,
+      AppTheme.primary,
+      'Uploading',
+    ),
+    FileSyncStatus.synced => (
+      Icons.check_circle_rounded,
+      AppTheme.success,
+      'Complete',
+    ),
+    FileSyncStatus.failed => (
+      Icons.error_outline_rounded,
+      AppTheme.error,
+      'Failed',
+    ),
+    _ => (Icons.info_outline_rounded, AppTheme.inkMuted, 'Updated'),
+  };
+}
+
+String _mediaKind(String path) {
+  if (_isVideoPath(path)) return 'Video';
+  if (_isImagePath(path)) return 'Photo';
+  return 'File';
+}
+
+bool _isImagePath(String path) {
+  final lower = path.toLowerCase();
+  return lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.heic') ||
+      lower.endsWith('.heif');
+}
+
+bool _isVideoPath(String path) {
+  final lower = path.toLowerCase();
+  return lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mkv') ||
+      lower.endsWith('.avi') ||
+      lower.endsWith('.3gp');
+}
+
+String _relativeTime(DateTime time) {
+  final difference = DateTime.now().difference(time);
+  if (difference.isNegative || difference.inMinutes < 1) return 'Just now';
+  if (difference.inMinutes < 60) return '${difference.inMinutes} min ago';
+  if (difference.inHours < 24) return '${difference.inHours} hr ago';
+  if (difference.inDays < 7) return '${difference.inDays} d ago';
+  return '${time.day}/${time.month}/${time.year}';
 }

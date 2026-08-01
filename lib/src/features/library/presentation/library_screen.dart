@@ -6,9 +6,13 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:share_plus/share_plus.dart' as share_plus;
 
 import '../../../core/database/file_sync_status.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
+import '../../../core/presentation/televault_logo_mark.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../buckets/presentation/bucket_selector_sheet.dart';
+import '../../buckets/services/bucket_service.dart';
 import '../../settings/services/app_lock_controller.dart';
+import '../../sync/services/sync_status_service.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
 import '../../vault/presentation/vault_recovery_key_screen.dart';
 import '../../vault/services/vault_recovery_service.dart';
@@ -16,6 +20,7 @@ import 'image_viewer_screen.dart';
 import 'library_controller.dart';
 import '../services/media_permission_service.dart';
 import 'widgets/media_access_notice.dart';
+import 'widgets/label_editor_dialog.dart';
 import 'widgets/media_tile.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -176,6 +181,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(libraryControllerProvider);
+    final activeBucket = ref.watch(activeBucketProvider).asData?.value;
+    final bucketStatus = ref.watch(bucketSyncStatusProvider(activeBucket?.id));
 
     if (!state.hasPermission) {
       if (state.isLoading) {
@@ -206,6 +213,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: state.isSelecting ? 64 : 78,
         leading: state.isSelecting
             ? IconButton(
                 onPressed: () => ref
@@ -214,25 +222,45 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 icon: const Icon(Icons.close),
               )
             : null,
-        title: Text(
-          state.isAllPhotos ? 'Library' : state.currentAlbum?.name ?? 'Library',
-        ),
-        actions: [
-          if (state.isSelecting)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Text(
-                  '${state.selectedIds.length}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
+        titleSpacing: state.isSelecting ? 8 : 16,
+        title: state.isSelecting
+            ? Text('${state.selectedIds.length} selected')
+            : Row(
+                children: [
+                  if (state.isAllPhotos) ...[
+                    const TeleVaultLogoMark(size: 32, shadow: false),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          state.isAllPhotos
+                              ? 'TeleVault'
+                              : state.currentAlbum?.name ?? 'Library',
+                        ),
+                        if (activeBucket != null)
+                          Text(
+                            '${activeBucket.name} - ${_bucketStatusText(bucketStatus.asData?.value)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: _bucketStatusColor(
+                                    bucketStatus.asData?.value,
+                                  ),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
-            )
-          else ...[
+        actions: [
+          if (!state.isSelecting) ...[
             IconButton(
               tooltip: 'Filters',
               onPressed: () => _openFiltersSheet(),
@@ -240,11 +268,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 _hasActiveFilters
                     ? Icons.filter_alt
                     : Icons.filter_alt_outlined,
-                color: _hasActiveFilters ? AppTheme.primary : Colors.white,
+                color: _hasActiveFilters ? AppTheme.primary : AppTheme.ink,
               ),
             ),
-            IconButton(
-              tooltip: 'Bucket',
+            LibraryBucketStatusAction(
+              bucketName: activeBucket?.name,
+              status: bucketStatus,
               onPressed: () {
                 showModalBottomSheet(
                   context: context,
@@ -253,7 +282,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   builder: (_) => const BucketSelectorSheet(),
                 );
               },
-              icon: const Icon(Icons.cloud_outlined),
             ),
             IconButton(
               tooltip: 'Select',
@@ -265,31 +293,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           ],
         ],
       ),
-      body: Scrollbar(
-        controller: _scrollCtrl,
-        interactive: true,
-        child: CustomScrollView(
+      body: TeleVaultPage(
+        safeTop: false,
+        safeBottom: false,
+        child: Scrollbar(
           controller: _scrollCtrl,
-          slivers: [
-            if (state.permissionStatus.scope == MediaAccessScope.limitedAccess)
-              SliverToBoxAdapter(
-                child: MediaAccessNotice(
-                  status: state.permissionStatus,
-                  onManageAccess: _manageMediaAccess,
+          interactive: true,
+          child: CustomScrollView(
+            controller: _scrollCtrl,
+            slivers: [
+              if (state.permissionStatus.scope ==
+                  MediaAccessScope.limitedAccess)
+                SliverToBoxAdapter(
+                  child: MediaAccessNotice(
+                    status: state.permissionStatus,
+                    onManageAccess: _manageMediaAccess,
+                  ),
                 ),
-              ),
-            if (_hasActiveFilters)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surface.withValues(alpha: 0.78),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white10),
-                    ),
+              if (_hasActiveFilters)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     child: Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -328,99 +352,89 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     ),
                   ),
                 ),
-              ),
-            for (final month in groupedAssets.keys) ...[
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 12, 8),
-                  child: _monthHeader(month, groupedAssets[month]!, state),
-                ),
-              ),
-              SliverGrid(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final asset = groupedAssets[month]![index];
-                  final isSelected = state.selectedIds.contains(asset.id);
-                  final syncStatus = state.assetStatus[asset.id];
-                  final label = state.assetLabels[asset.id];
-
-                  return MediaTile(
-                    asset: asset,
-                    selectionMode: state.isSelecting,
-                    isSelected: isSelected,
-                    syncStatus: syncStatus,
-                    label: label,
-                    onTap: () {
-                      if (state.isSelecting) {
-                        ref
-                            .read(libraryControllerProvider.notifier)
-                            .toggleItemSelection(asset);
-                      } else {
-                        final visibleIndex = filteredAssets.indexOf(asset);
-                        if (visibleIndex != -1) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ImageViewerScreen(
-                                assets: filteredAssets,
-                                initialIndex: visibleIndex,
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    onLongPress: () {
-                      if (!state.isSelecting) {
-                        ref
-                            .read(libraryControllerProvider.notifier)
-                            .toggleSelectionMode();
-                        ref
-                            .read(libraryControllerProvider.notifier)
-                            .toggleItemSelection(asset);
-                      }
-                    },
-                  );
-                }, childCount: groupedAssets[month]!.length),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 2,
-                  mainAxisSpacing: 2,
-                ),
-              ),
-            ],
-            if (filteredAssets.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.photo_library_outlined,
-                        size: 52,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        'No media found',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+              for (final month in groupedAssets.keys) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 12, 8),
+                    child: _monthHeader(month, groupedAssets[month]!, state),
                   ),
                 ),
-              ),
-            if (state.isLoading)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Center(child: CircularProgressIndicator()),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  sliver: SliverGrid(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final asset = groupedAssets[month]![index];
+                      final isSelected = state.selectedIds.contains(asset.id);
+                      final syncStatus = state.assetStatus[asset.id];
+                      final label = state.assetLabels[asset.id];
+
+                      return MediaTile(
+                        asset: asset,
+                        selectionMode: state.isSelecting,
+                        isSelected: isSelected,
+                        syncStatus: syncStatus,
+                        label: label,
+                        onTap: () {
+                          if (state.isSelecting) {
+                            ref
+                                .read(libraryControllerProvider.notifier)
+                                .toggleItemSelection(asset);
+                          } else {
+                            final visibleIndex = filteredAssets.indexOf(asset);
+                            if (visibleIndex != -1) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ImageViewerScreen(
+                                    assets: filteredAssets,
+                                    initialIndex: visibleIndex,
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        onLongPress: () {
+                          if (!state.isSelecting) {
+                            ref
+                                .read(libraryControllerProvider.notifier)
+                                .toggleSelectionMode();
+                            ref
+                                .read(libraryControllerProvider.notifier)
+                                .toggleItemSelection(asset);
+                          }
+                        },
+                      );
+                    }, childCount: groupedAssets[month]!.length),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 5,
+                          mainAxisSpacing: 5,
+                        ),
+                  ),
                 ),
-              ),
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
+              ],
+              if (filteredAssets.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: TeleVaultEmptyState(
+                    icon: Icons.photo_library_outlined,
+                    title: 'No media found',
+                    message:
+                        'Try changing your filters or choosing another album.',
+                  ),
+                ),
+              if (state.isLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
+          ),
         ),
       ),
       floatingActionButton: state.isSelecting && state.selectedIds.isNotEmpty
@@ -428,6 +442,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
+  }
+
+  String _bucketStatusText(SyncStatusSnapshot? snapshot) {
+    if (snapshot == null) return 'Checking backup';
+    if (snapshot.uploadingCount > 0) {
+      return 'Backing up ${snapshot.uploadingCount}';
+    }
+    if (snapshot.failedCount > 0) return '${snapshot.failedCount} failed';
+    if (snapshot.pendingCount > 0) return '${snapshot.pendingCount} waiting';
+    if (snapshot.completedCount > 0) return 'Up to date';
+    return 'Ready';
+  }
+
+  Color _bucketStatusColor(SyncStatusSnapshot? snapshot) {
+    if (snapshot == null) return AppTheme.inkMuted;
+    if (snapshot.failedCount > 0) return AppTheme.error;
+    if (snapshot.uploadingCount > 0) return AppTheme.primary;
+    if (snapshot.pendingCount > 0) return AppTheme.warning;
+    return AppTheme.success;
   }
 
   bool get _hasActiveFilters {
@@ -450,9 +483,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
       side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.34)),
-      backgroundColor: AppTheme.primary.withValues(alpha: 0.12),
+      backgroundColor: AppTheme.primarySoft,
       labelStyle: const TextStyle(
-        color: Colors.white,
+        color: AppTheme.primaryDeep,
         fontSize: 12,
         fontWeight: FontWeight.w700,
       ),
@@ -508,10 +541,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       onPressed: _clearFilters,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
-      side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
-      backgroundColor: Colors.white.withValues(alpha: 0.08),
+      side: const BorderSide(color: AppTheme.outline),
+      backgroundColor: AppTheme.surface,
       labelStyle: const TextStyle(
-        color: Colors.white,
+        color: AppTheme.inkMuted,
         fontSize: 12,
         fontWeight: FontWeight.w700,
       ),
@@ -547,27 +580,79 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           ),
         ),
         if (state.isSelecting)
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(libraryControllerProvider.notifier)
-                  .setItemsSelection(monthAssets, selected: !allSelected);
-            },
-            child: Text(allSelected ? 'Clear Month' : 'Select Month'),
+          Semantics(
+            button: true,
+            label: allSelected
+                ? 'Clear selection for $month'
+                : 'Select all media from $month',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () {
+                ref
+                    .read(libraryControllerProvider.notifier)
+                    .setItemsSelection(monthAssets, selected: !allSelected);
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(
+                  allSelected
+                      ? Icons.check_circle_rounded
+                      : selectedCount > 0
+                      ? Icons.indeterminate_check_box_rounded
+                      : Icons.circle_outlined,
+                  color: allSelected || selectedCount > 0
+                      ? AppTheme.primary
+                      : AppTheme.inkMuted,
+                  size: 22,
+                ),
+              ),
+            ),
           ),
       ],
     );
   }
 
   List<AssetEntity> _applyFilters(LibraryState state) {
-    final query = _searchQuery.trim().toLowerCase();
+    return _filterAssets(
+      state,
+      search: _searchQuery,
+      status: _statusFilter,
+      media: _mediaFilter,
+      labelId: _labelFilterId,
+    );
+  }
+
+  int _filteredCountFor({
+    required LibraryState state,
+    required String search,
+    required _LibraryStatusFilter status,
+    required _LibraryMediaFilter media,
+    required int? labelId,
+  }) {
+    return _filterAssets(
+      state,
+      search: search,
+      status: status,
+      media: media,
+      labelId: labelId,
+    ).length;
+  }
+
+  List<AssetEntity> _filterAssets(
+    LibraryState state, {
+    required String search,
+    required _LibraryStatusFilter status,
+    required _LibraryMediaFilter media,
+    required int? labelId,
+  }) {
+    final query = search.trim().toLowerCase();
 
     return state.assets
         .where((asset) {
           final syncStatus = state.assetStatus[asset.id];
           final label = state.assetLabels[asset.id];
 
-          final statusMatch = switch (_statusFilter) {
+          final statusMatch = switch (status) {
             _LibraryStatusFilter.all => true,
             _LibraryStatusFilter.needsBackup =>
               syncStatus == null ||
@@ -583,15 +668,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           };
           if (!statusMatch) return false;
 
-          final mediaMatch = switch (_mediaFilter) {
+          final mediaMatch = switch (media) {
             _LibraryMediaFilter.all => true,
             _LibraryMediaFilter.photos => asset.type == AssetType.image,
             _LibraryMediaFilter.videos => asset.type == AssetType.video,
           };
           if (!mediaMatch) return false;
 
-          if (_labelFilterId != null) {
-            if (label == null || label.id != _labelFilterId) {
+          if (labelId != null) {
+            if (label == null || label.id != labelId) {
               return false;
             }
           }
@@ -618,31 +703,45 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surface,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
-                  16,
-                  14,
-                  16,
-                  MediaQuery.of(context).viewInsets.bottom + 16,
+                  20,
+                  8,
+                  20,
+                  MediaQuery.of(context).viewInsets.bottom + 20,
                 ),
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'Filters',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Filter your library',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          if (_hasActiveFilters)
+                            TextButton(
+                              onPressed: () {
+                                setModalState(() {
+                                  localSearch = '';
+                                  localStatus = _LibraryStatusFilter.all;
+                                  localMedia = _LibraryMediaFilter.all;
+                                  localLabel = null;
+                                  searchCtrl.clear();
+                                });
+                              },
+                              child: const Text('Clear'),
+                            ),
+                        ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 14),
                       TextField(
                         controller: searchCtrl,
                         onChanged: (v) => localSearch = v,
@@ -652,10 +751,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'Sync Status',
-                        style: TextStyle(color: Colors.grey),
-                      ),
+                      const TeleVaultSectionTitle(title: 'Backup status'),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
@@ -670,7 +766,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         }).toList(),
                       ),
                       const SizedBox(height: 12),
-                      const Text('Type', style: TextStyle(color: Colors.grey)),
+                      const TeleVaultSectionTitle(title: 'Media type'),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
@@ -685,7 +781,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                         }).toList(),
                       ),
                       const SizedBox(height: 12),
-                      const Text('Label', style: TextStyle(color: Colors.grey)),
+                      const TeleVaultSectionTitle(title: 'Label'),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
@@ -721,7 +817,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                                 });
                                 Navigator.pop(context);
                               },
-                              child: const Text('Reset'),
+                              child: const Text('Clear'),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -736,7 +832,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                                 });
                                 Navigator.pop(context);
                               },
-                              child: const Text('Apply'),
+                              child: Text(
+                                'Show ${_filteredCountFor(state: ref.read(libraryControllerProvider), search: localSearch, status: localStatus, media: localMedia, labelId: localLabel)} items',
+                              ),
                             ),
                           ),
                         ],
@@ -755,53 +853,78 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Widget _buildSelectionBar(WidgetRef ref, LibraryState state) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildActionButton(Icons.label_outline, 'Label', _handleLabel),
-          const SizedBox(width: 16),
-          _buildActionButton(
-            Icons.share,
-            'Share',
-            () => _handleShare(ref, state),
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Material(
+        color: AppTheme.surface,
+        elevation: 12,
+        shadowColor: AppTheme.ink.withValues(alpha: 0.18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: AppTheme.outline),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildActionButton(Icons.label_outline, 'Label', _handleLabel),
+              _buildActionButton(
+                Icons.share_outlined,
+                'Share',
+                () => _handleShare(ref, state),
+              ),
+              _buildActionButton(
+                Icons.lock_outline_rounded,
+                'Vault',
+                () => _handleVault(context),
+              ),
+              _buildActionButton(
+                Icons.delete_outline_rounded,
+                'Delete',
+                () => _handleDelete(ref, state),
+                color: AppTheme.error,
+              ),
+            ],
           ),
-          const SizedBox(width: 16),
-          _buildActionButton(
-            Icons.lock_outline,
-            'Vault',
-            () => _handleVault(context),
-          ),
-          const SizedBox(width: 16),
-          _buildActionButton(
-            Icons.delete_outline,
-            'Delete',
-            () => _handleDelete(ref, state),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 22),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 11),
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    Color color = AppTheme.ink,
+  }) {
+    return Semantics(
+      button: true,
+      label: '$label selected media',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 68, minHeight: 54),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 21),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -893,10 +1016,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   Future<bool> _openCreateLabelDialog() async {
     if (!mounted) return false;
-    final result = await showDialog<_CreateLabelResult>(
-      context: context,
-      builder: (_) => const _CreateLabelDialog(),
-    );
+    final result = await showLabelEditorDialog(context);
 
     if (result == null) return false;
 
@@ -1112,6 +1232,152 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 }
 
+class LibraryBucketStatusAction extends StatelessWidget {
+  final String? bucketName;
+  final AsyncValue<SyncStatusSnapshot> status;
+  final VoidCallback onPressed;
+
+  const LibraryBucketStatusAction({
+    super.key,
+    required this.bucketName,
+    required this.status,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = status.asData?.value;
+    final tooltip = _tooltip(snapshot);
+    final badgeCount = snapshot == null
+        ? 0
+        : snapshot.failedCount > 0
+        ? snapshot.failedCount
+        : snapshot.pendingCount + snapshot.uploadingCount;
+    final badgeColor = snapshot != null && snapshot.failedCount > 0
+        ? AppTheme.error
+        : AppTheme.warning;
+
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: SizedBox(
+          width: 28,
+          height: 28,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              _statusIcon(snapshot),
+              if (badgeCount > 0 && snapshot?.uploadingCount == 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: AppTheme.surface, width: 1.5),
+                    ),
+                    child: Text(
+                      badgeCount > 99 ? '99+' : '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statusIcon(SyncStatusSnapshot? snapshot) {
+    if (snapshot == null) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    if (snapshot.uploadingCount > 0) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 25,
+            height: 25,
+            child: CircularProgressIndicator(
+              value: snapshot.activeUploadProgress > 0
+                  ? snapshot.activeUploadProgress
+                  : null,
+              strokeWidth: 2,
+              backgroundColor: AppTheme.paperMuted,
+              color: AppTheme.primary,
+            ),
+          ),
+          const Icon(
+            Icons.cloud_upload_rounded,
+            size: 16,
+            color: AppTheme.primary,
+          ),
+        ],
+      );
+    }
+    if (snapshot.failedCount > 0) {
+      return const Icon(
+        Icons.cloud_off_rounded,
+        color: AppTheme.error,
+        size: 24,
+      );
+    }
+    if (snapshot.pendingCount > 0) {
+      return const Icon(
+        Icons.cloud_upload_outlined,
+        color: AppTheme.warning,
+        size: 24,
+      );
+    }
+    if (snapshot.completedCount > 0) {
+      return const Icon(
+        Icons.cloud_done_rounded,
+        color: AppTheme.success,
+        size: 24,
+      );
+    }
+    return const Icon(Icons.cloud_queue_outlined, color: AppTheme.inkMuted);
+  }
+
+  String _tooltip(SyncStatusSnapshot? snapshot) {
+    final name = bucketName ?? 'Current bucket';
+    if (snapshot == null) return '$name: loading backup status';
+    if (snapshot.uploadingCount > 0) {
+      return '$name: uploading ${snapshot.uploadingCount}';
+    }
+    if (snapshot.failedCount > 0) {
+      return '$name: ${snapshot.failedCount} failed';
+    }
+    if (snapshot.pendingCount > 0) {
+      return '$name: ${snapshot.pendingCount} waiting';
+    }
+    if (snapshot.completedCount > 0) return '$name: backup up to date';
+    return '$name: no media queued';
+  }
+}
+
 enum _LibraryStatusFilter {
   all('All'),
   needsBackup('Need Backup'),
@@ -1143,129 +1409,4 @@ class _LabelSheetAction {
   const _LabelSheetAction.clear() : this._(_LabelSheetActionType.clear);
   const _LabelSheetAction.apply(int labelId)
     : this._(_LabelSheetActionType.apply, labelId);
-}
-
-class _CreateLabelResult {
-  final String name;
-  final String colorHex;
-
-  const _CreateLabelResult({required this.name, required this.colorHex});
-}
-
-class _CreateLabelDialog extends StatefulWidget {
-  const _CreateLabelDialog();
-
-  @override
-  State<_CreateLabelDialog> createState() => _CreateLabelDialogState();
-}
-
-class _CreateLabelDialogState extends State<_CreateLabelDialog> {
-  static const _colors = [
-    '#0A84FF',
-    '#22C55E',
-    '#EF4444',
-    '#F59E0B',
-    '#A855F7',
-    '#14B8A6',
-  ];
-
-  final TextEditingController _nameCtrl = TextEditingController();
-  String _selectedColor = _colors.first;
-  String _validation = '';
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppTheme.surface,
-      title: const Text('Create Label'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _nameCtrl,
-            maxLength: 11,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              hintText: 'Trip, Mom, Work',
-              helperText: 'Letters, numbers, symbols, and emojis are allowed.',
-            ),
-            onChanged: (_) {
-              if (_validation.isNotEmpty) {
-                setState(() => _validation = '');
-              }
-            },
-          ),
-          if (_validation.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                _validation,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: _colors.map((color) {
-              final picked = _selectedColor == color;
-              return InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => setState(() => _selectedColor = color),
-                child: Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    color: _parseLabelColor(color),
-                    shape: BoxShape.circle,
-                    border: picked
-                        ? Border.all(color: Colors.white, width: 2)
-                        : null,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            final name = _nameCtrl.text.trim();
-            if (name.isEmpty) {
-              setState(() => _validation = 'Enter a label name');
-              return;
-            }
-            Navigator.pop(
-              context,
-              _CreateLabelResult(name: name, colorHex: _selectedColor),
-            );
-          },
-          child: const Text('Create'),
-        ),
-      ],
-    );
-  }
-}
-
-Color _parseLabelColor(String value) {
-  final normalized = value.replaceAll('#', '');
-  if (normalized.length == 6) {
-    return Color(int.parse('FF$normalized', radix: 16));
-  }
-  if (normalized.length == 8) {
-    return Color(int.parse(normalized, radix: 16));
-  }
-  return AppTheme.primary;
 }

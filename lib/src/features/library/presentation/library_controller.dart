@@ -672,6 +672,49 @@ class LibraryController extends StateNotifier<LibraryState> {
     return updated + inserted;
   }
 
+  Future<int> applyLabelToAsset(AssetEntity asset, int? labelId) async {
+    final activeBucketId = await _getActiveBucketId();
+    if (activeBucketId == null) return 0;
+
+    final existing =
+        await (_db.select(_db.files)..where(
+              (t) =>
+                  t.assetId.equals(asset.id) &
+                  t.bucketId.equals(activeBucketId),
+            ))
+            .getSingleOrNull();
+
+    if (existing != null) {
+      final updated =
+          await (_db.update(_db.files)..where((t) => t.id.equals(existing.id)))
+              .write(FilesCompanion(labelId: Value(labelId)));
+      await _refreshVisibleStatuses();
+      return updated;
+    }
+
+    if (labelId == null) return 0;
+    final file = await asset.file;
+    if (file == null) return 0;
+
+    final size = await io.File(file.path).length();
+    await _db
+        .into(_db.files)
+        .insertOnConflictUpdate(
+          FilesCompanion.insert(
+            localPath: file.path,
+            assetId: Value(asset.id),
+            folderName: asset.title ?? 'Unknown',
+            size: size,
+            bucketId: activeBucketId,
+            status: Value(FileSyncStatus.pending.dbValue),
+            labelId: Value(labelId),
+            dateAdded: Value(asset.createDateTime),
+          ),
+        );
+    await _refreshVisibleStatuses();
+    return 1;
+  }
+
   Future<int?> _getActiveBucketId() async {
     final bucket =
         await (_db.select(_db.buckets)

@@ -46,7 +46,15 @@ class AppResponsive {
   }
 
   static double bottomSafeGap(BuildContext context, {double extra = 16}) {
-    return MediaQuery.paddingOf(context).bottom + extra;
+    final mediaQuery = MediaQuery.of(context);
+    final systemBottom = math.max(
+      mediaQuery.viewPadding.bottom,
+      math.max(
+        mediaQuery.padding.bottom,
+        mediaQuery.systemGestureInsets.bottom,
+      ),
+    );
+    return systemBottom + extra;
   }
 
   static EdgeInsets pagePaddingWithBottomSafe(
@@ -84,6 +92,7 @@ class ResponsivePage extends StatelessWidget {
     final resolvedPadding = padding ?? AppResponsive.pagePadding(context);
 
     return SafeArea(
+      maintainBottomViewPadding: true,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final minHeight = centerVertically

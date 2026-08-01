@@ -151,4 +151,113 @@ void main() {
       requestsBefore,
     );
   });
+
+  test('createBucket persists selected per-bucket preferences', () async {
+    var nextChatId = 2001;
+    telegramGateway.handler = (request) {
+      if (request['@type'] == 'createNewSupergroupChat') {
+        return {'@type': 'chat', 'id': nextChatId++};
+      }
+      throw UnimplementedError('Unexpected request: ${request['@type']}');
+    };
+
+    final photosId = await service.createBucket(
+      'Photos',
+      'Photos bucket',
+      allowedTypes: {BucketMediaType.photo},
+      preferences: const SyncPreferences(
+        autoBackupEnabled: true,
+        includePhotos: true,
+        includeVideos: false,
+        wifiOnly: true,
+        maxFileSizeMb: 500,
+      ),
+    );
+    final videosId = await service.createBucket(
+      'Videos',
+      'Videos bucket',
+      allowedTypes: {BucketMediaType.video},
+      preferences: const SyncPreferences(
+        includePhotos: false,
+        includeVideos: true,
+        chargingOnly: true,
+        uploadFormat: SyncUploadFormat.compressedMedia,
+      ),
+    );
+
+    final buckets = await service.getBuckets();
+    final settings = SettingsService(db);
+    final photos = await settings.getSyncPreferences(bucketId: photosId);
+    final videos = await settings.getSyncPreferences(bucketId: videosId);
+    expect(
+      buckets.singleWhere((bucket) => bucket.id == photosId).allowedMediaTypes,
+      'photo',
+    );
+    expect(
+      buckets.singleWhere((bucket) => bucket.id == videosId).allowedMediaTypes,
+      'video',
+    );
+    expect(photos.wifiOnly, isTrue);
+    expect(videos.includePhotos, isFalse);
+    expect(videos.includeVideos, isTrue);
+    expect(videos.chargingOnly, isTrue);
+    expect(videos.uploadFormat, SyncUploadFormat.compressedMedia);
+  });
+
+  test(
+    'additional buckets inherit main preferences with auto-sync off',
+    () async {
+      var nextChatId = 2101;
+      telegramGateway.handler = (request) {
+        if (request['@type'] == 'createNewSupergroupChat') {
+          return {'@type': 'chat', 'id': nextChatId++};
+        }
+        throw UnimplementedError('Unexpected request: ${request['@type']}');
+      };
+
+      final mainId = await service.createBucket(
+        'Main',
+        'Main bucket',
+        preferences: const SyncPreferences(
+          autoBackupEnabled: true,
+          wifiOnly: true,
+          chargingOnly: true,
+          maxFileSizeMb: 500,
+        ),
+      );
+      final secondId = await service.createBucket('Second', 'Second bucket');
+
+      final settings = SettingsService(db);
+      final main = await settings.getSyncPreferences(bucketId: mainId);
+      final second = await settings.getSyncPreferences(bucketId: secondId);
+      expect(main.autoBackupEnabled, isTrue);
+      expect(second.autoBackupEnabled, isFalse);
+      expect(second.wifiOnly, isTrue);
+      expect(second.chargingOnly, isTrue);
+      expect(second.maxFileSizeMb, 500);
+    },
+  );
+
+  test('watchBuckets emits active bucket changes immediately', () async {
+    await insertBucket(
+      'Main',
+      chatId: 1001,
+      isActive: true,
+      createdAt: DateTime(2026),
+    );
+    final secondId = await insertBucket(
+      'Videos',
+      chatId: 1002,
+      isActive: false,
+      createdAt: DateTime(2026, 1, 2),
+    );
+    final changed = service.watchBuckets().firstWhere(
+      (rows) => rows.any((bucket) => bucket.id == secondId && bucket.isActive),
+    );
+
+    await service.setActiveBucket(secondId);
+    final rows = await changed.timeout(const Duration(seconds: 2));
+    expect(rows.where((bucket) => bucket.isActive), hasLength(1));
+    expect(rows.singleWhere((bucket) => bucket.isActive).id, secondId);
+  });
 }

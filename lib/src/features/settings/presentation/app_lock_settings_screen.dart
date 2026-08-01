@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/presentation/secure_text_dialog.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/theme/app_theme.dart';
 import '../services/app_lock_controller.dart';
 import '../services/app_lock_service.dart';
@@ -49,151 +50,155 @@ class _AppLockSettingsScreenState extends ConsumerState<AppLockSettingsScreen> {
     final config = state.config;
 
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(title: const Text('App Lock')),
-      body: FutureBuilder<_AppLockSettingsAccess>(
-        future: _accessFuture,
-        builder: (context, snapshot) {
-          final access = snapshot.data;
-          final loadingAccess =
-              snapshot.connectionState != ConnectionState.done;
+      body: TeleVaultPage(
+        safeTop: false,
+        safeBottom: false,
+        child: FutureBuilder<_AppLockSettingsAccess>(
+          future: _accessFuture,
+          builder: (context, snapshot) {
+            final access = snapshot.data;
+            final loadingAccess =
+                snapshot.connectionState != ConnectionState.done;
 
-          return ListView(
-            padding: AppResponsive.pagePaddingWithBottomSafe(
-              context,
-              horizontal: 16,
-              top: 16,
-              bottomExtra: 18,
-            ),
-            children: [
-              SwitchListTile(
-                value: config.enabled,
-                onChanged: _saving ? null : (value) => _toggleEnabled(value),
-                title: const Text('Enable App Lock'),
-                subtitle: const Text(
-                  'Lock TeleVault with phone security or a TeleVault password.',
+            return ListView(
+              padding: AppResponsive.pagePaddingWithBottomSafe(
+                context,
+                horizontal: 16,
+                top: 16,
+                bottomExtra: 18,
+              ),
+              children: [
+                SwitchListTile(
+                  value: config.enabled,
+                  onChanged: _saving ? null : (value) => _toggleEnabled(value),
+                  title: const Text('Enable App Lock'),
+                  subtitle: const Text(
+                    'Lock TeleVault with phone security or a TeleVault password.',
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              _SecurityCard(
-                icon: Icons.phonelink_lock_rounded,
-                title: 'Phone Security',
-                subtitle: loadingAccess
-                    ? 'Checking this device...'
-                    : access?.phoneSecurityAvailable == true
-                    ? 'Available: fingerprint, face unlock, phone PIN, pattern, or phone password.'
-                    : 'Not available. Set a phone screen lock in Android settings to use it here.',
-                statusLabel: access?.phoneSecurityAvailable == true
-                    ? 'Ready'
-                    : 'Unavailable',
-                statusColor: access?.phoneSecurityAvailable == true
-                    ? Colors.greenAccent
-                    : Colors.orangeAccent,
-                actions: [
-                  OutlinedButton.icon(
-                    onPressed: _saving || access?.phoneSecurityAvailable != true
-                        ? null
-                        : _testPhoneSecurity,
-                    icon: const Icon(Icons.verified_user_outlined),
-                    label: const Text('Test'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _SecurityCard(
-                icon: Icons.password_rounded,
-                title: 'TeleVault Password',
-                subtitle: access?.passwordConfigured == true
-                    ? _passwordStatusText(access!.credentialLockState)
-                    : 'Optional. Use it as an alternative to phone security.',
-                statusLabel: access?.passwordConfigured == true
-                    ? 'Set'
-                    : 'Optional',
-                statusColor: access?.passwordConfigured == true
-                    ? AppTheme.primary
-                    : AppTheme.textSecondary,
-                actions: [
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : _setOrChangePassword,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: Text(
-                      access?.passwordConfigured == true ? 'Change' : 'Set',
-                    ),
-                  ),
-                  if (access?.passwordConfigured == true) ...[
+                const SizedBox(height: 12),
+                _SecurityCard(
+                  icon: Icons.phonelink_lock_rounded,
+                  title: 'Phone Security',
+                  subtitle: loadingAccess
+                      ? 'Checking this device...'
+                      : access?.phoneSecurityAvailable == true
+                      ? 'Available: fingerprint, face unlock, phone PIN, pattern, or phone password.'
+                      : 'Not available. Set a phone screen lock in Android settings to use it here.',
+                  statusLabel: access?.phoneSecurityAvailable == true
+                      ? 'Ready'
+                      : 'Unavailable',
+                  statusColor: access?.phoneSecurityAvailable == true
+                      ? AppTheme.success
+                      : AppTheme.warning,
+                  actions: [
                     OutlinedButton.icon(
                       onPressed:
                           _saving || access?.phoneSecurityAvailable != true
                           ? null
-                          : _resetPasswordWithPhoneSecurity,
-                      icon: const Icon(Icons.restart_alt_rounded),
-                      label: const Text('Reset'),
+                          : _testPhoneSecurity,
+                      icon: const Icon(Icons.verified_user_outlined),
+                      label: const Text('Test'),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _SecurityCard(
+                  icon: Icons.password_rounded,
+                  title: 'TeleVault Password',
+                  subtitle: access?.passwordConfigured == true
+                      ? _passwordStatusText(access!.credentialLockState)
+                      : 'Optional. Use it as an alternative to phone security.',
+                  statusLabel: access?.passwordConfigured == true
+                      ? 'Set'
+                      : 'Optional',
+                  statusColor: access?.passwordConfigured == true
+                      ? AppTheme.primary
+                      : AppTheme.textSecondary,
+                  actions: [
                     OutlinedButton.icon(
-                      onPressed: _saving ? null : _removePassword,
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Remove'),
+                      onPressed: _saving ? null : _setOrChangePassword,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(
+                        access?.passwordConfigured == true ? 'Change' : 'Set',
+                      ),
                     ),
+                    if (access?.passwordConfigured == true) ...[
+                      OutlinedButton.icon(
+                        onPressed:
+                            _saving || access?.phoneSecurityAvailable != true
+                            ? null
+                            : _resetPasswordWithPhoneSecurity,
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Reset'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _saving ? null : _removePassword,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('Remove'),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              if (config.enabled) ...[
-                const SizedBox(height: 16),
-                DropdownButtonFormField<int>(
-                  initialValue: config.timeoutSeconds,
-                  decoration: const InputDecoration(
-                    labelText: 'Lock after inactivity',
-                  ),
-                  dropdownColor: AppTheme.surface,
-                  items: const [
-                    DropdownMenuItem(value: 15, child: Text('15 seconds')),
-                    DropdownMenuItem(value: 30, child: Text('30 seconds')),
-                    DropdownMenuItem(value: 60, child: Text('1 minute')),
-                    DropdownMenuItem(value: 300, child: Text('5 minutes')),
-                    DropdownMenuItem(value: 900, child: Text('15 minutes')),
-                  ],
-                  onChanged: _saving
-                      ? null
-                      : (value) async {
-                          if (value == null) return;
-                          await _saveConfig(
-                            config.copyWith(timeoutSeconds: value),
-                          );
-                        },
                 ),
-                SwitchListTile(
-                  value: config.lockOnBackground,
-                  onChanged: _saving
-                      ? null
-                      : (value) async {
-                          await _saveConfig(
-                            config.copyWith(lockOnBackground: value),
-                          );
-                        },
-                  title: const Text('Lock when app goes to background'),
-                  subtitle: const Text(
-                    'Locks immediately when switching apps.',
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: OutlinedButton.icon(
-                    onPressed: _saving
+                if (config.enabled) ...[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: config.timeoutSeconds,
+                    decoration: const InputDecoration(
+                      labelText: 'Lock after inactivity',
+                    ),
+                    dropdownColor: AppTheme.surface,
+                    items: const [
+                      DropdownMenuItem(value: 15, child: Text('15 seconds')),
+                      DropdownMenuItem(value: 30, child: Text('30 seconds')),
+                      DropdownMenuItem(value: 60, child: Text('1 minute')),
+                      DropdownMenuItem(value: 300, child: Text('5 minutes')),
+                      DropdownMenuItem(value: 900, child: Text('15 minutes')),
+                    ],
+                    onChanged: _saving
                         ? null
-                        : () {
-                            ref
-                                .read(appLockControllerProvider.notifier)
-                                .lockNow();
-                            if (context.mounted) Navigator.pop(context);
+                        : (value) async {
+                            if (value == null) return;
+                            await _saveConfig(
+                              config.copyWith(timeoutSeconds: value),
+                            );
                           },
-                    icon: const Icon(Icons.lock),
-                    label: const Text('Lock Now'),
                   ),
-                ),
+                  SwitchListTile(
+                    value: config.lockOnBackground,
+                    onChanged: _saving
+                        ? null
+                        : (value) async {
+                            await _saveConfig(
+                              config.copyWith(lockOnBackground: value),
+                            );
+                          },
+                    title: const Text('Lock when app goes to background'),
+                    subtitle: const Text(
+                      'Locks immediately when switching apps.',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: _saving
+                          ? null
+                          : () {
+                              ref
+                                  .read(appLockControllerProvider.notifier)
+                                  .lockNow();
+                              if (context.mounted) Navigator.pop(context);
+                            },
+                      icon: const Icon(Icons.lock),
+                      label: const Text('Lock Now'),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -466,25 +471,19 @@ class _SecurityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
-      ),
+    return TeleVaultCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppTheme.primary),
+              TeleVaultIconBadge(icon: icon),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppTheme.ink,
                     fontWeight: FontWeight.w800,
                     fontSize: 16,
                   ),

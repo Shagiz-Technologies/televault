@@ -18,6 +18,20 @@ final bucketServiceProvider = Provider<BucketService>((ref) {
   );
 });
 
+final bucketListProvider = StreamProvider<List<Bucket>>((ref) {
+  return ref.watch(bucketServiceProvider).watchBuckets();
+});
+
+final activeBucketProvider = Provider<AsyncValue<Bucket?>>((ref) {
+  return ref.watch(bucketListProvider).whenData((buckets) {
+    if (buckets.isEmpty) return null;
+    return buckets.firstWhere(
+      (bucket) => bucket.isActive,
+      orElse: () => buckets.first,
+    );
+  });
+});
+
 final bucketPresenceProvider =
     StateNotifierProvider<BucketPresenceController, AsyncValue<bool>>((ref) {
       return BucketPresenceController(ref.watch(bucketServiceProvider));
@@ -92,11 +106,13 @@ class BucketService {
       BucketMediaType.photo,
       BucketMediaType.video,
     },
+    SyncPreferences? preferences,
   }) async {
     final existingBuckets = await getBuckets();
     if (existingBuckets.length >= maxFreeBuckets) {
       throw BucketLimitException(maxFreeBuckets);
     }
+    await _telegramService.waitUntilReady(timeout: const Duration(seconds: 45));
 
     final response = await _telegramReliability.executeWrite(
       {
@@ -145,28 +161,38 @@ class BucketService {
     );
 
     final bucketId = await _db.into(_db.buckets).insert(entry);
-    final inheritedPreferences = isFirst
-        ? await _settingsService.getSyncPreferences()
-        : await _settingsService.getSyncPreferences(
-            bucketId: existingBuckets.first.id,
-          );
+    final inheritedPreferences =
+        preferences ??
+        (isFirst
+            ? await _settingsService.getSyncPreferences()
+            : await _settingsService.getSyncPreferences(
+                bucketId: existingBuckets.first.id,
+              ));
     await _settingsService.seedBucketSyncPreferences(
       bucketId,
-      inheritedPreferences.copyWith(autoBackupEnabled: isFirst),
+      preferences ?? inheritedPreferences.copyWith(autoBackupEnabled: isFirst),
     );
+    await setActiveBucket(bucketId);
     return bucketId;
   }
 
   Future<List<Bucket>> getBuckets() async {
-    return (_db.select(_db.buckets)..orderBy([
-          (t) => OrderingTerm.asc(t.createdAt),
-          (t) => OrderingTerm.asc(t.id),
-        ]))
-        .get();
+    return _orderedBucketsQuery().get();
+  }
+
+  Stream<List<Bucket>> watchBuckets() {
+    return _orderedBucketsQuery().watch();
   }
 
   Future<void> setActiveBucket(int bucketId) async {
     await _db.transaction(() async {
+      final target = await (_db.select(
+        _db.buckets,
+      )..where((bucket) => bucket.id.equals(bucketId))).getSingleOrNull();
+      if (target == null) {
+        throw StateError('The selected bucket no longer exists.');
+      }
+
       await (_db.update(
         _db.buckets,
       )).write(const BucketsCompanion(isActive: Value(false)));
@@ -195,6 +221,13 @@ class BucketService {
     }
 
     return active.first;
+  }
+
+  SimpleSelectStatement<$BucketsTable, Bucket> _orderedBucketsQuery() {
+    return _db.select(_db.buckets)..orderBy([
+      (bucket) => OrderingTerm.asc(bucket.createdAt),
+      (bucket) => OrderingTerm.asc(bucket.id),
+    ]);
   }
 
   int? _extractInt(dynamic value) {

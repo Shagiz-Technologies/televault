@@ -311,17 +311,44 @@ class TelegramReliabilityService {
       );
     }
 
-    final response = await _executeWriteNow(
-      {
-        '@type': 'sendMessage',
-        'chat_id': chatIdInt,
-        'input_message_content': inputMessageContent,
-      },
-      operation: operation,
-      chatId: chatId,
-      timeout: timeout,
-    );
+    int? temporaryMessageId;
+    final bufferedSendUpdates = <TelegramUpdate>[];
+    final sendUpdateCompleter = Completer<TelegramUpdate>();
+    late final StreamSubscription<TelegramUpdate> sendUpdateSubscription;
+    sendUpdateSubscription = _telegram.updates.listen((candidate) {
+      final type = candidate['@type'];
+      if (type != 'updateMessageSendSucceeded' &&
+          type != 'updateMessageSendFailed') {
+        return;
+      }
+      if (temporaryMessageId == null) {
+        bufferedSendUpdates.add(candidate);
+        return;
+      }
+      if (!sendUpdateCompleter.isCompleted &&
+          _matchesSendUpdate(candidate, temporaryMessageId, chatId)) {
+        sendUpdateCompleter.complete(candidate);
+      }
+    });
+
+    TelegramResult response;
+    try {
+      response = await _executeWriteNow(
+        {
+          '@type': 'sendMessage',
+          'chat_id': chatIdInt,
+          'input_message_content': inputMessageContent,
+        },
+        operation: operation,
+        chatId: chatId,
+        timeout: timeout,
+      );
+    } catch (_) {
+      await sendUpdateSubscription.cancel();
+      rethrow;
+    }
     if (response['@type'] != 'message') {
+      await sendUpdateSubscription.cancel();
       throw TelegramError(
         code: null,
         tdlibMessage: 'Unexpected TDLib send response',
@@ -338,12 +365,14 @@ class TelegramReliabilityService {
       chatId: chatId,
     );
     if (initialFailure != null) {
+      await sendUpdateSubscription.cancel();
       await registerError(initialFailure);
       throw initialFailure;
     }
 
-    final temporaryMessageId = _int(response['id']);
+    temporaryMessageId = _int(response['id']);
     if (temporaryMessageId == null) {
+      await sendUpdateSubscription.cancel();
       throw TelegramError(
         code: null,
         tdlibMessage: 'TDLib message identifier missing',
@@ -353,29 +382,36 @@ class TelegramReliabilityService {
         canRetry: true,
       );
     }
-    if (response['sending_state'] == null) return temporaryMessageId;
+
+    for (final candidate in bufferedSendUpdates) {
+      if (!sendUpdateCompleter.isCompleted &&
+          _matchesSendUpdate(candidate, temporaryMessageId, chatId)) {
+        sendUpdateCompleter.complete(candidate);
+        break;
+      }
+    }
+
+    if (response['sending_state'] == null) {
+      await sendUpdateSubscription.cancel();
+      return _verifySentMessage(
+        operation: operation,
+        chatId: chatId,
+        messageId: temporaryMessageId,
+      );
+    }
 
     TelegramUpdate update;
     try {
-      update = await _telegram.waitForUpdate((candidate) {
-        final type = candidate['@type'];
-        if (type != 'updateMessageSendSucceeded' &&
-            type != 'updateMessageSendFailed') {
-          return false;
-        }
-        final oldId = _int(candidate['old_message_id']);
-        final updateChatId = _bigInt(
-          (candidate['message'] as Map?)?['chat_id'],
-        );
-        return oldId == temporaryMessageId && updateChatId == chatId;
-      }, timeout: timeout);
+      update = await sendUpdateCompleter.future.timeout(timeout);
     } catch (error) {
+      await sendUpdateSubscription.cancel();
       throw TelegramErrorParser.fromThrown(
         error,
         operation: operation,
         chatId: chatId,
       );
     }
+    await sendUpdateSubscription.cancel();
 
     final failure = TelegramErrorParser.parse(
       update,
@@ -386,7 +422,124 @@ class TelegramReliabilityService {
       await registerError(failure);
       throw failure;
     }
-    return _int((update['message'] as Map?)?['id']) ?? temporaryMessageId;
+    final confirmedMessageId =
+        _int((update['message'] as Map?)?['id']) ?? temporaryMessageId;
+    return _verifySentMessage(
+      operation: operation,
+      chatId: chatId,
+      messageId: confirmedMessageId,
+    );
+  }
+
+  Future<int> _verifySentMessage({
+    required String operation,
+    required BigInt chatId,
+    required int messageId,
+  }) async {
+    final chatIdInt = _tdInt64(chatId)!;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      TelegramResult response;
+      try {
+        response = await _telegram.request({
+          '@type': 'getMessage',
+          'chat_id': chatIdInt,
+          'message_id': messageId,
+        }, timeout: const Duration(seconds: 15));
+      } catch (error) {
+        if (attempt < 3) {
+          await Future<void>.delayed(Duration(milliseconds: 250 << attempt));
+          continue;
+        }
+        throw TelegramErrorParser.fromThrown(
+          error,
+          operation: 'verify_sent_message',
+          chatId: chatId,
+        );
+      }
+
+      final error = TelegramErrorParser.parse(
+        response,
+        operation: 'verify_sent_message',
+        chatId: chatId,
+      );
+      final responseId = _int(response['id']);
+      final responseChatId = _bigInt(response['chat_id']);
+      if (error == null &&
+          response['@type'] == 'message' &&
+          responseId == messageId &&
+          responseChatId == chatId &&
+          response['sending_state'] == null) {
+        return messageId;
+      }
+      if (error != null && error.code != 404) {
+        await registerError(error);
+        throw error;
+      }
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(milliseconds: 250 << attempt));
+      }
+    }
+
+    throw TelegramError(
+      code: 404,
+      tdlibMessage: 'Telegram did not confirm the uploaded message',
+      operation: operation,
+      chatId: chatId,
+      category: TelegramErrorCategory.transient,
+      canRetry: true,
+    );
+  }
+
+  Future<Set<int>> findConfirmedMessages({
+    required BigInt chatId,
+    required List<int> messageIds,
+  }) async {
+    if (messageIds.isEmpty) return const <int>{};
+    final chatIdInt = _tdInt64(chatId);
+    if (chatIdInt == null) return const <int>{};
+    final response = await _telegram.request({
+      '@type': 'getMessages',
+      'chat_id': chatIdInt,
+      'message_ids': messageIds,
+    }, timeout: const Duration(seconds: 30));
+    final error = TelegramErrorParser.parse(
+      response,
+      operation: 'verify_bucket_messages',
+      chatId: chatId,
+    );
+    if (error != null) throw error;
+    if (response['@type'] != 'messages') {
+      throw TelegramError(
+        code: null,
+        tdlibMessage: 'Unexpected TDLib message verification response',
+        operation: 'verify_bucket_messages',
+        chatId: chatId,
+        category: TelegramErrorCategory.transient,
+        canRetry: true,
+      );
+    }
+    final messages = response['messages'];
+    if (messages is! List) return const <int>{};
+    return messages
+        .whereType<Map>()
+        .where(
+          (message) =>
+              _bigInt(message['chat_id']) == chatId &&
+              message['sending_state'] == null,
+        )
+        .map((message) => _int(message['id']))
+        .whereType<int>()
+        .toSet();
+  }
+
+  bool _matchesSendUpdate(
+    TelegramUpdate candidate,
+    int temporaryMessageId,
+    BigInt chatId,
+  ) {
+    final oldId = _int(candidate['old_message_id']);
+    final updateChatId = _bigInt((candidate['message'] as Map?)?['chat_id']);
+    return oldId == temporaryMessageId && updateChatId == chatId;
   }
 
   Future<void> ensureWriteAllowed({
