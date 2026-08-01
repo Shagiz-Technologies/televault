@@ -74,11 +74,15 @@ jobs:
       - name: Check tracked secrets and release files
         run: python3 tool/android/check_release_secrets.py
 
-      - name: Test Android release verifier
+      - name: Verify Play Store source readiness
+        run: python3 tool/android/verify_play_store_readiness.py
+
+      - name: Test Android release verifiers
         run: >-
           python3 -m unittest
           tool.android.test_verify_16kb
           tool.android.test_verify_media_permissions
+          tool.android.test_verify_play_store_readiness
           -v
 
       - name: Install Flutter dependencies
