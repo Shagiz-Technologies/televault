@@ -11,7 +11,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
     final year = DateTime.now().year;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Privacy & Data')),
+      appBar: AppBar(title: const Text('Privacy & transparency')),
       body: SingleChildScrollView(
         padding: AppResponsive.pagePaddingWithBottomSafe(
           context,
