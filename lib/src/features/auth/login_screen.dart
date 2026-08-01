@@ -7,6 +7,8 @@ import '../../core/presentation/responsive_layout.dart';
 import '../../core/presentation/televault_logo_mark.dart';
 import '../../core/services/telegram_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../settings/presentation/privacy_policy_screen.dart';
+import '../settings/presentation/terms_summary_screen.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -64,7 +66,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ).animate().slideY(begin: 0.3, end: 0, delay: 200.ms).fadeIn(),
             Gap(AppResponsive.gap(context, 10, compact: 6)),
             Text(
-              'Enter your phone number to access your secure cloud storage.',
+              'Use your Telegram account to organize and back up selected photos and videos.',
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
@@ -116,14 +118,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 style: const TextStyle(color: AppTheme.error, fontSize: 13),
               ),
             ],
-            Gap(AppResponsive.gap(context, 20, compact: 12)),
+            Gap(AppResponsive.gap(context, 18, compact: 10)),
             Text(
-              'By continuing, you agree to our Terms of Service.',
+              'By continuing, you agree to the Terms of Service and acknowledge the Privacy Policy.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppTheme.textSecondary.withValues(alpha: 0.6),
+                color: AppTheme.textSecondary.withValues(alpha: 0.7),
                 fontSize: 12,
               ),
+            ).animate().fadeIn(delay: 700.ms),
+            const Gap(4),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 4,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TermsSummaryScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Terms of Service'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Privacy Policy'),
+                ),
+              ],
             ).animate().fadeIn(delay: 800.ms),
           ],
         ),
