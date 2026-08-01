@@ -1,0 +1,112 @@
+name: Bug report
+description: Report a reproducible TeleVault problem using sanitized information.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a reproducible problem. Do not include Telegram
+        credentials, phone numbers, session files, personal media, metadata
+        backups, local databases, signing files, or unredacted logs.
+  - type: input
+    id: app_version
+    attributes:
+      label: TeleVault version
+      description: Use the version shown in About, or state "not available."
+      placeholder: 1.0.0+1
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Include the full commit SHA for source builds, or state "not applicable."
+      placeholder: 0123456789abcdef...
+    validations:
+      required: true
+  - type: input
+    id: android_version
+    attributes:
+      label: Android version
+      placeholder: Android 15 / API 35
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device model
+      placeholder: Manufacturer and model
+    validations:
+      required: true
+  - type: dropdown
+    id: install_source
+    attributes:
+      label: Installation source
+      options:
+        - Local debug build
+        - Local release APK
+        - GitHub Actions artifact
+        - Google Play testing track
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      multiple: true
+      options:
+        - Startup or navigation
+        - Telegram login
+        - Media permissions or scanning
+        - Bucket creation or settings
+        - Sync or upload
+        - Restore or metadata backup
+        - Vault or encryption
+        - App lock or biometrics
+        - Build, CI, or release tooling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: Describe the observable behavior without private account or media data.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open...
+        2. Select...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove identifiers, paths, credentials, media names, and personal data. Use "none" if unavailable.
+      render: shell
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I removed Telegram credentials, phone numbers, sessions, personal media, backups, databases, signing files, private paths, and other personal data.
+          required: true
+        - label: I searched existing issues and did not find a matching report.
+          required: true

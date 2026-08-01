@@ -39,9 +39,11 @@ The goal is simple: make backup feel familiar like a modern gallery app, while k
 | --- | --- |
 | Understand the idea | [What is TeleVault?](#what-is-televault) |
 | Build the app locally | [Build from source](#build-from-source) |
+| Understand the architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Check privacy boundaries | [Privacy & security](#privacy--security) |
 | See what is encrypted | [What is encrypted?](#what-is-encrypted) |
 | Contribute code or docs | [Contributing](#contributing) |
+| Get support | [`SUPPORT.md`](SUPPORT.md) |
 | Report a security issue | [Security](#security) |
 
 ## The idea: Telegram-as-Storage (TaaS)
@@ -255,7 +257,11 @@ Near-term release-readiness work is tracked in [`ROADMAP.md`](ROADMAP.md) and Gi
 
 Contributions are welcome when they keep user privacy, data integrity, and Android reliability in mind.
 
-Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then open a focused issue or pull request. Changes touching privacy, permissions, encryption, Telegram login, sync, vault, or restore need careful review and Android testing.
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), then use
+[`DEVELOPMENT.md`](DEVELOPMENT.md) and the
+[`contribution workflow`](docs/CONTRIBUTION_WORKFLOW.md). Open a focused issue
+or pull request. Changes touching privacy, permissions, encryption, Telegram
+login, sync, vault, or restore need careful review and Android testing.
 
 ## Security
 

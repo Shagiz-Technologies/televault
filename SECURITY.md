@@ -8,10 +8,19 @@ This repository is preparing an initial open-source release. Until stable releas
 
 Do not open a public issue containing secrets, personal metadata, credentials, exploit details, or private Telegram account information.
 
-Preferred reporting path:
+Use [GitHub Private Vulnerability Reporting](https://github.com/Shagiz-Technologies/televault/security/advisories/new) as the primary reporting path.
 
-1. Use GitHub private vulnerability reporting if it is enabled for this repository.
-2. If private reporting is not available, open a minimal public issue that says a security report is needed, without sensitive details.
+If private reporting is unavailable, open a minimal public issue stating only
+that a private security conversation is needed. Do not include reproduction
+details, exploit code, secrets, account identifiers, paths, logs, metadata
+backups, or personal media.
+
+## Response targets
+
+The project aims to acknowledge a private report within 7 days and provide an
+initial triage update within 14 days. These are targets, not guarantees.
+Resolution time depends on severity, reproducibility, maintainer availability,
+and coordinated-disclosure needs.
 
 ## Sensitive areas
 
@@ -24,6 +33,8 @@ Changes touching these areas need extra review:
 - Metadata export/import and Safe Uninstall restore.
 - Android permissions.
 - Release signing and CI/CD.
+- Vendored TDLib/libtdjson binaries and dependency provenance.
+- Local database, diagnostics, biometric, and secure-storage behavior.
 
 ## Secrets policy
 

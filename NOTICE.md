@@ -33,3 +33,9 @@ is resolved through pub.dev; no additional native cryptography binary is
 vendored by TeleVault.
 
 iOS builds resolve the upstream `flutter_libtdjson` `1.8.65` CocoaPod, which provides the TDLib `1.8.65` static XCFramework. The native binary is downloaded by CocoaPods during the macOS build and is not committed to this repository. Physical-device Telegram login, upload, and restore still require release validation before iOS can be declared production-supported.
+
+The Android binary inventory, checksums, known provenance, and unresolved
+release blockers are recorded in
+[`docs/NATIVE_BINARY_PROVENANCE.md`](docs/NATIVE_BINARY_PROVENANCE.md). The
+vendored wrapper's MIT license does not by itself establish the exact source,
+build, or complete redistribution record for the committed native binaries.
