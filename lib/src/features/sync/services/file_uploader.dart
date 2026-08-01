@@ -57,6 +57,7 @@ class FileUploader {
   bool _started = false;
   bool _disposed = false;
   bool _backgroundWakesSuspended = false;
+  bool _accountCleanupRequested = false;
 
   FileUploader(
     this._db,
@@ -105,6 +106,7 @@ class FileUploader {
   }
 
   Future<void> startUploadLoop() async {
+    _accountCleanupRequested = false;
     if (_started) {
       wake();
       return;
@@ -226,7 +228,12 @@ class FileUploader {
   }
 
   void wake({bool ignoreConstraints = false, int? bucketId}) {
-    if (!_started || _disposed || _backgroundWakesSuspended) return;
+    if (!_started ||
+        _disposed ||
+        _backgroundWakesSuspended ||
+        _accountCleanupRequested) {
+      return;
+    }
     if (_isUploading) {
       _queuedWake = _mergeQueuedWake(
         _queuedWake,
@@ -248,6 +255,7 @@ class FileUploader {
   }
 
   void resumeBackgroundWakes() {
+    if (_accountCleanupRequested) return;
     if (!_backgroundWakesSuspended) return;
     _backgroundWakesSuspended = false;
     wake();
@@ -316,7 +324,7 @@ class FileUploader {
     _isUploading = true;
 
     try {
-      while (!_disposed) {
+      while (!_disposed && !_accountCleanupRequested) {
         if (!await _canUpload(ignoreConstraints: ignoreConstraints)) {
           break;
         }
@@ -470,6 +478,32 @@ class FileUploader {
 
     wake(bucketId: bucketId);
     return ids.length;
+  }
+
+  Future<void> stopForAccountCleanup({
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    _accountCleanupRequested = true;
+    _backgroundWakesSuspended = true;
+    _queuedWake = null;
+    _retryWakeTimer?.cancel();
+    _scheduledWakeAt = null;
+    await _pendingSub?.cancel();
+    await _constraintsSub?.cancel();
+    await _telegramStateSub?.cancel();
+    _pendingSub = null;
+    _constraintsSub = null;
+    _telegramStateSub = null;
+    try {
+      await waitForCurrentUploadToFinish(timeout: timeout);
+    } on TimeoutException {
+      // TDLib logout below terminates a request that did not finish in time.
+    }
+    _started = false;
+    _currentProgress.clear();
+    if (!_progressController.isClosed) {
+      _progressController.add(const <String, double>{});
+    }
   }
 
   Future<bool> _canUpload({required bool ignoreConstraints}) async {
@@ -676,6 +710,15 @@ class FileUploader {
         ),
       );
     }
+    await (_db.update(
+      _db.files,
+    )..where((table) => table.id.equals(file.id))).write(
+      FilesCompanion(
+        localPath: Value(resolved.absolute.path),
+        localPathResolved: const Value(true),
+        size: Value(await resolved.length()),
+      ),
+    );
     return resolved;
   }
 

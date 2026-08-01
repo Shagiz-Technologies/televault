@@ -445,6 +445,46 @@ class TelegramService implements TelegramGateway {
     return prepareAuthorization(timeout: timeout);
   }
 
+  Future<void> clearLocalAccountStorage() async {
+    _ensureInitialized();
+    try {
+      await request({'@type': 'destroy'}, timeout: const Duration(seconds: 8));
+    } catch (_) {
+      // Cleanup remains safe to retry after TDLib has already closed.
+    }
+
+    _clientId = _tdJson.td_create_client_id();
+    _tdlibParametersSent = false;
+    _databaseEncryptionKeyChecked = false;
+    _setParametersInFlight = null;
+    _checkEncryptionKeyInFlight = null;
+    _currentAuthState = null;
+
+    final root = await _tdlibRootDirectory();
+    for (var attempt = 0; attempt < 3 && await root.exists(); attempt++) {
+      try {
+        await root.delete(recursive: true);
+      } on FileSystemException {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    if (await root.exists()) {
+      throw const FileSystemException(
+        'TDLib local account storage could not be removed.',
+      );
+    }
+    if (Platform.isIOS) {
+      await _secureStorage.delete(key: _iosDatabaseKeyName);
+    }
+  }
+
+  Future<Directory> _tdlibRootDirectory() async {
+    final storageRoot = Platform.isIOS
+        ? await getApplicationSupportDirectory()
+        : await getApplicationDocumentsDirectory();
+    return Directory(p.join(storageRoot.path, 'tdlib'));
+  }
+
   Future<Map<String, dynamic>> _getAuthorizationState({
     required Duration timeout,
   }) async {

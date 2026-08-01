@@ -8,8 +8,13 @@ import '../services/vault_recovery_service.dart';
 
 class VaultRecoveryKeyScreen extends ConsumerStatefulWidget {
   final bool allowImport;
+  final bool requireExistingKey;
 
-  const VaultRecoveryKeyScreen({super.key, this.allowImport = true});
+  const VaultRecoveryKeyScreen({
+    super.key,
+    this.allowImport = true,
+    this.requireExistingKey = false,
+  });
 
   @override
   ConsumerState<VaultRecoveryKeyScreen> createState() =>
@@ -59,7 +64,8 @@ class _VaultRecoveryKeyScreenState
           )
           .map((row) => row.read<int>('c'))
           .getSingle();
-      if (existingV3Count > 0 && !hasRecoveryKey) {
+      if ((widget.requireExistingKey || existingV3Count > 0) &&
+          !hasRecoveryKey) {
         if (!mounted) return;
         setState(() {
           _requiresExistingKey = true;
@@ -161,7 +167,7 @@ class _VaultRecoveryKeyScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('Vault Recovery Key')),
+      appBar: AppBar(title: const Text('TeleVault Recovery Key')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -169,13 +175,13 @@ class _VaultRecoveryKeyScreenState
             const Icon(Icons.key_rounded, color: AppTheme.primary, size: 54),
             const SizedBox(height: 14),
             const Text(
-              'Your portable vault key',
+              'Your portable recovery key',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             const Text(
-              'This key, not your short PIN or biometrics, recovers encrypted vault backups on another installation.',
+              'This key, not your short PIN or biometrics, recovers encrypted vault files and metadata backups on another installation.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, height: 1.4),
             ),
@@ -190,7 +196,7 @@ class _VaultRecoveryKeyScreenState
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Text(
-                  'Existing v3 vault metadata was found, but this installation does not have its recovery key. Import the original TVRK1 key below. Creating a new key would not unlock those files.',
+                  'Protected TeleVault data was found, but this installation does not have its recovery key. Import the original TVRK1 key below. Creating a new key would not unlock that data.',
                   style: TextStyle(color: Colors.orangeAccent, height: 1.4),
                 ),
               )
@@ -226,7 +232,7 @@ class _VaultRecoveryKeyScreenState
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Text(
-                  'If you uninstall TeleVault or lose this phone without saving this key, encrypted Telegram vault files cannot be recovered. Shagiz Technologies cannot reset it.',
+                  'If you uninstall TeleVault or lose this phone without saving this key, encrypted vault files and v5 metadata snapshots cannot be recovered. Shagiz Technologies cannot reset it.',
                   style: TextStyle(color: Colors.orangeAccent, height: 1.4),
                 ),
               ),

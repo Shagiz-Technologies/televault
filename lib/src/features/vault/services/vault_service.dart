@@ -428,6 +428,17 @@ class VaultService {
     }
   }
 
+  Future<void> deleteAllLocalVaultFiles() async {
+    final temporaryDirectory = await _temporaryDirectoryProvider();
+    if (await temporaryDirectory.exists()) {
+      await temporaryDirectory.delete(recursive: true);
+    }
+    final vaultDirectory = await _vaultDirectoryProvider();
+    if (await vaultDirectory.exists()) {
+      await vaultDirectory.delete(recursive: true);
+    }
+  }
+
   static Future<void> cleanupDefaultTemporaryFiles() async {
     final service = VaultService(
       recoveryKeyProvider: _UnavailableRecoveryKeyProvider(),

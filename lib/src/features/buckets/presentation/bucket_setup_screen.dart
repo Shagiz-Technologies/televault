@@ -9,9 +9,12 @@ import '../../../core/presentation/secure_text_dialog.dart';
 import '../../../core/presentation/televault_logo_mark.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../backup/services/auto_metadata_backup_service.dart';
+import '../../backup/services/metadata_backup_service.dart';
 import '../../backup/services/safe_uninstall_backup_service.dart';
 import '../services/bucket_service.dart';
 import '../../sync/services/sync_initializer.dart';
+import '../../vault/presentation/vault_recovery_key_screen.dart';
+import '../../vault/services/vault_recovery_service.dart';
 
 class BucketSetupScreen extends ConsumerStatefulWidget {
   const BucketSetupScreen({super.key});
@@ -95,26 +98,36 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final isFirstBucket = existingBuckets.isEmpty;
       await bucketService.createBucket(
         _nameCtrl.text,
         "TeleVault Storage Bucket for ${_nameCtrl.text}",
         allowedTypes: _selectedTypes,
       );
       await ref.read(syncInitializerProvider).ensureStarted();
-      unawaited(
-        ref
-            .read(autoMetadataBackupServiceProvider)
-            .backupNow(reason: 'bucket_created')
-            .then<void>(
-              (_) {},
-              onError: (Object e, StackTrace stackTrace) {
-                debugPrint('Initial metadata backup failed: $e');
-              },
-            ),
-      );
+      var metadataProtectionReady = await ref
+          .read(vaultRecoveryServiceProvider)
+          .isRecoveryKeyConfirmed();
+      if (isFirstBucket && !metadataProtectionReady && mounted) {
+        metadataProtectionReady =
+            await Navigator.of(context).push<bool>(
+              MaterialPageRoute(builder: (_) => const VaultRecoveryKeyScreen()),
+            ) ??
+            false;
+      }
+      if (metadataProtectionReady) {
+        unawaited(
+          ref
+              .read(autoMetadataBackupServiceProvider)
+              .backupNow(reason: 'bucket_created')
+              .then<void>(
+                (_) {},
+                onError: (Object _, StackTrace stackTrace) {},
+              ),
+        );
+      }
 
       if (mounted) {
-        final isFirstBucket = existingBuckets.isEmpty;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -334,7 +347,9 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
     };
   }
 
-  Future<void> _restoreAutomaticMetadataBackup() async {
+  Future<void> _restoreAutomaticMetadataBackup({
+    bool allowRecoveryPrompt = true,
+  }) async {
     if (_isRestoring) return;
     setState(() {
       _isRestoring = true;
@@ -373,11 +388,33 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
         unawaited(ref.read(syncInitializerProvider).ensureStarted());
         ref.read(bucketPresenceProvider.notifier).setHasBuckets(true);
       });
-    } catch (e) {
+    } on MetadataBackupException catch (error) {
+      if (allowRecoveryPrompt &&
+          error.code == MetadataBackupErrorCode.recoveryKeyRequired &&
+          mounted) {
+        final ready = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => VaultRecoveryKeyScreen(
+              requireExistingKey: error.requiresExistingRecoveryKey,
+            ),
+          ),
+        );
+        if (ready == true && mounted) {
+          setState(() => _isRestoring = false);
+          await _restoreAutomaticMetadataBackup(allowRecoveryPrompt: false);
+          return;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _restoreStatus =
-            'Automatic metadata restore did not finish. You can create a new bucket or restore an older passphrase backup. Details: $e';
+            'Automatic metadata restore did not finish. ${error.message}';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _restoreStatus =
+            'Automatic metadata restore did not finish. You can create a new bucket or restore an older passphrase backup.';
       });
     } finally {
       if (mounted) setState(() => _isRestoring = false);
@@ -419,11 +456,33 @@ class _BucketSetupScreenState extends ConsumerState<BucketSetupScreen> {
         unawaited(ref.read(syncInitializerProvider).ensureStarted());
         ref.read(bucketPresenceProvider.notifier).setHasBuckets(true);
       });
-    } catch (e) {
+    } on MetadataBackupException catch (error) {
       if (!mounted) return;
       setState(() {
         _restoreStatus =
-            'No previous Safe Uninstall metadata was restored. You can create a new bucket to start over. Details: $e';
+            'No previous Safe Uninstall metadata was restored. ${error.message}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No Safe Uninstall metadata was restored'),
+        ),
+      );
+    } on SafeUninstallBackupException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _restoreStatus =
+            'No previous Safe Uninstall metadata was restored. ${error.message}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No Safe Uninstall metadata was restored'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _restoreStatus =
+            'No previous Safe Uninstall metadata was restored. Check your connection or create a new bucket to start over.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

@@ -82,4 +82,9 @@ class _MemorySecretStore implements VaultSecretStore {
   Future<void> write(String key, String value) async {
     values[key] = value;
   }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
 }

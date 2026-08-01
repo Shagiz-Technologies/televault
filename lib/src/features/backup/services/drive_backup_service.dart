@@ -23,8 +23,8 @@ class DriveBackupService {
   Future<GoogleSignInAccount?> signIn() async {
     try {
       return await _googleSignIn.signIn();
-    } catch (e) {
-      debugPrint('Google Sign In Error: $e');
+    } catch (_) {
+      debugPrint('Google Drive sign-in did not complete.');
       return null;
     }
   }
@@ -42,7 +42,7 @@ class DriveBackupService {
     final dbFile = File(dbPath);
 
     if (!await dbFile.exists()) {
-      debugPrint('Database not found at $dbPath');
+      debugPrint('The local metadata database was not found.');
       return;
     }
 

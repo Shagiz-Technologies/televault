@@ -776,6 +776,21 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _localPathResolvedMeta = const VerificationMeta(
+    'localPathResolved',
+  );
+  @override
+  late final GeneratedColumn<bool> localPathResolved = GeneratedColumn<bool>(
+    'local_path_resolved',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("local_path_resolved" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _assetIdMeta = const VerificationMeta(
     'assetId',
   );
@@ -853,6 +868,20 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
+  );
+  static const VerificationMeta _remoteStateVerifiedMeta =
+      const VerificationMeta('remoteStateVerified');
+  @override
+  late final GeneratedColumn<bool> remoteStateVerified = GeneratedColumn<bool>(
+    'remote_state_verified',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("remote_state_verified" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
@@ -1150,6 +1179,7 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
   List<GeneratedColumn> get $columns => [
     id,
     localPath,
+    localPathResolved,
     assetId,
     folderName,
     fileHash,
@@ -1157,6 +1187,7 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     bucketId,
     telegramMessageId,
     telegramFileId,
+    remoteStateVerified,
     status,
     retryCount,
     lastError,
@@ -1205,6 +1236,15 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
       );
     } else if (isInserting) {
       context.missing(_localPathMeta);
+    }
+    if (data.containsKey('local_path_resolved')) {
+      context.handle(
+        _localPathResolvedMeta,
+        localPathResolved.isAcceptableOrUnknown(
+          data['local_path_resolved']!,
+          _localPathResolvedMeta,
+        ),
+      );
     }
     if (data.containsKey('asset_id')) {
       context.handle(
@@ -1257,6 +1297,15 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         telegramFileId.isAcceptableOrUnknown(
           data['telegram_file_id']!,
           _telegramFileIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('remote_state_verified')) {
+      context.handle(
+        _remoteStateVerifiedMeta,
+        remoteStateVerified.isAcceptableOrUnknown(
+          data['remote_state_verified']!,
+          _remoteStateVerifiedMeta,
         ),
       );
     }
@@ -1485,6 +1534,10 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.string,
         data['${effectivePrefix}local_path'],
       )!,
+      localPathResolved: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}local_path_resolved'],
+      )!,
       assetId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}asset_id'],
@@ -1513,6 +1566,10 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.int,
         data['${effectivePrefix}telegram_file_id'],
       ),
+      remoteStateVerified: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}remote_state_verified'],
+      )!,
       status: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}status'],
@@ -1625,6 +1682,7 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
 class File extends DataClass implements Insertable<File> {
   final int id;
   final String localPath;
+  final bool localPathResolved;
   final String? assetId;
   final String folderName;
   final String? fileHash;
@@ -1632,6 +1690,7 @@ class File extends DataClass implements Insertable<File> {
   final int bucketId;
   final int? telegramMessageId;
   final int? telegramFileId;
+  final bool remoteStateVerified;
   final int status;
   final int retryCount;
   final String? lastError;
@@ -1660,6 +1719,7 @@ class File extends DataClass implements Insertable<File> {
   const File({
     required this.id,
     required this.localPath,
+    required this.localPathResolved,
     this.assetId,
     required this.folderName,
     this.fileHash,
@@ -1667,6 +1727,7 @@ class File extends DataClass implements Insertable<File> {
     required this.bucketId,
     this.telegramMessageId,
     this.telegramFileId,
+    required this.remoteStateVerified,
     required this.status,
     required this.retryCount,
     this.lastError,
@@ -1698,6 +1759,7 @@ class File extends DataClass implements Insertable<File> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['local_path'] = Variable<String>(localPath);
+    map['local_path_resolved'] = Variable<bool>(localPathResolved);
     if (!nullToAbsent || assetId != null) {
       map['asset_id'] = Variable<String>(assetId);
     }
@@ -1713,6 +1775,7 @@ class File extends DataClass implements Insertable<File> {
     if (!nullToAbsent || telegramFileId != null) {
       map['telegram_file_id'] = Variable<int>(telegramFileId);
     }
+    map['remote_state_verified'] = Variable<bool>(remoteStateVerified);
     map['status'] = Variable<int>(status);
     map['retry_count'] = Variable<int>(retryCount);
     if (!nullToAbsent || lastError != null) {
@@ -1779,6 +1842,7 @@ class File extends DataClass implements Insertable<File> {
     return FilesCompanion(
       id: Value(id),
       localPath: Value(localPath),
+      localPathResolved: Value(localPathResolved),
       assetId: assetId == null && nullToAbsent
           ? const Value.absent()
           : Value(assetId),
@@ -1794,6 +1858,7 @@ class File extends DataClass implements Insertable<File> {
       telegramFileId: telegramFileId == null && nullToAbsent
           ? const Value.absent()
           : Value(telegramFileId),
+      remoteStateVerified: Value(remoteStateVerified),
       status: Value(status),
       retryCount: Value(retryCount),
       lastError: lastError == null && nullToAbsent
@@ -1864,6 +1929,7 @@ class File extends DataClass implements Insertable<File> {
     return File(
       id: serializer.fromJson<int>(json['id']),
       localPath: serializer.fromJson<String>(json['localPath']),
+      localPathResolved: serializer.fromJson<bool>(json['localPathResolved']),
       assetId: serializer.fromJson<String?>(json['assetId']),
       folderName: serializer.fromJson<String>(json['folderName']),
       fileHash: serializer.fromJson<String?>(json['fileHash']),
@@ -1871,6 +1937,9 @@ class File extends DataClass implements Insertable<File> {
       bucketId: serializer.fromJson<int>(json['bucketId']),
       telegramMessageId: serializer.fromJson<int?>(json['telegramMessageId']),
       telegramFileId: serializer.fromJson<int?>(json['telegramFileId']),
+      remoteStateVerified: serializer.fromJson<bool>(
+        json['remoteStateVerified'],
+      ),
       status: serializer.fromJson<int>(json['status']),
       retryCount: serializer.fromJson<int>(json['retryCount']),
       lastError: serializer.fromJson<String?>(json['lastError']),
@@ -1918,6 +1987,7 @@ class File extends DataClass implements Insertable<File> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'localPath': serializer.toJson<String>(localPath),
+      'localPathResolved': serializer.toJson<bool>(localPathResolved),
       'assetId': serializer.toJson<String?>(assetId),
       'folderName': serializer.toJson<String>(folderName),
       'fileHash': serializer.toJson<String?>(fileHash),
@@ -1925,6 +1995,7 @@ class File extends DataClass implements Insertable<File> {
       'bucketId': serializer.toJson<int>(bucketId),
       'telegramMessageId': serializer.toJson<int?>(telegramMessageId),
       'telegramFileId': serializer.toJson<int?>(telegramFileId),
+      'remoteStateVerified': serializer.toJson<bool>(remoteStateVerified),
       'status': serializer.toJson<int>(status),
       'retryCount': serializer.toJson<int>(retryCount),
       'lastError': serializer.toJson<String?>(lastError),
@@ -1960,6 +2031,7 @@ class File extends DataClass implements Insertable<File> {
   File copyWith({
     int? id,
     String? localPath,
+    bool? localPathResolved,
     Value<String?> assetId = const Value.absent(),
     String? folderName,
     Value<String?> fileHash = const Value.absent(),
@@ -1967,6 +2039,7 @@ class File extends DataClass implements Insertable<File> {
     int? bucketId,
     Value<int?> telegramMessageId = const Value.absent(),
     Value<int?> telegramFileId = const Value.absent(),
+    bool? remoteStateVerified,
     int? status,
     int? retryCount,
     Value<String?> lastError = const Value.absent(),
@@ -1995,6 +2068,7 @@ class File extends DataClass implements Insertable<File> {
   }) => File(
     id: id ?? this.id,
     localPath: localPath ?? this.localPath,
+    localPathResolved: localPathResolved ?? this.localPathResolved,
     assetId: assetId.present ? assetId.value : this.assetId,
     folderName: folderName ?? this.folderName,
     fileHash: fileHash.present ? fileHash.value : this.fileHash,
@@ -2006,6 +2080,7 @@ class File extends DataClass implements Insertable<File> {
     telegramFileId: telegramFileId.present
         ? telegramFileId.value
         : this.telegramFileId,
+    remoteStateVerified: remoteStateVerified ?? this.remoteStateVerified,
     status: status ?? this.status,
     retryCount: retryCount ?? this.retryCount,
     lastError: lastError.present ? lastError.value : this.lastError,
@@ -2060,6 +2135,9 @@ class File extends DataClass implements Insertable<File> {
     return File(
       id: data.id.present ? data.id.value : this.id,
       localPath: data.localPath.present ? data.localPath.value : this.localPath,
+      localPathResolved: data.localPathResolved.present
+          ? data.localPathResolved.value
+          : this.localPathResolved,
       assetId: data.assetId.present ? data.assetId.value : this.assetId,
       folderName: data.folderName.present
           ? data.folderName.value
@@ -2073,6 +2151,9 @@ class File extends DataClass implements Insertable<File> {
       telegramFileId: data.telegramFileId.present
           ? data.telegramFileId.value
           : this.telegramFileId,
+      remoteStateVerified: data.remoteStateVerified.present
+          ? data.remoteStateVerified.value
+          : this.remoteStateVerified,
       status: data.status.present ? data.status.value : this.status,
       retryCount: data.retryCount.present
           ? data.retryCount.value
@@ -2144,6 +2225,7 @@ class File extends DataClass implements Insertable<File> {
     return (StringBuffer('File(')
           ..write('id: $id, ')
           ..write('localPath: $localPath, ')
+          ..write('localPathResolved: $localPathResolved, ')
           ..write('assetId: $assetId, ')
           ..write('folderName: $folderName, ')
           ..write('fileHash: $fileHash, ')
@@ -2151,6 +2233,7 @@ class File extends DataClass implements Insertable<File> {
           ..write('bucketId: $bucketId, ')
           ..write('telegramMessageId: $telegramMessageId, ')
           ..write('telegramFileId: $telegramFileId, ')
+          ..write('remoteStateVerified: $remoteStateVerified, ')
           ..write('status: $status, ')
           ..write('retryCount: $retryCount, ')
           ..write('lastError: $lastError, ')
@@ -2184,6 +2267,7 @@ class File extends DataClass implements Insertable<File> {
   int get hashCode => Object.hashAll([
     id,
     localPath,
+    localPathResolved,
     assetId,
     folderName,
     fileHash,
@@ -2191,6 +2275,7 @@ class File extends DataClass implements Insertable<File> {
     bucketId,
     telegramMessageId,
     telegramFileId,
+    remoteStateVerified,
     status,
     retryCount,
     lastError,
@@ -2223,6 +2308,7 @@ class File extends DataClass implements Insertable<File> {
       (other is File &&
           other.id == this.id &&
           other.localPath == this.localPath &&
+          other.localPathResolved == this.localPathResolved &&
           other.assetId == this.assetId &&
           other.folderName == this.folderName &&
           other.fileHash == this.fileHash &&
@@ -2230,6 +2316,7 @@ class File extends DataClass implements Insertable<File> {
           other.bucketId == this.bucketId &&
           other.telegramMessageId == this.telegramMessageId &&
           other.telegramFileId == this.telegramFileId &&
+          other.remoteStateVerified == this.remoteStateVerified &&
           other.status == this.status &&
           other.retryCount == this.retryCount &&
           other.lastError == this.lastError &&
@@ -2260,6 +2347,7 @@ class File extends DataClass implements Insertable<File> {
 class FilesCompanion extends UpdateCompanion<File> {
   final Value<int> id;
   final Value<String> localPath;
+  final Value<bool> localPathResolved;
   final Value<String?> assetId;
   final Value<String> folderName;
   final Value<String?> fileHash;
@@ -2267,6 +2355,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   final Value<int> bucketId;
   final Value<int?> telegramMessageId;
   final Value<int?> telegramFileId;
+  final Value<bool> remoteStateVerified;
   final Value<int> status;
   final Value<int> retryCount;
   final Value<String?> lastError;
@@ -2295,6 +2384,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   const FilesCompanion({
     this.id = const Value.absent(),
     this.localPath = const Value.absent(),
+    this.localPathResolved = const Value.absent(),
     this.assetId = const Value.absent(),
     this.folderName = const Value.absent(),
     this.fileHash = const Value.absent(),
@@ -2302,6 +2392,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.bucketId = const Value.absent(),
     this.telegramMessageId = const Value.absent(),
     this.telegramFileId = const Value.absent(),
+    this.remoteStateVerified = const Value.absent(),
     this.status = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.lastError = const Value.absent(),
@@ -2331,6 +2422,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   FilesCompanion.insert({
     this.id = const Value.absent(),
     required String localPath,
+    this.localPathResolved = const Value.absent(),
     this.assetId = const Value.absent(),
     required String folderName,
     this.fileHash = const Value.absent(),
@@ -2338,6 +2430,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     required int bucketId,
     this.telegramMessageId = const Value.absent(),
     this.telegramFileId = const Value.absent(),
+    this.remoteStateVerified = const Value.absent(),
     this.status = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.lastError = const Value.absent(),
@@ -2370,6 +2463,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   static Insertable<File> custom({
     Expression<int>? id,
     Expression<String>? localPath,
+    Expression<bool>? localPathResolved,
     Expression<String>? assetId,
     Expression<String>? folderName,
     Expression<String>? fileHash,
@@ -2377,6 +2471,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Expression<int>? bucketId,
     Expression<int>? telegramMessageId,
     Expression<int>? telegramFileId,
+    Expression<bool>? remoteStateVerified,
     Expression<int>? status,
     Expression<int>? retryCount,
     Expression<String>? lastError,
@@ -2406,6 +2501,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (localPath != null) 'local_path': localPath,
+      if (localPathResolved != null) 'local_path_resolved': localPathResolved,
       if (assetId != null) 'asset_id': assetId,
       if (folderName != null) 'folder_name': folderName,
       if (fileHash != null) 'file_hash': fileHash,
@@ -2413,6 +2509,8 @@ class FilesCompanion extends UpdateCompanion<File> {
       if (bucketId != null) 'bucket_id': bucketId,
       if (telegramMessageId != null) 'telegram_message_id': telegramMessageId,
       if (telegramFileId != null) 'telegram_file_id': telegramFileId,
+      if (remoteStateVerified != null)
+        'remote_state_verified': remoteStateVerified,
       if (status != null) 'status': status,
       if (retryCount != null) 'retry_count': retryCount,
       if (lastError != null) 'last_error': lastError,
@@ -2452,6 +2550,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   FilesCompanion copyWith({
     Value<int>? id,
     Value<String>? localPath,
+    Value<bool>? localPathResolved,
     Value<String?>? assetId,
     Value<String>? folderName,
     Value<String?>? fileHash,
@@ -2459,6 +2558,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Value<int>? bucketId,
     Value<int?>? telegramMessageId,
     Value<int?>? telegramFileId,
+    Value<bool>? remoteStateVerified,
     Value<int>? status,
     Value<int>? retryCount,
     Value<String?>? lastError,
@@ -2488,6 +2588,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     return FilesCompanion(
       id: id ?? this.id,
       localPath: localPath ?? this.localPath,
+      localPathResolved: localPathResolved ?? this.localPathResolved,
       assetId: assetId ?? this.assetId,
       folderName: folderName ?? this.folderName,
       fileHash: fileHash ?? this.fileHash,
@@ -2495,6 +2596,7 @@ class FilesCompanion extends UpdateCompanion<File> {
       bucketId: bucketId ?? this.bucketId,
       telegramMessageId: telegramMessageId ?? this.telegramMessageId,
       telegramFileId: telegramFileId ?? this.telegramFileId,
+      remoteStateVerified: remoteStateVerified ?? this.remoteStateVerified,
       status: status ?? this.status,
       retryCount: retryCount ?? this.retryCount,
       lastError: lastError ?? this.lastError,
@@ -2534,6 +2636,9 @@ class FilesCompanion extends UpdateCompanion<File> {
     if (localPath.present) {
       map['local_path'] = Variable<String>(localPath.value);
     }
+    if (localPathResolved.present) {
+      map['local_path_resolved'] = Variable<bool>(localPathResolved.value);
+    }
     if (assetId.present) {
       map['asset_id'] = Variable<String>(assetId.value);
     }
@@ -2554,6 +2659,9 @@ class FilesCompanion extends UpdateCompanion<File> {
     }
     if (telegramFileId.present) {
       map['telegram_file_id'] = Variable<int>(telegramFileId.value);
+    }
+    if (remoteStateVerified.present) {
+      map['remote_state_verified'] = Variable<bool>(remoteStateVerified.value);
     }
     if (status.present) {
       map['status'] = Variable<int>(status.value);
@@ -2648,6 +2756,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     return (StringBuffer('FilesCompanion(')
           ..write('id: $id, ')
           ..write('localPath: $localPath, ')
+          ..write('localPathResolved: $localPathResolved, ')
           ..write('assetId: $assetId, ')
           ..write('folderName: $folderName, ')
           ..write('fileHash: $fileHash, ')
@@ -2655,6 +2764,7 @@ class FilesCompanion extends UpdateCompanion<File> {
           ..write('bucketId: $bucketId, ')
           ..write('telegramMessageId: $telegramMessageId, ')
           ..write('telegramFileId: $telegramFileId, ')
+          ..write('remoteStateVerified: $remoteStateVerified, ')
           ..write('status: $status, ')
           ..write('retryCount: $retryCount, ')
           ..write('lastError: $lastError, ')
@@ -4066,6 +4176,7 @@ typedef $$FilesTableCreateCompanionBuilder =
     FilesCompanion Function({
       Value<int> id,
       required String localPath,
+      Value<bool> localPathResolved,
       Value<String?> assetId,
       required String folderName,
       Value<String?> fileHash,
@@ -4073,6 +4184,7 @@ typedef $$FilesTableCreateCompanionBuilder =
       required int bucketId,
       Value<int?> telegramMessageId,
       Value<int?> telegramFileId,
+      Value<bool> remoteStateVerified,
       Value<int> status,
       Value<int> retryCount,
       Value<String?> lastError,
@@ -4103,6 +4215,7 @@ typedef $$FilesTableUpdateCompanionBuilder =
     FilesCompanion Function({
       Value<int> id,
       Value<String> localPath,
+      Value<bool> localPathResolved,
       Value<String?> assetId,
       Value<String> folderName,
       Value<String?> fileHash,
@@ -4110,6 +4223,7 @@ typedef $$FilesTableUpdateCompanionBuilder =
       Value<int> bucketId,
       Value<int?> telegramMessageId,
       Value<int?> telegramFileId,
+      Value<bool> remoteStateVerified,
       Value<int> status,
       Value<int> retryCount,
       Value<String?> lastError,
@@ -4195,6 +4309,11 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get localPathResolved => $composableBuilder(
+    column: $table.localPathResolved,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get assetId => $composableBuilder(
     column: $table.assetId,
     builder: (column) => ColumnFilters(column),
@@ -4222,6 +4341,11 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
 
   ColumnFilters<int> get telegramFileId => $composableBuilder(
     column: $table.telegramFileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get remoteStateVerified => $composableBuilder(
+    column: $table.remoteStateVerified,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4411,6 +4535,11 @@ class $$FilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get localPathResolved => $composableBuilder(
+    column: $table.localPathResolved,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get assetId => $composableBuilder(
     column: $table.assetId,
     builder: (column) => ColumnOrderings(column),
@@ -4438,6 +4567,11 @@ class $$FilesTableOrderingComposer
 
   ColumnOrderings<int> get telegramFileId => $composableBuilder(
     column: $table.telegramFileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get remoteStateVerified => $composableBuilder(
+    column: $table.remoteStateVerified,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -4623,6 +4757,11 @@ class $$FilesTableAnnotationComposer
   GeneratedColumn<String> get localPath =>
       $composableBuilder(column: $table.localPath, builder: (column) => column);
 
+  GeneratedColumn<bool> get localPathResolved => $composableBuilder(
+    column: $table.localPathResolved,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get assetId =>
       $composableBuilder(column: $table.assetId, builder: (column) => column);
 
@@ -4644,6 +4783,11 @@ class $$FilesTableAnnotationComposer
 
   GeneratedColumn<int> get telegramFileId => $composableBuilder(
     column: $table.telegramFileId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get remoteStateVerified => $composableBuilder(
+    column: $table.remoteStateVerified,
     builder: (column) => column,
   );
 
@@ -4834,6 +4978,7 @@ class $$FilesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> localPath = const Value.absent(),
+                Value<bool> localPathResolved = const Value.absent(),
                 Value<String?> assetId = const Value.absent(),
                 Value<String> folderName = const Value.absent(),
                 Value<String?> fileHash = const Value.absent(),
@@ -4841,6 +4986,7 @@ class $$FilesTableTableManager
                 Value<int> bucketId = const Value.absent(),
                 Value<int?> telegramMessageId = const Value.absent(),
                 Value<int?> telegramFileId = const Value.absent(),
+                Value<bool> remoteStateVerified = const Value.absent(),
                 Value<int> status = const Value.absent(),
                 Value<int> retryCount = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
@@ -4869,6 +5015,7 @@ class $$FilesTableTableManager
               }) => FilesCompanion(
                 id: id,
                 localPath: localPath,
+                localPathResolved: localPathResolved,
                 assetId: assetId,
                 folderName: folderName,
                 fileHash: fileHash,
@@ -4876,6 +5023,7 @@ class $$FilesTableTableManager
                 bucketId: bucketId,
                 telegramMessageId: telegramMessageId,
                 telegramFileId: telegramFileId,
+                remoteStateVerified: remoteStateVerified,
                 status: status,
                 retryCount: retryCount,
                 lastError: lastError,
@@ -4906,6 +5054,7 @@ class $$FilesTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required String localPath,
+                Value<bool> localPathResolved = const Value.absent(),
                 Value<String?> assetId = const Value.absent(),
                 required String folderName,
                 Value<String?> fileHash = const Value.absent(),
@@ -4913,6 +5062,7 @@ class $$FilesTableTableManager
                 required int bucketId,
                 Value<int?> telegramMessageId = const Value.absent(),
                 Value<int?> telegramFileId = const Value.absent(),
+                Value<bool> remoteStateVerified = const Value.absent(),
                 Value<int> status = const Value.absent(),
                 Value<int> retryCount = const Value.absent(),
                 Value<String?> lastError = const Value.absent(),
@@ -4941,6 +5091,7 @@ class $$FilesTableTableManager
               }) => FilesCompanion.insert(
                 id: id,
                 localPath: localPath,
+                localPathResolved: localPathResolved,
                 assetId: assetId,
                 folderName: folderName,
                 fileHash: fileHash,
@@ -4948,6 +5099,7 @@ class $$FilesTableTableManager
                 bucketId: bucketId,
                 telegramMessageId: telegramMessageId,
                 telegramFileId: telegramFileId,
+                remoteStateVerified: remoteStateVerified,
                 status: status,
                 retryCount: retryCount,
                 lastError: lastError,

@@ -21,9 +21,13 @@ This metadata is stored on the device using local app storage and Drift/SQLite.
 
 When backup is enabled, TeleVault uploads selected photos and videos to private Telegram channels under the logged-in Telegram account. Normal non-vault media is not client-side encrypted by TeleVault before upload in the current implementation.
 
-Vault-protected media is encrypted by TeleVault as part of the vault flow. New vault objects use the authenticated, streaming v3 format and random per-file keys. The portable Vault Recovery Key is stored through the platform secure-storage facility while installed and is not written to Drift, Telegram captions, diagnostics, or TeleVault-operated infrastructure. Metadata backup packages are separately encrypted and bound to the Telegram account recorded in the snapshot.
+Vault-protected media is encrypted by TeleVault as part of the vault flow. New vault objects use the authenticated, streaming v3 format and random per-file keys. The portable Vault Recovery Key is stored through the platform secure-storage facility while installed and is not written to Drift, Telegram captions, diagnostics, or TeleVault-operated infrastructure. New metadata v5 snapshots are encrypted using that Recovery Key and authenticated against the current Telegram account. Manual v5 exports additionally require the user's export passphrase. The account fingerprint is an identity binding, not the encryption secret.
 
 The Vault PIN/password and device biometrics control local access; they are not the portable v3 recovery secret. Users must privately retain the exported Vault Recovery Key. Losing both the installed secure-storage copy and the exported key makes v3 vault backups unrecoverable.
+
+Portable v5 metadata excludes absolute local media paths and restores device media references as unresolved until the current media library confirms them. Legacy v4 metadata remains readable only for migration and used weaker account-identifier-derived protection; a successful automatic v4 restore is replaced with a secure v5 snapshot.
+
+Logging out removes account-scoped local metadata, caches, temporary exports, and access secrets. Users may explicitly retain local encrypted vault files and the Recovery Key. Logout does not delete the user's remote Telegram channels, uploaded media, or metadata messages.
 
 ## Telemetry and diagnostics
 

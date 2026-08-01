@@ -188,6 +188,9 @@ class SyncService {
           globallyVisitedAssets.add(asset.id);
           final existingById = dbMapById[asset.id];
           if (existingById != null) {
+            if (!existingById.localPathResolved) {
+              await _resolveRestoredLocalPath(existingById, asset, album.name);
+            }
             await _repairQueueDateAdded(existingById, asset.createDateTime);
             if (repairLegacyDeletedRows &&
                 existingById.status == FileSyncStatus.deletedLocal.dbValue) {
@@ -217,6 +220,7 @@ class SyncService {
             )..where((t) => t.id.equals(row.id))).write(
               FilesCompanion(
                 assetId: Value(asset.id),
+                localPathResolved: const Value(true),
                 dateAdded: Value(asset.createDateTime),
               ),
             );
@@ -231,6 +235,7 @@ class SyncService {
               .insert(
                 FilesCompanion(
                   localPath: Value(localPath),
+                  localPathResolved: const Value(true),
                   assetId: Value(asset.id),
                   folderName: Value(album.name),
                   size: Value(size),
@@ -255,6 +260,27 @@ class SyncService {
       _uploader.wake();
     }
     return true;
+  }
+
+  Future<void> _resolveRestoredLocalPath(
+    File row,
+    AssetEntity asset,
+    String folderName,
+  ) async {
+    final localFile = await asset.originFile ?? await asset.file;
+    if (localFile == null || !await localFile.exists()) return;
+    final size = await localFile.length();
+    await (_db.update(
+      _db.files,
+    )..where((table) => table.id.equals(row.id))).write(
+      FilesCompanion(
+        localPath: Value(localFile.absolute.path),
+        localPathResolved: const Value(true),
+        folderName: Value(folderName),
+        size: Value(size),
+        dateAdded: Value(asset.createDateTime),
+      ),
+    );
   }
 
   Future<void> _restoreLegacyDeletedLocalRow(File row) async {

@@ -33,6 +33,11 @@ class SyncInitializer {
     });
   }
 
+  void resetForAccountCleanup() {
+    _started = false;
+    _starting = null;
+  }
+
   Future<void> _startIfBucketsExist() async {
     final bucketService = _ref.read(bucketServiceProvider);
     if (!await bucketService.hasBuckets()) return;

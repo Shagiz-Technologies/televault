@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
@@ -10,6 +14,7 @@ import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import 'metadata_backup_service.dart';
+import 'metadata_operation_lock.dart';
 
 final autoMetadataBackupServiceProvider = Provider<AutoMetadataBackupService>((
   ref,
@@ -19,6 +24,7 @@ final autoMetadataBackupServiceProvider = Provider<AutoMetadataBackupService>((
     ref.watch(telegramServiceProvider),
     ref.watch(metadataBackupServiceProvider),
     ref.watch(telegramReliabilityServiceProvider),
+    ref.watch(metadataOperationLockProvider),
   );
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
@@ -51,6 +57,8 @@ class AutoMetadataBackupService {
   final TelegramGateway _telegram;
   final MetadataBackupService _metadataBackupService;
   final TelegramReliabilityService _telegramReliability;
+  final MetadataOperationLock _operationLock;
+  final Future<io.Directory> Function() _temporaryDirectoryProvider;
 
   static const channelTitle = 'TeleVault';
   static const channelDescription =
@@ -63,18 +71,23 @@ class AutoMetadataBackupService {
   static const _keyLastMessageId = 'metadata_default_channel_message_id';
   static const _keyUploadedSinceBackup = 'metadata_uploaded_since_backup';
   static const _keyBackupEveryFiles = 'metadata_backup_every_files';
+  static const _keyVerifiedSnapshots = 'metadata_verified_snapshots_v5';
   static const _captionPrefix = 'TeleVault Metadata Backup';
+  static const remoteSnapshotRetention = 2;
 
-  bool _backupRunning = false;
-  bool _restoreRunning = false;
+  bool _automaticBackupQueued = false;
   StreamSubscription<TelegramReliabilityState>? _telegramStateSubscription;
 
   AutoMetadataBackupService(
     this._db,
     this._telegram,
     this._metadataBackupService,
-    this._telegramReliability,
-  ) {
+    this._telegramReliability, [
+    MetadataOperationLock? operationLock,
+    Future<io.Directory> Function()? temporaryDirectoryProvider,
+  ]) : _operationLock = operationLock ?? MetadataOperationLock(),
+       _temporaryDirectoryProvider =
+           temporaryDirectoryProvider ?? getTemporaryDirectory {
     _telegramStateSubscription = _telegramReliability.states.listen((state) {
       if (!state.isBlockedAt(DateTime.now())) {
         unawaited(_retryThresholdBackup());
@@ -119,10 +132,11 @@ class AutoMetadataBackupService {
   }
 
   Future<void> _triggerBackup({required String reason}) async {
-    if (_backupRunning ||
+    if (_automaticBackupQueued ||
         _telegramReliability.currentState.isBlockedAt(DateTime.now())) {
       return;
     }
+    _automaticBackupQueued = true;
     try {
       await backupNow(reason: reason);
     } on TelegramError {
@@ -131,14 +145,16 @@ class AutoMetadataBackupService {
     } catch (_) {
       // Automatic metadata backup is retried by the next completed upload or
       // explicit user action; background failures must not escape unawaited.
+    } finally {
+      _automaticBackupQueued = false;
     }
   }
 
-  Future<AutoMetadataBackupResult> backupNow({required String reason}) async {
-    if (_backupRunning) {
-      throw Exception('Metadata backup is already running.');
-    }
-    _backupRunning = true;
+  Future<AutoMetadataBackupResult> backupNow({required String reason}) {
+    return _operationLock.synchronized(() => _backupNow(reason: reason));
+  }
+
+  Future<AutoMetadataBackupResult> _backupNow({required String reason}) async {
     io.File? snapshot;
     try {
       final chatId = await ensureMetadataChannel(createIfMissing: true);
@@ -147,14 +163,25 @@ class AutoMetadataBackupService {
         await _getSetting(_keyLastMessageId) ?? '',
       );
       final messageId = await _uploadSnapshot(snapshot, chatId, reason);
+      final verified = await _verifyRemoteSnapshot(chatId, messageId);
+      final history = await _loadVerifiedSnapshots();
+      if (history.isEmpty && previousMessageId != null) {
+        final previous = await _tryVerifyRemoteSnapshot(
+          chatId,
+          previousMessageId,
+        );
+        if (previous != null) history.add(previous);
+      }
+      history.removeWhere(
+        (entry) => entry.chatId == chatId && entry.messageId == messageId,
+      );
+      history.insert(0, verified);
 
       await _setSetting(_keyChatId, chatId.toString());
       await _setSetting(_keyLastMessageId, messageId.toString());
       await _setSetting(_keyUploadedSinceBackup, '0');
-
-      if (previousMessageId != null && previousMessageId != messageId) {
-        unawaited(_deletePreviousSnapshot(chatId, previousMessageId));
-      }
+      await _saveVerifiedSnapshots(history);
+      await _pruneVerifiedSnapshots(history);
 
       return AutoMetadataBackupResult(
         chatId: chatId,
@@ -162,45 +189,80 @@ class AutoMetadataBackupService {
         completedAt: DateTime.now(),
       );
     } finally {
-      _backupRunning = false;
       if (snapshot != null && await snapshot.exists()) {
-        unawaited(snapshot.delete());
+        await snapshot.delete();
       }
     }
   }
 
   Future<AutoMetadataRestoreResult?> restoreLatestIfAvailable({
     void Function(String status)? onStatus,
-  }) async {
-    if (_restoreRunning) return null;
-    _restoreRunning = true;
-    try {
-      onStatus?.call('Looking for the TeleVault metadata channel...');
-      final found = await _findLatestMetadataMessage();
-      if (found == null) return null;
+  }) {
+    return _operationLock.synchronized(
+      () => _restoreLatestIfAvailable(onStatus: onStatus),
+    );
+  }
 
-      onStatus?.call('Downloading TeleVault metadata...');
-      final snapshot = await _downloadSnapshotFromMessage(found.message);
+  Future<AutoMetadataRestoreResult?> _restoreLatestIfAvailable({
+    void Function(String status)? onStatus,
+  }) async {
+    onStatus?.call('Looking for the TeleVault metadata channel...');
+    final found = await _findMetadataMessages();
+    if (found.isEmpty) return null;
+
+    MetadataBackupException? lastSnapshotError;
+    for (final candidate in found) {
+      io.File? snapshot;
       try {
-        onStatus?.call('Restoring TeleVault metadata...');
-        await _metadataBackupService.importAccountBoundSnapshot(snapshot);
+        onStatus?.call('Downloading TeleVault metadata...');
+        snapshot = await _downloadSnapshotFromMessage(candidate.message);
+        onStatus?.call('Authenticating and restoring TeleVault metadata...');
+        final imported = await _metadataBackupService
+            .importAccountBoundSnapshot(snapshot);
+
+        await _setSetting(_keyChatId, candidate.chatId.toString());
+        await _setSetting(_keyLastMessageId, candidate.messageId.toString());
+        await _setSetting(_keyUploadedSinceBackup, '0');
+        final history = await _loadVerifiedSnapshots();
+        history.removeWhere(
+          (entry) =>
+              entry.chatId == candidate.chatId &&
+              entry.messageId == candidate.messageId,
+        );
+        history.insert(
+          0,
+          _VerifiedRemoteSnapshot(
+            chatId: candidate.chatId,
+            messageId: candidate.messageId,
+            verifiedAt: DateTime.now().toUtc(),
+          ),
+        );
+        await _saveVerifiedSnapshots(history);
+
+        if (imported.requiresSecureMigration) {
+          onStatus?.call(
+            'Replacing legacy weak metadata protection with secure v5...',
+          );
+          await _backupNow(reason: 'legacy_v4_migration');
+        }
+        return AutoMetadataRestoreResult(
+          chatId: candidate.chatId,
+          messageId: candidate.messageId,
+        );
+      } on MetadataBackupException catch (error) {
+        lastSnapshotError = error;
+        if (error.code == MetadataBackupErrorCode.wrongTelegramAccount ||
+            error.code == MetadataBackupErrorCode.recoveryKeyRequired) {
+          rethrow;
+        }
       } finally {
-        if (await snapshot.exists()) {
-          unawaited(snapshot.delete());
+        if (snapshot != null && await snapshot.exists()) {
+          await snapshot.delete();
         }
       }
-
-      await _setSetting(_keyChatId, found.chatId.toString());
-      await _setSetting(_keyLastMessageId, found.messageId.toString());
-      await _setSetting(_keyUploadedSinceBackup, '0');
-
-      return AutoMetadataRestoreResult(
-        chatId: found.chatId,
-        messageId: found.messageId,
-      );
-    } finally {
-      _restoreRunning = false;
     }
+    if (lastSnapshotError != null) throw lastSnapshotError;
+    return null;
   }
 
   Future<BigInt> ensureMetadataChannel({required bool createIfMissing}) async {
@@ -281,41 +343,40 @@ class AutoMetadataBackupService {
     return null;
   }
 
-  Future<_FoundMetadataMessage?> _findLatestMetadataMessage() async {
+  Future<List<_FoundMetadataMessage>> _findMetadataMessages() async {
     final chatIds = await _loadChatIds();
-    _FoundMetadataMessage? latest;
+    final found = <_FoundMetadataMessage>[];
 
     for (final chatId in chatIds) {
       final chat = await _getChat(chatId);
       if (chat?['title']?.toString() != channelTitle) continue;
-
-      final message = await _findMetadataMessageInChat(chatId);
-      if (message == null) continue;
-      final messageId = _extractInt(message['id']);
-      if (messageId == null) continue;
-
-      final found = _FoundMetadataMessage(
-        chatId: chatId,
-        messageId: messageId,
-        date: _extractInt(message['date']) ?? 0,
-        message: message,
-      );
-      if (latest == null || found.date >= latest.date) {
-        latest = found;
+      for (final message in await _findMetadataMessagesInChat(chatId)) {
+        final messageId = _extractInt(message['id']);
+        if (messageId == null) continue;
+        found.add(
+          _FoundMetadataMessage(
+            chatId: chatId,
+            messageId: messageId,
+            date: _extractInt(message['date']) ?? 0,
+            message: message,
+          ),
+        );
       }
     }
-
-    return latest;
+    found.sort((left, right) => right.date.compareTo(left.date));
+    return found;
   }
 
-  Future<Map<String, dynamic>?> _findMetadataMessageInChat(
+  Future<List<Map<String, dynamic>>> _findMetadataMessagesInChat(
     BigInt chatId,
   ) async {
     final chatIdInt = _toTdInt64(chatId);
-    if (chatIdInt == null) return null;
-
-    final searched = await _searchChatMessages(chatIdInt);
-    if (searched != null) return searched;
+    if (chatIdInt == null) return const [];
+    final matches = <int, Map<String, dynamic>>{};
+    for (final message in await _searchChatMessages(chatIdInt)) {
+      final id = _extractInt(message['id']);
+      if (id != null) matches[id] = message;
+    }
 
     final history = await _telegram.request({
       '@type': 'getChatHistory',
@@ -326,15 +387,17 @@ class AutoMetadataBackupService {
       'only_local': false,
     }, timeout: const Duration(seconds: 20));
 
-    if (history['@type'] == 'error') return null;
+    if (history['@type'] == 'error') return matches.values.toList();
     final messages = history['messages'] as List<dynamic>? ?? const [];
-    for (final raw in messages.cast<Map<String, dynamic>>()) {
-      if (_messageHasMarker(raw)) return raw;
+    for (final raw in messages.whereType<Map>()) {
+      final message = Map<String, dynamic>.from(raw);
+      final id = _extractInt(message['id']);
+      if (id != null && _messageHasMarker(message)) matches[id] = message;
     }
-    return null;
+    return matches.values.toList();
   }
 
-  Future<Map<String, dynamic>?> _searchChatMessages(int chatId) async {
+  Future<List<Map<String, dynamic>>> _searchChatMessages(int chatId) async {
     final response = await _telegram.request({
       '@type': 'searchChatMessages',
       'chat_id': chatId,
@@ -342,7 +405,7 @@ class AutoMetadataBackupService {
       'sender_id': null,
       'from_message_id': 0,
       'offset': 0,
-      'limit': 10,
+      'limit': 100,
       'filter': {'@type': 'searchMessagesFilterDocument'},
       'message_thread_id': 0,
     }, timeout: const Duration(seconds: 20));
@@ -355,10 +418,11 @@ class AutoMetadataBackupService {
       )!;
     }
     final messages = response['messages'] as List<dynamic>? ?? const [];
-    for (final raw in messages.cast<Map<String, dynamic>>()) {
-      if (_messageHasMarker(raw)) return raw;
-    }
-    return null;
+    return messages
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .where(_messageHasMarker)
+        .toList(growable: false);
   }
 
   Future<List<BigInt>> _loadChatIds() async {
@@ -434,7 +498,138 @@ class AutoMetadataBackupService {
     );
   }
 
-  Future<void> _deletePreviousSnapshot(BigInt chatId, int messageId) async {
+  Future<_VerifiedRemoteSnapshot> _verifyRemoteSnapshot(
+    BigInt chatId,
+    int messageId,
+  ) async {
+    final message = await _getMessage(chatId, messageId);
+    final downloaded = await _downloadSnapshotFromMessage(message);
+    try {
+      await _metadataBackupService.verifyAccountBoundSnapshot(downloaded);
+      return _VerifiedRemoteSnapshot(
+        chatId: chatId,
+        messageId: messageId,
+        verifiedAt: DateTime.now().toUtc(),
+      );
+    } finally {
+      if (await downloaded.exists()) await downloaded.delete();
+    }
+  }
+
+  Future<_VerifiedRemoteSnapshot?> _tryVerifyRemoteSnapshot(
+    BigInt chatId,
+    int messageId,
+  ) async {
+    try {
+      return await _verifyRemoteSnapshot(chatId, messageId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getMessage(BigInt chatId, int messageId) async {
+    final chatIdInt = _toTdInt64(chatId);
+    if (chatIdInt == null || messageId <= 0) {
+      throw const MetadataBackupException(
+        MetadataBackupErrorCode.validationFailed,
+        'The remote metadata reference is invalid.',
+      );
+    }
+    final response = await _telegram.request({
+      '@type': 'getMessage',
+      'chat_id': chatIdInt,
+      'message_id': messageId,
+    }, timeout: const Duration(seconds: 20));
+    if (response['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        response,
+        operation: 'verify_metadata_message',
+        chatId: chatId,
+      )!;
+    }
+    if (response['@type'] != 'message') {
+      throw const MetadataBackupException(
+        MetadataBackupErrorCode.invalidSnapshot,
+        'Telegram did not return the uploaded metadata message.',
+      );
+    }
+    return response;
+  }
+
+  Future<List<_VerifiedRemoteSnapshot>> _loadVerifiedSnapshots() async {
+    final raw = await _getSetting(_keyVerifiedSnapshots);
+    if (raw == null || raw.isEmpty) return <_VerifiedRemoteSnapshot>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <_VerifiedRemoteSnapshot>[];
+      final results = <_VerifiedRemoteSnapshot>[];
+      for (final value in decoded) {
+        if (value is! Map) continue;
+        final chatId = _extractBigInt(value['chat_id']);
+        final messageId = _extractInt(value['message_id']);
+        final verifiedAt = DateTime.tryParse(
+          value['verified_at']?.toString() ?? '',
+        );
+        if (chatId == null || messageId == null || verifiedAt == null) continue;
+        results.add(
+          _VerifiedRemoteSnapshot(
+            chatId: chatId,
+            messageId: messageId,
+            verifiedAt: verifiedAt.toUtc(),
+          ),
+        );
+      }
+      results.sort(
+        (left, right) => right.verifiedAt.compareTo(left.verifiedAt),
+      );
+      return results;
+    } catch (_) {
+      return <_VerifiedRemoteSnapshot>[];
+    }
+  }
+
+  Future<void> _saveVerifiedSnapshots(List<_VerifiedRemoteSnapshot> snapshots) {
+    final unique = <String, _VerifiedRemoteSnapshot>{};
+    for (final snapshot in snapshots) {
+      unique['${snapshot.chatId}:${snapshot.messageId}'] = snapshot;
+    }
+    final sorted = unique.values.toList()
+      ..sort((left, right) => right.verifiedAt.compareTo(left.verifiedAt));
+    return _setSetting(
+      _keyVerifiedSnapshots,
+      jsonEncode(
+        sorted
+            .map(
+              (snapshot) => <String, String>{
+                'chat_id': snapshot.chatId.toString(),
+                'message_id': snapshot.messageId.toString(),
+                'verified_at': snapshot.verifiedAt.toIso8601String(),
+              },
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  Future<void> _pruneVerifiedSnapshots(
+    List<_VerifiedRemoteSnapshot> snapshots,
+  ) async {
+    snapshots.sort(
+      (left, right) => right.verifiedAt.compareTo(left.verifiedAt),
+    );
+    if (snapshots.length <= remoteSnapshotRetention) {
+      await _saveVerifiedSnapshots(snapshots);
+      return;
+    }
+    final retained = snapshots.take(remoteSnapshotRetention).toList();
+    final obsolete = snapshots.skip(remoteSnapshotRetention).toList();
+    for (final snapshot in obsolete) {
+      await _deleteRemoteSnapshot(snapshot.chatId, snapshot.messageId);
+    }
+    await _saveVerifiedSnapshots(retained);
+  }
+
+  Future<void> _deleteRemoteSnapshot(BigInt chatId, int messageId) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) return;
     try {
@@ -445,7 +640,7 @@ class AutoMetadataBackupService {
           'message_ids': [messageId],
           'revoke': true,
         },
-        operation: 'delete_previous_metadata',
+        operation: 'prune_verified_metadata',
         chatId: chatId,
         timeout: const Duration(seconds: 20),
       );
@@ -462,7 +657,10 @@ class AutoMetadataBackupService {
     final file = document?['document'] as Map<String, dynamic>?;
     final fileId = _extractInt(file?['id']);
     if (fileId == null) {
-      throw Exception('TeleVault metadata message has no document file.');
+      throw const MetadataBackupException(
+        MetadataBackupErrorCode.invalidSnapshot,
+        'The TeleVault metadata message has no document file.',
+      );
     }
 
     final response = await _telegram.request({
@@ -483,14 +681,28 @@ class AutoMetadataBackupService {
 
     final localPath = response['local']?['path']?.toString();
     if (localPath == null || localPath.isEmpty) {
-      throw Exception('Downloaded metadata file path is unavailable.');
+      throw const MetadataBackupException(
+        MetadataBackupErrorCode.ioFailure,
+        'The downloaded metadata file is unavailable.',
+      );
     }
 
     final snapshot = io.File(localPath);
     if (!await snapshot.exists()) {
-      throw Exception('Downloaded metadata file was not found on disk.');
+      throw const MetadataBackupException(
+        MetadataBackupErrorCode.ioFailure,
+        'The downloaded metadata file was not found.',
+      );
     }
-    return snapshot;
+    final temporaryRoot = await _temporaryDirectoryProvider();
+    final temporaryDirectory = io.Directory(
+      path.join(temporaryRoot.path, 'televault_metadata_downloads'),
+    );
+    await temporaryDirectory.create(recursive: true);
+    final copy = io.File(
+      path.join(temporaryDirectory.path, '${const Uuid().v4()}.tvmeta'),
+    );
+    return snapshot.copy(copy.path);
   }
 
   bool _messageHasMarker(Map<String, dynamic> message) {
@@ -552,5 +764,17 @@ class _FoundMetadataMessage {
     required this.messageId,
     required this.date,
     required this.message,
+  });
+}
+
+class _VerifiedRemoteSnapshot {
+  final BigInt chatId;
+  final int messageId;
+  final DateTime verifiedAt;
+
+  const _VerifiedRemoteSnapshot({
+    required this.chatId,
+    required this.messageId,
+    required this.verifiedAt,
   });
 }
