@@ -430,11 +430,11 @@ class _BucketConfigurationSheetState extends State<_BucketConfigurationSheet> {
   }
 
   Widget _surface(Widget child) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
+    return Material(
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.outline),
+        side: const BorderSide(color: AppTheme.outline),
       ),
       clipBehavior: Clip.antiAlias,
       child: child,
