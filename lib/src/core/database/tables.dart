@@ -19,6 +19,8 @@ class Files extends Table {
   TextColumn get localPath => text()(); // /storage/emulated/0/DCIM/...
   BoolColumn get localPathResolved =>
       boolean().withDefault(const Constant(true))();
+  TextColumn get localMediaAccessState =>
+      text().withDefault(const Constant('available'))();
   TextColumn get assetId => text().nullable()(); // ID from PhotoManager
   TextColumn get folderName => text()(); // "Camera", "Vacation"
   TextColumn get fileHash => text().nullable()(); // SHA-256 for deduplication

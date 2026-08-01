@@ -6,7 +6,7 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
 
 void main() {
-  test('schema v7 migrates through v10 without data loss', () async {
+  test('schema v7 migrates through v11 without data loss', () async {
     final directory = await io.Directory.systemTemp.createTemp(
       'televault_schema_v7_',
     );
@@ -61,7 +61,7 @@ void main() {
              encrypted_size, vault_integrity_status,
              vault_migration_status, key_wrapping_version,
              last_verified_at, local_path_resolved,
-             remote_state_verified
+             remote_state_verified, local_media_access_state
       FROM files
     ''').get();
     final accountTables = await db
@@ -79,6 +79,7 @@ void main() {
     expect(rows.single.read<String>('vault_migration_status'), 'pending');
     expect(rows.single.read<int>('local_path_resolved'), 1);
     expect(rows.single.read<int>('remote_state_verified'), 1);
+    expect(rows.single.read<String>('local_media_access_state'), 'available');
     expect(accountTables, hasLength(1));
   });
 }

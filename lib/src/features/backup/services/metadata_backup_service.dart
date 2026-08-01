@@ -1039,6 +1039,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
               FilesCompanion.insert(
                 localPath: unresolvedPath,
                 localPathResolved: const Value(false),
+                localMediaAccessState: const Value('accessUnavailable'),
                 assetId: Value(file.assetId),
                 folderName: file.folderName,
                 fileHash: Value(file.fileHash),

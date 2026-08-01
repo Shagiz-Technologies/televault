@@ -75,7 +75,11 @@ jobs:
         run: python3 tool/android/check_release_secrets.py
 
       - name: Test Android release verifier
-        run: python3 -m unittest tool.android.test_verify_16kb -v
+        run: >-
+          python3 -m unittest
+          tool.android.test_verify_16kb
+          tool.android.test_verify_media_permissions
+          -v
 
       - name: Install Flutter dependencies
         run: flutter pub get
@@ -95,6 +99,19 @@ jobs:
           --zipalign "$ANDROID_SDK_ROOT/build-tools/36.1.0/zipalign"
           --aapt2 "$ANDROID_SDK_ROOT/build-tools/36.1.0/aapt2"
           --objdump "$ANDROID_SDK_ROOT/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
+
+      - name: Verify merged media permissions and release dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports
+          java -jar "$RUNNER_TEMP/bundletool/bundletool.jar" dump manifest \
+            --bundle=build/app/outputs/bundle/release/app-release.aab \
+            --module=base \
+            > build/reports/merged-release-manifest.xml
+          python3 tool/android/verify_media_permissions.py \
+            --manifest build/reports/merged-release-manifest.xml \
+            --lockfile pubspec.lock
 
       - name: Upload native inventory
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

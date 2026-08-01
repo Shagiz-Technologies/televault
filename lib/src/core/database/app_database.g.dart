@@ -791,6 +791,18 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _localMediaAccessStateMeta =
+      const VerificationMeta('localMediaAccessState');
+  @override
+  late final GeneratedColumn<String> localMediaAccessState =
+      GeneratedColumn<String>(
+        'local_media_access_state',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('available'),
+      );
   static const VerificationMeta _assetIdMeta = const VerificationMeta(
     'assetId',
   );
@@ -1180,6 +1192,7 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
     id,
     localPath,
     localPathResolved,
+    localMediaAccessState,
     assetId,
     folderName,
     fileHash,
@@ -1243,6 +1256,15 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         localPathResolved.isAcceptableOrUnknown(
           data['local_path_resolved']!,
           _localPathResolvedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('local_media_access_state')) {
+      context.handle(
+        _localMediaAccessStateMeta,
+        localMediaAccessState.isAcceptableOrUnknown(
+          data['local_media_access_state']!,
+          _localMediaAccessStateMeta,
         ),
       );
     }
@@ -1538,6 +1560,10 @@ class $FilesTable extends Files with TableInfo<$FilesTable, File> {
         DriftSqlType.bool,
         data['${effectivePrefix}local_path_resolved'],
       )!,
+      localMediaAccessState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_media_access_state'],
+      )!,
       assetId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}asset_id'],
@@ -1683,6 +1709,7 @@ class File extends DataClass implements Insertable<File> {
   final int id;
   final String localPath;
   final bool localPathResolved;
+  final String localMediaAccessState;
   final String? assetId;
   final String folderName;
   final String? fileHash;
@@ -1720,6 +1747,7 @@ class File extends DataClass implements Insertable<File> {
     required this.id,
     required this.localPath,
     required this.localPathResolved,
+    required this.localMediaAccessState,
     this.assetId,
     required this.folderName,
     this.fileHash,
@@ -1760,6 +1788,7 @@ class File extends DataClass implements Insertable<File> {
     map['id'] = Variable<int>(id);
     map['local_path'] = Variable<String>(localPath);
     map['local_path_resolved'] = Variable<bool>(localPathResolved);
+    map['local_media_access_state'] = Variable<String>(localMediaAccessState);
     if (!nullToAbsent || assetId != null) {
       map['asset_id'] = Variable<String>(assetId);
     }
@@ -1843,6 +1872,7 @@ class File extends DataClass implements Insertable<File> {
       id: Value(id),
       localPath: Value(localPath),
       localPathResolved: Value(localPathResolved),
+      localMediaAccessState: Value(localMediaAccessState),
       assetId: assetId == null && nullToAbsent
           ? const Value.absent()
           : Value(assetId),
@@ -1930,6 +1960,9 @@ class File extends DataClass implements Insertable<File> {
       id: serializer.fromJson<int>(json['id']),
       localPath: serializer.fromJson<String>(json['localPath']),
       localPathResolved: serializer.fromJson<bool>(json['localPathResolved']),
+      localMediaAccessState: serializer.fromJson<String>(
+        json['localMediaAccessState'],
+      ),
       assetId: serializer.fromJson<String?>(json['assetId']),
       folderName: serializer.fromJson<String>(json['folderName']),
       fileHash: serializer.fromJson<String?>(json['fileHash']),
@@ -1988,6 +2021,7 @@ class File extends DataClass implements Insertable<File> {
       'id': serializer.toJson<int>(id),
       'localPath': serializer.toJson<String>(localPath),
       'localPathResolved': serializer.toJson<bool>(localPathResolved),
+      'localMediaAccessState': serializer.toJson<String>(localMediaAccessState),
       'assetId': serializer.toJson<String?>(assetId),
       'folderName': serializer.toJson<String>(folderName),
       'fileHash': serializer.toJson<String?>(fileHash),
@@ -2032,6 +2066,7 @@ class File extends DataClass implements Insertable<File> {
     int? id,
     String? localPath,
     bool? localPathResolved,
+    String? localMediaAccessState,
     Value<String?> assetId = const Value.absent(),
     String? folderName,
     Value<String?> fileHash = const Value.absent(),
@@ -2069,6 +2104,7 @@ class File extends DataClass implements Insertable<File> {
     id: id ?? this.id,
     localPath: localPath ?? this.localPath,
     localPathResolved: localPathResolved ?? this.localPathResolved,
+    localMediaAccessState: localMediaAccessState ?? this.localMediaAccessState,
     assetId: assetId.present ? assetId.value : this.assetId,
     folderName: folderName ?? this.folderName,
     fileHash: fileHash.present ? fileHash.value : this.fileHash,
@@ -2138,6 +2174,9 @@ class File extends DataClass implements Insertable<File> {
       localPathResolved: data.localPathResolved.present
           ? data.localPathResolved.value
           : this.localPathResolved,
+      localMediaAccessState: data.localMediaAccessState.present
+          ? data.localMediaAccessState.value
+          : this.localMediaAccessState,
       assetId: data.assetId.present ? data.assetId.value : this.assetId,
       folderName: data.folderName.present
           ? data.folderName.value
@@ -2226,6 +2265,7 @@ class File extends DataClass implements Insertable<File> {
           ..write('id: $id, ')
           ..write('localPath: $localPath, ')
           ..write('localPathResolved: $localPathResolved, ')
+          ..write('localMediaAccessState: $localMediaAccessState, ')
           ..write('assetId: $assetId, ')
           ..write('folderName: $folderName, ')
           ..write('fileHash: $fileHash, ')
@@ -2268,6 +2308,7 @@ class File extends DataClass implements Insertable<File> {
     id,
     localPath,
     localPathResolved,
+    localMediaAccessState,
     assetId,
     folderName,
     fileHash,
@@ -2309,6 +2350,7 @@ class File extends DataClass implements Insertable<File> {
           other.id == this.id &&
           other.localPath == this.localPath &&
           other.localPathResolved == this.localPathResolved &&
+          other.localMediaAccessState == this.localMediaAccessState &&
           other.assetId == this.assetId &&
           other.folderName == this.folderName &&
           other.fileHash == this.fileHash &&
@@ -2348,6 +2390,7 @@ class FilesCompanion extends UpdateCompanion<File> {
   final Value<int> id;
   final Value<String> localPath;
   final Value<bool> localPathResolved;
+  final Value<String> localMediaAccessState;
   final Value<String?> assetId;
   final Value<String> folderName;
   final Value<String?> fileHash;
@@ -2385,6 +2428,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.id = const Value.absent(),
     this.localPath = const Value.absent(),
     this.localPathResolved = const Value.absent(),
+    this.localMediaAccessState = const Value.absent(),
     this.assetId = const Value.absent(),
     this.folderName = const Value.absent(),
     this.fileHash = const Value.absent(),
@@ -2423,6 +2467,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     this.id = const Value.absent(),
     required String localPath,
     this.localPathResolved = const Value.absent(),
+    this.localMediaAccessState = const Value.absent(),
     this.assetId = const Value.absent(),
     required String folderName,
     this.fileHash = const Value.absent(),
@@ -2464,6 +2509,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Expression<int>? id,
     Expression<String>? localPath,
     Expression<bool>? localPathResolved,
+    Expression<String>? localMediaAccessState,
     Expression<String>? assetId,
     Expression<String>? folderName,
     Expression<String>? fileHash,
@@ -2502,6 +2548,8 @@ class FilesCompanion extends UpdateCompanion<File> {
       if (id != null) 'id': id,
       if (localPath != null) 'local_path': localPath,
       if (localPathResolved != null) 'local_path_resolved': localPathResolved,
+      if (localMediaAccessState != null)
+        'local_media_access_state': localMediaAccessState,
       if (assetId != null) 'asset_id': assetId,
       if (folderName != null) 'folder_name': folderName,
       if (fileHash != null) 'file_hash': fileHash,
@@ -2551,6 +2599,7 @@ class FilesCompanion extends UpdateCompanion<File> {
     Value<int>? id,
     Value<String>? localPath,
     Value<bool>? localPathResolved,
+    Value<String>? localMediaAccessState,
     Value<String?>? assetId,
     Value<String>? folderName,
     Value<String?>? fileHash,
@@ -2589,6 +2638,8 @@ class FilesCompanion extends UpdateCompanion<File> {
       id: id ?? this.id,
       localPath: localPath ?? this.localPath,
       localPathResolved: localPathResolved ?? this.localPathResolved,
+      localMediaAccessState:
+          localMediaAccessState ?? this.localMediaAccessState,
       assetId: assetId ?? this.assetId,
       folderName: folderName ?? this.folderName,
       fileHash: fileHash ?? this.fileHash,
@@ -2638,6 +2689,11 @@ class FilesCompanion extends UpdateCompanion<File> {
     }
     if (localPathResolved.present) {
       map['local_path_resolved'] = Variable<bool>(localPathResolved.value);
+    }
+    if (localMediaAccessState.present) {
+      map['local_media_access_state'] = Variable<String>(
+        localMediaAccessState.value,
+      );
     }
     if (assetId.present) {
       map['asset_id'] = Variable<String>(assetId.value);
@@ -2757,6 +2813,7 @@ class FilesCompanion extends UpdateCompanion<File> {
           ..write('id: $id, ')
           ..write('localPath: $localPath, ')
           ..write('localPathResolved: $localPathResolved, ')
+          ..write('localMediaAccessState: $localMediaAccessState, ')
           ..write('assetId: $assetId, ')
           ..write('folderName: $folderName, ')
           ..write('fileHash: $fileHash, ')
@@ -4177,6 +4234,7 @@ typedef $$FilesTableCreateCompanionBuilder =
       Value<int> id,
       required String localPath,
       Value<bool> localPathResolved,
+      Value<String> localMediaAccessState,
       Value<String?> assetId,
       required String folderName,
       Value<String?> fileHash,
@@ -4216,6 +4274,7 @@ typedef $$FilesTableUpdateCompanionBuilder =
       Value<int> id,
       Value<String> localPath,
       Value<bool> localPathResolved,
+      Value<String> localMediaAccessState,
       Value<String?> assetId,
       Value<String> folderName,
       Value<String?> fileHash,
@@ -4311,6 +4370,11 @@ class $$FilesTableFilterComposer extends Composer<_$AppDatabase, $FilesTable> {
 
   ColumnFilters<bool> get localPathResolved => $composableBuilder(
     column: $table.localPathResolved,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localMediaAccessState => $composableBuilder(
+    column: $table.localMediaAccessState,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4540,6 +4604,11 @@ class $$FilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get localMediaAccessState => $composableBuilder(
+    column: $table.localMediaAccessState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get assetId => $composableBuilder(
     column: $table.assetId,
     builder: (column) => ColumnOrderings(column),
@@ -4762,6 +4831,11 @@ class $$FilesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get localMediaAccessState => $composableBuilder(
+    column: $table.localMediaAccessState,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get assetId =>
       $composableBuilder(column: $table.assetId, builder: (column) => column);
 
@@ -4979,6 +5053,7 @@ class $$FilesTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String> localPath = const Value.absent(),
                 Value<bool> localPathResolved = const Value.absent(),
+                Value<String> localMediaAccessState = const Value.absent(),
                 Value<String?> assetId = const Value.absent(),
                 Value<String> folderName = const Value.absent(),
                 Value<String?> fileHash = const Value.absent(),
@@ -5016,6 +5091,7 @@ class $$FilesTableTableManager
                 id: id,
                 localPath: localPath,
                 localPathResolved: localPathResolved,
+                localMediaAccessState: localMediaAccessState,
                 assetId: assetId,
                 folderName: folderName,
                 fileHash: fileHash,
@@ -5055,6 +5131,7 @@ class $$FilesTableTableManager
                 Value<int> id = const Value.absent(),
                 required String localPath,
                 Value<bool> localPathResolved = const Value.absent(),
+                Value<String> localMediaAccessState = const Value.absent(),
                 Value<String?> assetId = const Value.absent(),
                 required String folderName,
                 Value<String?> fileHash = const Value.absent(),
@@ -5092,6 +5169,7 @@ class $$FilesTableTableManager
                 id: id,
                 localPath: localPath,
                 localPathResolved: localPathResolved,
+                localMediaAccessState: localMediaAccessState,
                 assetId: assetId,
                 folderName: folderName,
                 fileHash: fileHash,

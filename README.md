@@ -86,7 +86,7 @@ At a high level, TeleVault scans Android photos/videos, records metadata locally
 - [x] Recovery-Key protected metadata v5 export/import with transactional restore
 - [x] Safe Uninstall metadata flow
 - [ ] Full polished media restore UX
-- [ ] Android 14+ selected photos access review
+- [x] Android 14+ selected photos access and re-selection
 - [x] TDLib 16 KB page-size verification and reproducible Android provenance
 - [ ] All-media client-side encryption
 
@@ -156,11 +156,14 @@ TeleVault currently requests these Android permissions:
 - `INTERNET`: required for Telegram login and backup upload/download.
 - `READ_MEDIA_IMAGES`: read image media on Android 13 and newer.
 - `READ_MEDIA_VIDEO`: read video media on Android 13 and newer.
+- `READ_MEDIA_VISUAL_USER_SELECTED`: represent and update selected-media access
+  on Android 14 and newer.
 - `READ_EXTERNAL_STORAGE` with `maxSdkVersion=32`: read media on older Android versions.
-- `ACCESS_MEDIA_LOCATION`: access original media location metadata when Android allows it. This should be reviewed before Play Store release because it is privacy-sensitive.
 - `USE_BIOMETRIC` and `USE_FINGERPRINT`: allow device biometrics for app/vault unlock flows where supported.
 
-Android 14+ selected-photos access (`READ_MEDIA_VISUAL_USER_SELECTED`) still needs a dedicated implementation review.
+TeleVault does not request original media location, all-files access, media audio,
+or broad file-system access. Limited access is shown as partial in Library,
+Sync Dashboard, and Settings > Media Access.
 
 </details>
 
@@ -226,7 +229,6 @@ Never commit:
 - iOS is experimental for local feasibility testing only. See [`docs/IOS_FEASIBILITY.md`](docs/IOS_FEASIBILITY.md).
 - Normal non-vault uploads are not client-side encrypted by TeleVault.
 - Full polished media restore UX is not complete.
-- Google Drive backup code exists as an experimental prototype and should be removed or documented.
 - Play Store compliance review is not complete.
 - A physical-device Telegram login and upload smoke test remains required for every release candidate.
 - Legacy vault v1/v2 objects remain readable but should be migrated to v3 after
@@ -253,8 +255,8 @@ Near-term release-readiness work is tracked in [`ROADMAP.md`](ROADMAP.md) and Gi
 | Area | Status |
 | --- | --- |
 | TDLib native binary provenance | Verified and release-gated |
-| Android 14+ selected photos access | Needs review |
-| Media permissions minimization | Needs review |
+| Android 14+ selected photos access | Implemented and release-gated |
+| Media permissions minimization | Implemented and release-gated |
 | Full media restore UX | Planned |
 | Local DB-at-rest encryption evaluation | Planned |
 | Play Store release checklist | Planned |

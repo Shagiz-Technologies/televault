@@ -7,11 +7,14 @@ import 'package:photo_manager/photo_manager.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
+import '../../../core/database/local_media_access_state.dart';
 import '../../../core/services/diagnostics_service.dart';
 import '../../buckets/services/bucket_service.dart';
 import '../../library/repositories/gallery_repository.dart';
+import '../../library/services/media_permission_service.dart';
 import '../../settings/services/settings_service.dart';
 import 'file_uploader.dart';
+import 'local_media_access_reconciler.dart';
 import 'sync_constraints_service.dart';
 
 final syncServiceProvider = Provider<SyncService>((ref) {
@@ -22,6 +25,7 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     ref.watch(diagnosticsServiceProvider),
     ref.watch(syncConstraintsServiceProvider),
     ref.watch(fileUploaderProvider),
+    ref.watch(localMediaAccessReconcilerProvider),
   );
 });
 
@@ -34,6 +38,7 @@ class SyncService {
   final DiagnosticsService _diagnosticsService;
   final SyncConstraintsService _constraintsService;
   final FileUploader _uploader;
+  final LocalMediaAccessReconciler _mediaAccessReconciler;
 
   static const _legacyLastScanAtKey = 'sync_last_scan_at';
   static const _legacyDeletedLocalRepairKey =
@@ -50,6 +55,7 @@ class SyncService {
     this._diagnosticsService,
     this._constraintsService,
     this._uploader,
+    this._mediaAccessReconciler,
   );
 
   void startSyncLoop() {
@@ -142,11 +148,41 @@ class SyncService {
   }) async {
     final bucketId = bucket.id;
     final allowedTypes = _parseAllowedTypes(bucket.allowedMediaTypes);
+    final permissionRequest = MediaPermissionRequest(
+      includeImages:
+          preferences.includePhotos &&
+          allowedTypes.contains(BucketMediaType.photo),
+      includeVideos:
+          preferences.includeVideos &&
+          allowedTypes.contains(BucketMediaType.video),
+    );
+    final permission = await _galleryRepo.getPermissionStatus(
+      permissionRequest,
+    );
+    if (!permission.canReadMedia) {
+      await _mediaAccessReconciler.reconcile(
+        bucketId: bucketId,
+        permission: permission,
+      );
+      return false;
+    }
 
-    final allAlbums = await _galleryRepo.getAlbums();
-    if (allAlbums.isEmpty) return false;
+    final allAlbums = await _galleryRepo.getAlbums(request: permissionRequest);
+    if (allAlbums.isEmpty) {
+      await _mediaAccessReconciler.reconcile(
+        bucketId: bucketId,
+        permission: permission,
+      );
+      return true;
+    }
     final albums = _filterAlbums(allAlbums, preferences);
-    if (albums.isEmpty) return false;
+    if (albums.isEmpty) {
+      await _mediaAccessReconciler.reconcile(
+        bucketId: bucketId,
+        permission: permission,
+      );
+      return true;
+    }
 
     final dbFiles = await (_db.select(
       _db.files,
@@ -161,7 +197,9 @@ class SyncService {
 
     final globallyVisitedAssets = <String>{};
     var newCount = 0;
-    final lastScanAt = repairLegacyDeletedRows
+    final lastScanAt =
+        repairLegacyDeletedRows ||
+            permission.scope == MediaAccessScope.limitedAccess
         ? null
         : await _getLastScanAt(bucketId);
     final maxBytes = preferences.maxFileSizeMb * 1024 * 1024;
@@ -188,6 +226,18 @@ class SyncService {
           globallyVisitedAssets.add(asset.id);
           final existingById = dbMapById[asset.id];
           if (existingById != null) {
+            if (existingById.localMediaAccessState !=
+                LocalMediaAccessState.available.dbValue) {
+              await (_db.update(
+                _db.files,
+              )..where((t) => t.id.equals(existingById.id))).write(
+                FilesCompanion(
+                  localMediaAccessState: Value(
+                    LocalMediaAccessState.available.dbValue,
+                  ),
+                ),
+              );
+            }
             if (!existingById.localPathResolved) {
               await _resolveRestoredLocalPath(existingById, asset, album.name);
             }
@@ -221,6 +271,9 @@ class SyncService {
               FilesCompanion(
                 assetId: Value(asset.id),
                 localPathResolved: const Value(true),
+                localMediaAccessState: Value(
+                  LocalMediaAccessState.available.dbValue,
+                ),
                 dateAdded: Value(asset.createDateTime),
               ),
             );
@@ -236,6 +289,9 @@ class SyncService {
                 FilesCompanion(
                   localPath: Value(localPath),
                   localPathResolved: const Value(true),
+                  localMediaAccessState: Value(
+                    LocalMediaAccessState.available.dbValue,
+                  ),
                   assetId: Value(asset.id),
                   folderName: Value(album.name),
                   size: Value(size),
@@ -255,6 +311,11 @@ class SyncService {
     // That partial result cannot safely prove that unseen database rows were
     // deleted from the device.
     await _setLastScanAt(bucketId, DateTime.now());
+    await _mediaAccessReconciler.reconcile(
+      bucketId: bucketId,
+      permission: permission,
+      observedAssetIds: globallyVisitedAssets,
+    );
 
     if (newCount > 0) {
       _uploader.wake();
@@ -276,6 +337,7 @@ class SyncService {
       FilesCompanion(
         localPath: Value(localFile.absolute.path),
         localPathResolved: const Value(true),
+        localMediaAccessState: Value(LocalMediaAccessState.available.dbValue),
         folderName: Value(folderName),
         size: Value(size),
         dateAdded: Value(asset.createDateTime),

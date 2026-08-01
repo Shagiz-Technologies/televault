@@ -20,6 +20,7 @@ import 'about_screen.dart';
 import 'release_log_screen.dart';
 import 'app_lock_settings_screen.dart';
 import 'diagnostics_screen.dart';
+import 'media_permission_diagnostics_screen.dart';
 import 'sync_preferences_screen.dart';
 import '../../../core/database/app_database.dart';
 
@@ -100,6 +101,21 @@ class SettingsScreen extends ConsumerWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const SyncDashboardScreen(),
+                  ),
+                );
+              },
+            ),
+            const Gap(8),
+            _buildSectionTile(
+              context,
+              icon: Icons.perm_media_outlined,
+              title: "Media Access",
+              subtitle: "Gallery scope and accessible item count",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const MediaPermissionDiagnosticsScreen(),
                   ),
                 );
               },

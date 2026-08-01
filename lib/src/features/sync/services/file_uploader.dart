@@ -8,6 +8,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
+import '../../../core/database/local_media_access_state.dart';
 import '../../../core/services/diagnostics_service.dart';
 import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_gateway.dart';
@@ -118,10 +119,14 @@ class FileUploader {
 
     _pendingSub =
         (_db.select(_db.files)..where(
-              (t) => t.status.isIn([
-                FileSyncStatus.pending.dbValue,
-                FileSyncStatus.failed.dbValue,
-              ]),
+              (t) =>
+                  t.status.isIn([
+                    FileSyncStatus.pending.dbValue,
+                    FileSyncStatus.failed.dbValue,
+                  ]) &
+                  t.localMediaAccessState.equals(
+                    LocalMediaAccessState.available.dbValue,
+                  ),
             ))
             .watch()
             .listen((_) => wake());
@@ -392,6 +397,19 @@ class FileUploader {
           if (autoMetadataBackupService != null) {
             unawaited(autoMetadataBackupService.noteMediaUploadCompleted());
           }
+        } on _LocalMediaAccessException {
+          await (_db.update(
+            _db.files,
+          )..where((t) => t.id.equals(nextFile.id))).write(
+            FilesCompanion(
+              status: Value(FileSyncStatus.pending.dbValue),
+              localMediaAccessState: Value(
+                LocalMediaAccessState.accessUnavailable.dbValue,
+              ),
+              nextRetryAt: const Value(null),
+              lastError: const Value(null),
+            ),
+          );
         } catch (error) {
           final failure = _normalizeFailure(error);
           await _markFailed(nextFile, failure);
@@ -432,6 +450,9 @@ class FileUploader {
               ..where(
                 (t) =>
                     t.status.equals(FileSyncStatus.failed.dbValue) &
+                    t.localMediaAccessState.equals(
+                      LocalMediaAccessState.available.dbValue,
+                    ) &
                     (bucketId == null
                         ? const Constant(true)
                         : t.bucketId.equals(bucketId)),
@@ -524,6 +545,9 @@ class FileUploader {
               ..where(
                 (t) =>
                     t.status.equals(FileSyncStatus.pending.dbValue) &
+                    t.localMediaAccessState.equals(
+                      LocalMediaAccessState.available.dbValue,
+                    ) &
                     (bucketId == null
                         ? const Constant(true)
                         : t.bucketId.equals(bucketId)),
@@ -544,6 +568,9 @@ class FileUploader {
               ..where(
                 (t) =>
                     t.status.equals(FileSyncStatus.failed.dbValue) &
+                    t.localMediaAccessState.equals(
+                      LocalMediaAccessState.available.dbValue,
+                    ) &
                     (bucketId == null
                         ? const Constant(true)
                         : t.bucketId.equals(bucketId)) &
@@ -700,15 +727,7 @@ class FileUploader {
     final asset = await AssetEntity.fromId(assetId);
     final resolved = await asset?.originFile ?? await asset?.file;
     if (resolved == null || !await resolved.exists()) {
-      throw const _LocalUploadException(
-        _UploadFailure(
-          message: 'The gallery item is no longer available.',
-          category: TelegramErrorCategory.permanent,
-          canRetry: false,
-          operation: 'resolve_gallery_item',
-          continueQueue: true,
-        ),
-      );
+      throw const _LocalMediaAccessException();
     }
     await (_db.update(
       _db.files,
@@ -716,6 +735,7 @@ class FileUploader {
       FilesCompanion(
         localPath: Value(resolved.absolute.path),
         localPathResolved: const Value(true),
+        localMediaAccessState: Value(LocalMediaAccessState.available.dbValue),
         size: Value(await resolved.length()),
       ),
     );
@@ -882,6 +902,9 @@ class FileUploader {
               ..where(
                 (t) =>
                     t.status.equals(FileSyncStatus.failed.dbValue) &
+                    t.localMediaAccessState.equals(
+                      LocalMediaAccessState.available.dbValue,
+                    ) &
                     t.nextRetryAt.isNotNull(),
               )
               ..orderBy([(t) => OrderingTerm.asc(t.nextRetryAt)])
@@ -953,4 +976,8 @@ class _LocalUploadException implements Exception {
 
   @override
   String toString() => failure.message;
+}
+
+class _LocalMediaAccessException implements Exception {
+  const _LocalMediaAccessException();
 }

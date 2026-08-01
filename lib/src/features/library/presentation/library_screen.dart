@@ -14,6 +14,8 @@ import '../../vault/presentation/vault_recovery_key_screen.dart';
 import '../../vault/services/vault_recovery_service.dart';
 import 'image_viewer_screen.dart';
 import 'library_controller.dart';
+import '../services/media_permission_service.dart';
+import 'widgets/media_access_notice.dart';
 import 'widgets/media_tile.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -25,8 +27,114 @@ class LibraryScreen extends ConsumerStatefulWidget {
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+class _MediaPermissionGate extends StatelessWidget {
+  final MediaPermissionStatus status;
+  final bool busy;
+  final VoidCallback onRequest;
+  final VoidCallback onOpenSettings;
+
+  const _MediaPermissionGate({
+    required this.status,
+    required this.busy,
+    required this.onRequest,
+    required this.onOpenSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final permanent = status.requiresSettings;
+    final unsupported = status.scope == MediaAccessScope.unsupported;
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_outlined,
+                    size: 34,
+                    color: AppTheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  permanent ? 'Media access is off' : 'Back up your gallery',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _message(permanent, unsupported),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (!unsupported)
+                  FilledButton.icon(
+                    onPressed: busy
+                        ? null
+                        : permanent
+                        ? onOpenSettings
+                        : onRequest,
+                    icon: busy
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            permanent
+                                ? Icons.settings_outlined
+                                : Icons.arrow_forward_rounded,
+                          ),
+                    label: Text(permanent ? 'Open settings' : 'Continue'),
+                  ),
+                const SizedBox(height: 12),
+                const Text(
+                  'You can still use Settings and recovery tools without gallery access.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _message(bool permanent, bool unsupported) {
+    if (unsupported) {
+      return 'Media access is not supported on this platform.';
+    }
+    if (permanent) {
+      return 'TeleVault cannot scan new photos or videos. Open Android settings only if you want to enable continuous gallery backup.';
+    }
+    if (status.scope == MediaAccessScope.denied) {
+      return 'Access was not granted. You can try again when you are ready; TeleVault will not open Android settings automatically.';
+    }
+    return 'TeleVault needs ongoing photo and video access to discover new gallery items and back them up automatically. You can choose full or selected access in Android.';
+  }
+}
+
+class _LibraryScreenState extends ConsumerState<LibraryScreen>
+    with WidgetsBindingObserver {
   final ScrollController _scrollCtrl = ScrollController();
+  bool _permissionActionInProgress = false;
 
   String _searchQuery = '';
   _LibraryStatusFilter _statusFilter = _LibraryStatusFilter.all;
@@ -36,13 +144,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollCtrl.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _permissionActionInProgress) {
+      return;
+    }
+    Future<void>.delayed(const Duration(milliseconds: 250), () async {
+      if (!mounted || _permissionActionInProgress) return;
+      await ref.read(libraryControllerProvider.notifier).refreshPermission();
+    });
   }
 
   void _onScroll() {
@@ -57,7 +178,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final state = ref.watch(libraryControllerProvider);
 
     if (!state.hasPermission) {
-      return const Scaffold(body: Center(child: Text('Permission denied')));
+      if (state.isLoading) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      return Scaffold(
+        appBar: AppBar(title: const Text('Library')),
+        body: _MediaPermissionGate(
+          status: state.permissionStatus,
+          busy: _permissionActionInProgress,
+          onRequest: _requestMediaAccess,
+          onOpenSettings: _openMediaSettings,
+        ),
+      );
     }
 
     if (state.isLoading && state.assets.isEmpty) {
@@ -139,6 +271,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         child: CustomScrollView(
           controller: _scrollCtrl,
           slivers: [
+            if (state.permissionStatus.scope == MediaAccessScope.limitedAccess)
+              SliverToBoxAdapter(
+                child: MediaAccessNotice(
+                  status: state.permissionStatus,
+                  onManageAccess: _manageMediaAccess,
+                ),
+              ),
             if (_hasActiveFilters)
               SliverToBoxAdapter(
                 child: Padding(
@@ -318,6 +457,48 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         fontWeight: FontWeight.w700,
       ),
     );
+  }
+
+  Future<void> _requestMediaAccess() async {
+    if (_permissionActionInProgress) return;
+    setState(() => _permissionActionInProgress = true);
+    try {
+      await ref.read(libraryControllerProvider.notifier).requestMediaAccess();
+    } on MediaPermissionException catch (error) {
+      _showPermissionError(error.message);
+    } finally {
+      if (mounted) setState(() => _permissionActionInProgress = false);
+    }
+  }
+
+  Future<void> _manageMediaAccess() async {
+    if (_permissionActionInProgress) return;
+    final status = ref.read(libraryControllerProvider).permissionStatus;
+    setState(() => _permissionActionInProgress = true);
+    try {
+      if (status.canRequestAgain) {
+        await ref
+            .read(libraryControllerProvider.notifier)
+            .updateSelectedAccess();
+      } else {
+        await ref.read(libraryControllerProvider.notifier).openMediaSettings();
+      }
+    } on MediaPermissionException catch (error) {
+      _showPermissionError(error.message);
+    } finally {
+      if (mounted) setState(() => _permissionActionInProgress = false);
+    }
+  }
+
+  Future<void> _openMediaSettings() async {
+    await ref.read(libraryControllerProvider.notifier).openMediaSettings();
+  }
+
+  void _showPermissionError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _clearFiltersPill() {

@@ -71,12 +71,9 @@ dependencies:
   flutter_animate: ^4.5.0
   # photo_manager_image_provider: ^2.2.0
 
-  # --- Phase 5: Security & Backup ---
+  # --- Security & Backup ---
   encrypt: ^5.0.3
   crypto: ^3.0.3
-  google_sign_in: ^6.2.1
-  googleapis: ^13.1.0
-  extension_google_sign_in_as_googleapis_auth: ^2.0.12 # Helper for auth
   connectivity_plus: ^6.1.4
   battery_plus: ^6.2.1
   local_auth: ^2.3.0
