@@ -29,9 +29,12 @@ class TeleVaultSyncService : Service() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var runtimeNamespace: String? = null
     private val syncWake = object : Runnable {
         override fun run() {
-            BackgroundSyncChannel.requestDartSync()
+            runtimeNamespace?.let { namespace ->
+                BackgroundSyncChannel.requestDartSync(namespace)
+            }
             mainHandler.postDelayed(this, SYNC_WAKE_INTERVAL_MS)
         }
     }
@@ -39,11 +42,17 @@ class TeleVaultSyncService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        runtimeNamespace = RuntimeEnvironmentChannel.selectedMode(this)?.let {
+            "et.shagiz.tele_vault.$it"
+        }
         createNotificationChannel()
         mainHandler.postDelayed(syncWake, INITIAL_SYNC_WAKE_DELAY_MS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.getStringExtra("namespace")
+            ?.takeIf(String::isNotBlank)
+            ?.let { runtimeNamespace = it }
         when (intent?.action) {
             ACTION_STOP -> {
                 removeForegroundNotification()
@@ -72,6 +81,7 @@ class TeleVaultSyncService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        runtimeNamespace = null
         mainHandler.removeCallbacks(syncWake)
         removeForegroundNotification()
         super.onDestroy()

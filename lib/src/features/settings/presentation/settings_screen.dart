@@ -7,6 +7,8 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/config/app_runtime_environment.dart';
+import '../../../core/services/review_environment_exit_service.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../auth/auth_controller.dart';
@@ -48,6 +50,19 @@ class SettingsScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildProfileCard(context),
+              if (AppRuntimeEnvironment.isPlayStoreReview &&
+                  !AppRuntimeEnvironment.compileTimeReviewEnabled) ...[
+                const Gap(16),
+                _settingsGroup([
+                  _buildSectionTile(
+                    context,
+                    icon: Icons.restart_alt_rounded,
+                    title: 'Return to normal Telegram',
+                    subtitle: 'Clear only Test Environment data',
+                    onTap: () => _confirmReturnToProduction(context, ref),
+                  ),
+                ]),
+              ],
               const Gap(20),
               const TeleVaultSectionTitle(title: 'Backup'),
               const Gap(7),
@@ -225,6 +240,44 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmReturnToProduction(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Return to normal Telegram?'),
+        content: const Text(
+          'Only Test Environment sessions, settings, metadata, Vault files, cache, and background work will be removed. Normal TeleVault data stays unchanged.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Return to normal'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(reviewEnvironmentExitServiceProvider).returnToProduction();
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The Test Environment could not be cleared. Normal Telegram data was not opened.',
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildProfileCard(BuildContext context) {
@@ -505,7 +558,11 @@ class SettingsScreen extends ConsumerWidget {
     if (p.isAbsolute(rawPath)) return null;
 
     final dir = await getApplicationDocumentsDirectory();
-    final tdlibPath = p.join(dir.path, 'tdlib', rawPath);
+    final tdlibPath = p.join(
+      dir.path,
+      AppRuntimeEnvironment.tdlibDirectoryName,
+      rawPath,
+    );
     if (io.File(tdlibPath).existsSync()) return tdlibPath;
 
     return null;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/theme/app_theme.dart';
 
 class TermsSummaryScreen extends StatelessWidget {
   const TermsSummaryScreen({super.key});
@@ -26,13 +27,13 @@ class TermsSummaryScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppTheme.ink,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Effective: August 1, $year',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              style: const TextStyle(color: AppTheme.inkMuted, fontSize: 14),
             ),
             const SizedBox(height: 24),
             _section(
@@ -84,15 +85,15 @@ class TermsSummaryScreen extends StatelessWidget {
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppTheme.ink,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             content,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
-              color: Colors.grey[300],
+              color: AppTheme.inkMuted,
               height: 1.5,
             ),
           ),

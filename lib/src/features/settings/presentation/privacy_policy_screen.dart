@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/theme/app_theme.dart';
 import 'terms_summary_screen.dart';
 
 class PrivacyPolicyScreen extends StatelessWidget {
@@ -27,13 +28,13 @@ class PrivacyPolicyScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppTheme.ink,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Last updated: August 1, $year',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              style: const TextStyle(color: AppTheme.inkMuted, fontSize: 14),
             ),
             const SizedBox(height: 24),
             _section(
@@ -95,9 +96,9 @@ class PrivacyPolicyScreen extends StatelessWidget {
             const SizedBox(height: 24),
             Center(
               child: Text(
-                '© $year Shagiz Technologies',
+                'Copyright $year Shagiz Technologies',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                style: const TextStyle(fontSize: 11, color: AppTheme.inkMuted),
               ),
             ),
           ],
@@ -117,15 +118,15 @@ class PrivacyPolicyScreen extends StatelessWidget {
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppTheme.ink,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             content,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 14,
-              color: Colors.grey[300],
+              color: AppTheme.inkMuted,
               height: 1.5,
             ),
           ),

@@ -76,6 +76,25 @@ void main() {
     });
 
     test(
+      'legacy synced rows without message IDs do not block metadata backup',
+      () async {
+        final fixture = await _MetadataFixture.create();
+        addTearDown(fixture.dispose);
+        await fixture.seed();
+        await fixture.db
+            .update(fixture.db.files)
+            .write(const FilesCompanion(telegramMessageId: Value(null)));
+
+        final snapshot = await fixture.service.exportAccountBoundSnapshot();
+        await fixture.service.importAccountBoundSnapshot(snapshot);
+
+        final restored = await fixture.db.select(fixture.db.files).getSingle();
+        expect(restored.telegramMessageId, equals(null));
+        expect(restored.status, FileSyncStatus.failed.dbValue);
+      },
+    );
+
+    test(
       'rejects a wrong recovery secret without changing the database',
       () async {
         final fixture = await _MetadataFixture.create();

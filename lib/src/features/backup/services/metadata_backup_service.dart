@@ -356,8 +356,16 @@ class DriftMetadataBackupService implements MetadataBackupService {
           )
           .toList(growable: false),
       'files': files
-          .map(
-            (file) => <String, dynamic>{
+          .map((file) {
+            final claimsRemoteCompletion =
+                file.status == FileSyncStatus.synced.dbValue ||
+                file.status == FileSyncStatus.deletedLocal.dbValue;
+            final hasConfirmedMessage = file.telegramMessageId != null;
+            final portableStatus =
+                claimsRemoteCompletion && !hasConfirmedMessage
+                ? FileSyncStatus.failed.dbValue
+                : file.status;
+            return <String, dynamic>{
               'asset_id': file.assetId,
               'display_name': _portableDisplayName(file.localPath),
               'folder_name': file.folderName,
@@ -366,7 +374,7 @@ class DriftMetadataBackupService implements MetadataBackupService {
               'bucket_id': file.bucketId,
               'telegram_message_id': file.telegramMessageId,
               'telegram_file_id': file.telegramFileId,
-              'status': file.status,
+              'status': portableStatus,
               'is_vaulted': file.isVaulted,
               'is_encrypted': file.isEncrypted,
               'encryption_version': file.encryptionVersion,
@@ -385,8 +393,8 @@ class DriftMetadataBackupService implements MetadataBackupService {
                   .toIso8601String(),
               'label_id': file.labelId,
               'date_added': file.dateAdded.toUtc().toIso8601String(),
-            },
-          )
+            };
+          })
           .toList(growable: false),
       'settings': settings
           .map((setting) => {'key': setting.key, 'value': setting.value})

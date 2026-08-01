@@ -20,7 +20,7 @@ A release is not production-ready until every P0 item is complete against the ex
 
 ## P0 — reviewer access
 
-- [x] An isolated Telegram Test DC review build mode exists behind `TELEVAULT_PLAY_REVIEW=true`.
+- [x] The production AAB exposes Test DC reviewer access before account-scoped services start.
 - [x] Review mode uses separate TDLib, Drift, cache, secure-storage, worker, and cleanup namespaces.
 - [x] A persistent `Telegram Test Environment` indicator is visible.
 - [ ] Reusable reviewer credentials and exact steps are entered privately in Play Console.
@@ -53,13 +53,13 @@ flutter build appbundle --release \
   --dart-define=TELEGRAM_API_HASH=<release-secret>
 ```
 
-Build reviewer mode separately with Test DC values:
+The same production AAB contains reviewer access. The compile-time mode remains only for development checks:
 
 ```bash
 flutter build appbundle --release \
   --dart-define=TELEVAULT_PLAY_REVIEW=true \
-  --dart-define=TELEGRAM_TEST_API_ID=<test-dc-api-id> \
-  --dart-define=TELEGRAM_TEST_API_HASH=<test-dc-api-hash>
+  --dart-define=TELEGRAM_API_ID=<release-secret> \
+  --dart-define=TELEGRAM_API_HASH=<release-secret>
 ```
 
 Then run the existing API 36, 16 KB, merged-manifest, dependency, and secret/artifact verification. Record the commit SHA, version code, AAB SHA-256, signing-certificate fingerprints, and Play Console track.

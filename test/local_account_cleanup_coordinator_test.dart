@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tele_vault/src/core/config/app_runtime_environment.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
 import 'package:tele_vault/src/features/auth/services/local_account_cleanup_coordinator.dart';
 import 'package:tele_vault/src/features/backup/services/metadata_operation_lock.dart';
@@ -144,6 +145,34 @@ void main() {
             .getSingle();
     expect(owner.value, accountB);
     expect(fixture.tdlibCleared, isTrue);
+  });
+
+  test('review cleanup preserves legacy production metadata snapshots', () async {
+    AppRuntimeEnvironment.resetForTesting();
+    AppRuntimeEnvironment.configure(AppRuntimeMode.playReview);
+    addTearDown(() {
+      AppRuntimeEnvironment.resetForTesting();
+      AppRuntimeEnvironment.configure(AppRuntimeMode.production);
+    });
+    final fixture = await _CleanupFixture.create();
+    addTearDown(fixture.dispose);
+    await fixture.seed();
+    final reviewDirectory = io.Directory(
+      '${fixture.temporaryDirectory.path}/televault_metadata_play_review',
+    );
+    await reviewDirectory.create(recursive: true);
+    await io.File(
+      '${reviewDirectory.path}/review.tvmeta',
+    ).writeAsString('review');
+    final productionSnapshot = io.File(
+      '${fixture.temporaryDirectory.path}/tele_vault_metadata_production.tvmeta',
+    );
+    await productionSnapshot.writeAsString('production');
+
+    await fixture.coordinator.clearReviewEnvironment();
+
+    expect(await reviewDirectory.exists(), isFalse);
+    expect(await productionSnapshot.exists(), isTrue);
   });
 }
 

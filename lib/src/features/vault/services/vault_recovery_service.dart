@@ -40,15 +40,21 @@ abstract interface class VaultSecretStore {
 }
 
 class FlutterVaultSecretStore implements VaultSecretStore {
-  static const FlutterSecureStorage _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      storageNamespace: AppRuntimeEnvironment.vaultRecoveryStorageNamespace,
-      migrateWithBackup: true,
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.unlocked_this_device,
-    ),
-  );
+  final FlutterSecureStorage _storage;
+
+  FlutterVaultSecretStore({FlutterSecureStorage? storage})
+    : _storage =
+          storage ??
+          FlutterSecureStorage(
+            aOptions: AndroidOptions(
+              storageNamespace:
+                  AppRuntimeEnvironment.vaultRecoveryStorageNamespace,
+              migrateWithBackup: true,
+            ),
+            iOptions: const IOSOptions(
+              accessibility: KeychainAccessibility.unlocked_this_device,
+            ),
+          );
 
   @override
   Future<String?> read(String key) => _storage.read(key: key);
