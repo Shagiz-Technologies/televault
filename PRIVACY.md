@@ -21,7 +21,9 @@ This metadata is stored on the device using local app storage and Drift/SQLite.
 
 When backup is enabled, TeleVault uploads selected photos and videos to private Telegram channels under the logged-in Telegram account. Normal non-vault media is not client-side encrypted by TeleVault before upload in the current implementation.
 
-Vault-protected media is encrypted by TeleVault as part of the vault flow. Metadata backup packages are encrypted and bound to the Telegram account recorded in the snapshot.
+Vault-protected media is encrypted by TeleVault as part of the vault flow. New vault objects use the authenticated, streaming v3 format and random per-file keys. The portable Vault Recovery Key is stored through the platform secure-storage facility while installed and is not written to Drift, Telegram captions, diagnostics, or TeleVault-operated infrastructure. Metadata backup packages are separately encrypted and bound to the Telegram account recorded in the snapshot.
+
+The Vault PIN/password and device biometrics control local access; they are not the portable v3 recovery secret. Users must privately retain the exported Vault Recovery Key. Losing both the installed secure-storage copy and the exported key makes v3 vault backups unrecoverable.
 
 ## Telemetry and diagnostics
 

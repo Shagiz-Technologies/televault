@@ -10,6 +10,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../buckets/presentation/bucket_selector_sheet.dart';
 import '../../settings/services/app_lock_controller.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
+import '../../vault/presentation/vault_recovery_key_screen.dart';
+import '../../vault/services/vault_recovery_service.dart';
 import 'image_viewer_screen.dart';
 import 'library_controller.dart';
 import 'widgets/media_tile.dart';
@@ -812,6 +814,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         );
       }
       if (unlockedPin == null) return;
+
+      final recoveryService = ref.read(vaultRecoveryServiceProvider);
+      if (!await recoveryService.isRecoveryKeyConfirmed()) {
+        if (!context.mounted) return;
+        final ready = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const VaultRecoveryKeyScreen()),
+        );
+        if (ready != true || !context.mounted) return;
+      }
 
       await notifier.moveToVault(pin: unlockedPin!);
       if (context.mounted) {

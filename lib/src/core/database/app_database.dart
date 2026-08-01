@@ -18,7 +18,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -60,6 +60,29 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(files, files.userActionRequired);
         await m.createTable(telegramAccountStates);
       }
+      if (from < 9) {
+        await m.addColumn(files, files.vaultFormatVersion);
+        await m.addColumn(files, files.encryptedObjectId);
+        await m.addColumn(files, files.encryptedSize);
+        await m.addColumn(files, files.originalSize);
+        await m.addColumn(files, files.vaultIntegrityStatus);
+        await m.addColumn(files, files.vaultMigrationStatus);
+        await m.addColumn(files, files.keyWrappingVersion);
+        await m.addColumn(files, files.lastVerifiedAt);
+        await customStatement('''
+          UPDATE files
+          SET vault_format_version = encryption_version,
+              encrypted_size = size,
+              vault_migration_status = CASE
+                WHEN is_encrypted = 1 AND COALESCE(encryption_version, 1) < 3
+                  THEN 'pending'
+                WHEN is_encrypted = 1 AND encryption_version = 3
+                  THEN 'completed'
+                ELSE 'notRequired'
+              END
+          WHERE is_encrypted = 1
+        ''');
+      }
       await _createPerformanceIndexes();
     },
   );
@@ -79,6 +102,9 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_files_label_status ON files (label_id, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_files_vault_migration ON files (is_vaulted, vault_migration_status)',
     );
   }
 }

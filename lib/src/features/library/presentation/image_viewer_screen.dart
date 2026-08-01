@@ -10,6 +10,8 @@ import 'package:chewie/chewie.dart';
 
 import '../../settings/services/app_lock_controller.dart';
 import '../../vault/presentation/vault_pin_screen.dart';
+import '../../vault/presentation/vault_recovery_key_screen.dart';
+import '../../vault/services/vault_recovery_service.dart';
 import 'library_controller.dart';
 
 class ImageViewerScreen extends ConsumerStatefulWidget {
@@ -316,6 +318,16 @@ class _ImageViewerScreenState extends ConsumerState<ImageViewerScreen> {
     );
 
     if (unlockedSecret == null || unlockedSecret!.isEmpty || !mounted) return;
+
+    final recoveryService = ref.read(vaultRecoveryServiceProvider);
+    if (!await recoveryService.isRecoveryKeyConfirmed()) {
+      if (!mounted) return;
+      final ready = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => const VaultRecoveryKeyScreen()),
+      );
+      if (ready != true || !mounted) return;
+    }
 
     setState(() => _vaulting = true);
     try {

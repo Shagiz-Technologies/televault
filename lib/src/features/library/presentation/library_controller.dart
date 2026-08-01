@@ -10,6 +10,7 @@ import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../vault/services/vault_service.dart';
+import '../../vault/services/vault_migration_service.dart';
 import '../repositories/gallery_repository.dart';
 
 class LibraryState {
@@ -424,51 +425,56 @@ class LibraryController extends StateNotifier<LibraryState> {
       final sourceFile = await selectedAsset.file;
       if (sourceFile == null) continue;
 
-      final encrypted = await _vaultService.encryptFile(
-        io.File(sourceFile.path),
-        pin,
-      );
+      final source = io.File(sourceFile.path);
+      final encrypted = await _vaultService.encryptFile(source);
       final encryptedFile = io.File(encrypted.path);
-      final encryptedSize = await encryptedFile.length();
-
-      if (existing == null) {
-        await _db
-            .into(_db.files)
-            .insert(
-              FilesCompanion(
-                localPath: Value(encrypted.path),
-                assetId: Value(assetId),
-                folderName: Value(selectedAsset.title ?? 'Unknown'),
-                size: Value(encryptedSize),
-                bucketId: Value(activeBucketId),
-                status: Value(FileSyncStatus.pending.dbValue),
-                isVaulted: const Value(true),
-                isEncrypted: const Value(true),
-                encryptionVersion: Value(encrypted.version),
-                ivB64: Value(encrypted.ivB64),
-                dateAdded: Value(selectedAsset.createDateTime),
-              ),
-            );
-      } else {
-        await (_db.update(
-          _db.files,
-        )..where((t) => t.id.equals(existing.id))).write(
-          FilesCompanion(
-            localPath: Value(encrypted.path),
-            size: Value(encryptedSize),
-            status: Value(FileSyncStatus.pending.dbValue),
-            isVaulted: const Value(true),
-            isEncrypted: const Value(true),
-            encryptionVersion: Value(encrypted.version),
-            ivB64: Value(encrypted.ivB64),
-            telegramMessageId: const Value(null),
-            telegramFileId: const Value(null),
-            lastError: const Value(null),
-            retryCount: const Value(0),
-            nextRetryAt: const Value(null),
-            dateAdded: Value(selectedAsset.createDateTime),
-          ),
+      try {
+        final verifiedAt = await _vaultService.verifyFile(
+          encryptedFile,
+          expectedPlaintext: source,
         );
+        final vaultFields = FilesCompanion(
+          localPath: Value(encrypted.path),
+          size: Value(encrypted.encryptedSize),
+          status: Value(FileSyncStatus.pending.dbValue),
+          isVaulted: const Value(true),
+          isEncrypted: const Value(true),
+          encryptionVersion: Value(encrypted.version),
+          ivB64: Value(encrypted.ivB64),
+          vaultFormatVersion: Value(encrypted.version),
+          encryptedObjectId: Value(encrypted.objectId),
+          encryptedSize: Value(encrypted.encryptedSize),
+          originalSize: Value(encrypted.originalSize),
+          vaultIntegrityStatus: const Value(VaultIntegrityStates.verified),
+          vaultMigrationStatus: const Value(VaultMigrationStates.notRequired),
+          keyWrappingVersion: Value(encrypted.keyWrappingVersion),
+          lastVerifiedAt: Value(verifiedAt),
+          telegramMessageId: const Value(null),
+          telegramFileId: const Value(null),
+          lastError: const Value(null),
+          retryCount: const Value(0),
+          nextRetryAt: const Value(null),
+          dateAdded: Value(selectedAsset.createDateTime),
+        );
+
+        if (existing == null) {
+          await _db
+              .into(_db.files)
+              .insert(
+                vaultFields.copyWith(
+                  assetId: Value(assetId),
+                  folderName: Value(selectedAsset.title ?? 'Unknown'),
+                  bucketId: Value(activeBucketId),
+                ),
+              );
+        } else {
+          await (_db.update(
+            _db.files,
+          )..where((t) => t.id.equals(existing.id))).write(vaultFields);
+        }
+      } on Object {
+        if (await encryptedFile.exists()) await encryptedFile.delete();
+        rethrow;
       }
       moved++;
     }

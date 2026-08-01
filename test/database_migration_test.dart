@@ -7,7 +7,7 @@ import 'package:tele_vault/src/core/database/app_database.dart';
 
 void main() {
   test(
-    'schema v7 migrates Telegram reliability fields without data loss',
+    'schema v7 migrates Telegram and vault v3 fields without data loss',
     () async {
       final directory = await io.Directory.systemTemp.createTemp(
         'televault_schema_v7_',
@@ -45,7 +45,11 @@ void main() {
     ''');
       sqlite.execute(
         "INSERT INTO files (local_path, folder_name, size, bucket_id, status, date_added) "
-        "VALUES ('demo.jpg', 'Demo', 42, 7, 0, 0);",
+        "VALUES ('demo.jpg.enc', 'Demo', 42, 7, 5, 0);",
+      );
+      sqlite.execute(
+        'UPDATE files SET is_vaulted = 1, is_encrypted = 1, '
+        'encryption_version = 2;',
       );
       sqlite.execute('PRAGMA user_version = 7;');
       sqlite.dispose();
@@ -55,7 +59,10 @@ void main() {
       final rows = await db.customSelect('''
       SELECT telegram_error_code, telegram_error_category,
              telegram_retry_after, last_telegram_operation,
-             user_action_required
+             user_action_required, vault_format_version,
+             encrypted_size, vault_integrity_status,
+             vault_migration_status, key_wrapping_version,
+             last_verified_at
       FROM files
     ''').get();
       final accountTables = await db
@@ -67,6 +74,10 @@ void main() {
 
       expect(rows, hasLength(1));
       expect(rows.single.read<int>('user_action_required'), 0);
+      expect(rows.single.read<int?>('vault_format_version'), 2);
+      expect(rows.single.read<int?>('encrypted_size'), 42);
+      expect(rows.single.read<String>('vault_integrity_status'), 'unknown');
+      expect(rows.single.read<String>('vault_migration_status'), 'pending');
       expect(accountTables, hasLength(1));
     },
   );

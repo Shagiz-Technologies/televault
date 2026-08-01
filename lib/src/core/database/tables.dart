@@ -48,6 +48,16 @@ class Files extends Table {
   BoolColumn get isEncrypted => boolean().withDefault(const Constant(false))();
   IntColumn get encryptionVersion => integer().nullable()();
   TextColumn get ivB64 => text().nullable()();
+  IntColumn get vaultFormatVersion => integer().nullable()();
+  TextColumn get encryptedObjectId => text().nullable()();
+  IntColumn get encryptedSize => integer().nullable()();
+  IntColumn get originalSize => integer().nullable()();
+  TextColumn get vaultIntegrityStatus =>
+      text().withDefault(const Constant('unknown'))();
+  TextColumn get vaultMigrationStatus =>
+      text().withDefault(const Constant('notRequired'))();
+  IntColumn get keyWrappingVersion => integer().nullable()();
+  DateTimeColumn get lastVerifiedAt => dateTime().nullable()();
   DateTimeColumn get deletedLocallyAt => dateTime().nullable()();
   IntColumn get labelId => integer().nullable().references(Labels, #id)();
 

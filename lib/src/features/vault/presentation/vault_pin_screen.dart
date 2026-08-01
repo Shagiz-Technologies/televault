@@ -1,17 +1,15 @@
-import 'dart:io' as io;
-
-import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/services/app_lock_controller.dart';
+import '../services/vault_migration_service.dart';
 import '../services/vault_pin_service.dart';
-import '../services/vault_service.dart';
+import '../services/vault_recovery_service.dart';
 import 'vault_gallery_screen.dart';
+import 'vault_recovery_key_screen.dart';
 
 enum VaultPinMode { set, unlock }
 
@@ -453,7 +451,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
     try {
       final service = ref.read(vaultPinServiceProvider);
       var biometricConfirmed = false;
-      String? oldSecretForReEncryption;
+      String? legacyDecryptionSecret;
 
       if (biometricSave) {
         ref
@@ -474,10 +472,9 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
 
       if (_hasExistingSecret) {
         if (biometricSave) {
-          oldSecretForReEncryption = await service
-              .readVerifiedBiometricSecret();
-          if (oldSecretForReEncryption == null &&
-              await _encryptedVaultFileCount() > 0) {
+          legacyDecryptionSecret = await service.readVerifiedBiometricSecret();
+          if (legacyDecryptionSecret == null &&
+              await _legacyVaultFileCount() > 0) {
             if (currentSecret.isEmpty) {
               if (!mounted) return;
               setState(() {
@@ -499,7 +496,7 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
               });
               return;
             }
-            oldSecretForReEncryption = currentSecret;
+            legacyDecryptionSecret = currentSecret;
           }
         } else {
           final currentCheck = await service.verifyPin(currentSecret);
@@ -513,15 +510,29 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
             });
             return;
           }
-          oldSecretForReEncryption = currentSecret;
+          legacyDecryptionSecret = currentSecret;
         }
 
-        if (oldSecretForReEncryption != null &&
-            oldSecretForReEncryption != secret) {
-          await _reEncryptVaultFiles(
-            oldSecret: oldSecretForReEncryption,
-            newSecret: secret,
-          );
+        if (legacyDecryptionSecret != null &&
+            await _legacyVaultFileCount() > 0) {
+          final recoveryReady = await _ensureRecoveryKeyConfirmed();
+          if (!recoveryReady) {
+            if (!mounted) return;
+            setState(() {
+              _processing = false;
+              _error =
+                  'Confirm a recovery key before migrating legacy vault files.';
+            });
+            return;
+          }
+          final report = await ref
+              .read(vaultMigrationServiceProvider)
+              .migratePending(legacyDecryptionSecret);
+          if (report.failed > 0) {
+            throw StateError(
+              '${report.failed} legacy vault file(s) could not be migrated.',
+            );
+          }
         }
       }
 
@@ -532,6 +543,16 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
         await service.clearBiometricSecret();
       }
       await service.setAuthMethod(_method);
+      final recoveryReady = await _ensureRecoveryKeyConfirmed();
+      if (!recoveryReady) {
+        if (!mounted) return;
+        setState(() {
+          _processing = false;
+          _error =
+              'Vault access was saved, but the recovery key must be confirmed before files can be vaulted.';
+        });
+        return;
+      }
       final revision = ref.read(vaultSecurityRevisionProvider.notifier);
       revision.state = revision.state + 1;
       if (!mounted) return;
@@ -574,56 +595,32 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
     }
   }
 
-  Future<int> _encryptedVaultFileCount() {
+  Future<int> _legacyVaultFileCount() {
     final db = ref.read(databaseProvider);
     return db
         .customSelect(
-          'SELECT COUNT(*) AS c FROM files WHERE is_vaulted = 1 AND is_encrypted = 1',
+          '''
+          SELECT COUNT(*) AS c
+          FROM files
+          WHERE is_vaulted = 1
+            AND is_encrypted = 1
+            AND COALESCE(vault_format_version, encryption_version, 1) < 3
+          ''',
           readsFrom: {db.files},
         )
         .map((row) => row.read<int>('c'))
         .getSingle();
   }
 
-  Future<void> _reEncryptVaultFiles({
-    required String oldSecret,
-    required String newSecret,
-  }) async {
-    final db = ref.read(databaseProvider);
-    final vaultService = ref.read(vaultServiceProvider);
-    final rows =
-        await (db.select(db.files)..where(
-              (t) => t.isVaulted.equals(true) & t.isEncrypted.equals(true),
-            ))
-            .get();
-
-    for (final row in rows) {
-      final source = io.File(row.localPath);
-      if (!source.existsSync()) {
-        continue;
-      }
-
-      final decrypted = await vaultService.decryptFile(source, oldSecret);
-      final encrypted = await vaultService.encryptFile(decrypted, newSecret);
-      final encryptedFile = io.File(encrypted.path);
-      final encryptedSize = await encryptedFile.length();
-
-      if (source.path != encrypted.path && source.existsSync()) {
-        await source.delete();
-      }
-      if (decrypted.existsSync()) {
-        await decrypted.delete();
-      }
-
-      await (db.update(db.files)..where((t) => t.id.equals(row.id))).write(
-        FilesCompanion(
-          localPath: Value(encrypted.path),
-          size: Value(encryptedSize),
-          encryptionVersion: Value(encrypted.version),
-          ivB64: Value(encrypted.ivB64),
-        ),
-      );
-    }
+  Future<bool> _ensureRecoveryKeyConfirmed() async {
+    final recovery = ref.read(vaultRecoveryServiceProvider);
+    if (await recovery.isRecoveryKeyConfirmed()) return true;
+    if (!mounted) return false;
+    return await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const VaultRecoveryKeyScreen()),
+        ) ==
+        true;
   }
 
   Future<void> _unlockWithSecret() async {
