@@ -211,7 +211,13 @@ void main() {
     );
     final v1 = File(path.join(root.path, 'legacy-one.jpg.enc'));
     final v2 = File(path.join(root.path, 'legacy-two.jpg.enc'));
-    await _writeLegacy(v1, plaintext, secret, version: 1);
+    await _writeLegacy(
+      v1,
+      plaintext,
+      secret,
+      version: 1,
+      ivBytes: Uint8List.fromList([2, ...List<int>.filled(11, 9)]),
+    );
     await _writeLegacy(v2, plaintext, secret, version: 2);
 
     final decryptedV1 = await service.decryptFile(v1, secret);
@@ -346,8 +352,11 @@ Future<void> _writeLegacy(
   Uint8List plaintext,
   String secret, {
   required int version,
+  Uint8List? ivBytes,
 }) async {
-  final iv = legacy.IV.fromSecureRandom(12);
+  final iv = ivBytes == null
+      ? legacy.IV.fromSecureRandom(12)
+      : legacy.IV(ivBytes);
   final output = BytesBuilder();
   late final legacy.Key key;
   if (version == 2) {

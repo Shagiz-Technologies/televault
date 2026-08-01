@@ -12,6 +12,7 @@ import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
 import 'auto_metadata_backup_service.dart';
 import 'metadata_backup_service.dart';
+import 'metadata_operation_lock.dart';
 
 final safeUninstallBackupServiceProvider = Provider<SafeUninstallBackupService>(
   (ref) {
@@ -22,6 +23,7 @@ final safeUninstallBackupServiceProvider = Provider<SafeUninstallBackupService>(
       ref.watch(autoMetadataBackupServiceProvider),
       ref.watch(syncServiceProvider),
       ref.watch(fileUploaderProvider),
+      ref.watch(metadataOperationLockProvider),
     );
   },
 );
@@ -32,6 +34,25 @@ enum SafeUninstallStep {
   exportingMetadata,
   uploadingMetadata,
   complete,
+}
+
+enum SafeUninstallBackupErrorCode {
+  alreadyRunning,
+  bucketRequired,
+  backupNotFound,
+  invalidRemoteSnapshot,
+  downloadFailed,
+}
+
+class SafeUninstallBackupException implements Exception {
+  final SafeUninstallBackupErrorCode code;
+  final String message;
+  final Object? cause;
+
+  const SafeUninstallBackupException(this.code, this.message, {this.cause});
+
+  @override
+  String toString() => message;
 }
 
 class SafeUninstallBackupResult {
@@ -63,6 +84,7 @@ class SafeUninstallBackupService {
   final AutoMetadataBackupService _autoMetadataBackupService;
   final SyncService _syncService;
   final FileUploader _fileUploader;
+  final MetadataOperationLock _operationLock;
 
   static const marker = '#TeleVaultSafeUninstallMetadataV1';
   bool _safeUninstallRunning = false;
@@ -74,13 +96,25 @@ class SafeUninstallBackupService {
     this._autoMetadataBackupService,
     this._syncService,
     this._fileUploader,
+    this._operationLock,
   );
 
   Future<SafeUninstallBackupResult> createSafeUninstallBackup({
     void Function(SafeUninstallStep step)? onStep,
+  }) {
+    return _operationLock.synchronized(
+      () => _createSafeUninstallBackup(onStep: onStep),
+    );
+  }
+
+  Future<SafeUninstallBackupResult> _createSafeUninstallBackup({
+    void Function(SafeUninstallStep step)? onStep,
   }) async {
     if (_safeUninstallRunning) {
-      throw Exception('Safe Uninstall backup is already running.');
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.alreadyRunning,
+        'Safe Uninstall backup is already running.',
+      );
     }
     _safeUninstallRunning = true;
     var completed = false;
@@ -88,7 +122,10 @@ class SafeUninstallBackupService {
     final bucket = await _activeBucket();
     if (bucket == null) {
       _safeUninstallRunning = false;
-      throw Exception('Create or select a bucket before Safe Uninstall.');
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.bucketRequired,
+        'Create or select a bucket before Safe Uninstall.',
+      );
     }
 
     // Stop periodic scanning before the final pass so nothing can be enqueued
@@ -132,7 +169,8 @@ class SafeUninstallBackupService {
     onStatus?.call('Looking for TeleVault metadata in your Telegram chats...');
     final message = await _findLatestSafeUninstallMessage();
     if (message == null) {
-      throw Exception(
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.backupNotFound,
         'No Safe Uninstall metadata was found in your Telegram channels.',
       );
     }
@@ -281,7 +319,10 @@ class SafeUninstallBackupService {
     final file = document?['document'] as Map<String, dynamic>?;
     final fileId = _extractInt(file?['id']);
     if (fileId == null) {
-      throw Exception('Safe Uninstall metadata message has no document file.');
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.invalidRemoteSnapshot,
+        'The Safe Uninstall metadata message has no downloadable document.',
+      );
     }
 
     final response = await _telegram.request({
@@ -302,12 +343,18 @@ class SafeUninstallBackupService {
 
     final localPath = response['local']?['path']?.toString();
     if (localPath == null || localPath.isEmpty) {
-      throw Exception('Downloaded metadata file path is unavailable.');
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.downloadFailed,
+        'The downloaded metadata file is unavailable.',
+      );
     }
 
     final snapshot = io.File(localPath);
     if (!await snapshot.exists()) {
-      throw Exception('Downloaded metadata file was not found on disk.');
+      throw const SafeUninstallBackupException(
+        SafeUninstallBackupErrorCode.downloadFailed,
+        'The downloaded metadata file could not be opened.',
+      );
     }
     return snapshot;
   }

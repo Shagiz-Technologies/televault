@@ -131,9 +131,12 @@ class LibraryController extends StateNotifier<LibraryState> {
     newAssets.sort((a, b) => b.createDateTime.compareTo(a.createDateTime));
 
     final vaultedAssetIds =
-        (await (_db.select(
-              _db.files,
-            )..where((t) => t.isVaulted.equals(true))).get())
+        (await (_db.select(_db.files)..where(
+                  (t) =>
+                      t.isVaulted.equals(true) &
+                      t.localPathResolved.equals(true),
+                ))
+                .get())
             .map((f) => f.assetId)
             .whereType<String>()
             .toSet();

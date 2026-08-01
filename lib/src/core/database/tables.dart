@@ -17,6 +17,8 @@ class Files extends Table {
 
   // Local Metadata
   TextColumn get localPath => text()(); // /storage/emulated/0/DCIM/...
+  BoolColumn get localPathResolved =>
+      boolean().withDefault(const Constant(true))();
   TextColumn get assetId => text().nullable()(); // ID from PhotoManager
   TextColumn get folderName => text()(); // "Camera", "Vacation"
   TextColumn get fileHash => text().nullable()(); // SHA-256 for deduplication
@@ -27,6 +29,8 @@ class Files extends Table {
   IntColumn get telegramMessageId =>
       integer().nullable()(); // Null = not uploaded yet
   IntColumn get telegramFileId => integer().nullable()();
+  BoolColumn get remoteStateVerified =>
+      boolean().withDefault(const Constant(true))();
 
   // Status tracking
   // 0 = Pending, 1 = Uploading, 2 = Synced, 3 = Failed,

@@ -33,6 +33,8 @@ abstract interface class VaultSecretStore {
   Future<String?> read(String key);
 
   Future<void> write(String key, String value);
+
+  Future<void> delete(String key);
 }
 
 class FlutterVaultSecretStore implements VaultSecretStore {
@@ -52,6 +54,9 @@ class FlutterVaultSecretStore implements VaultSecretStore {
   @override
   Future<void> write(String key, String value) =>
       _storage.write(key: key, value: value);
+
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
 }
 
 abstract interface class VaultRecoveryKeyProvider {
@@ -152,6 +157,18 @@ class VaultRecoveryService implements VaultRecoveryKeyProvider {
     }
     await _safeWrite(_keyStorageKey, base64UrlEncode(candidate));
     await _safeWrite(_confirmedStorageKey, 'true');
+  }
+
+  Future<void> clearRecoveryKey() async {
+    try {
+      await _store.delete(_keyStorageKey);
+      await _store.delete(_confirmedStorageKey);
+    } catch (_) {
+      throw const VaultRecoveryException(
+        VaultRecoveryErrorCode.secureStorageFailure,
+        'The Vault Recovery Key could not be removed from secure storage.',
+      );
+    }
   }
 
   @override

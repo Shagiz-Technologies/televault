@@ -118,6 +118,8 @@ class VaultPinService {
     await _secureStorage.delete(key: _biometricSecretKey);
   }
 
+  Future<void> clearAccountSecrets() => clearBiometricSecret();
+
   Future<String?> readVerifiedBiometricSecret() async {
     final secret = await _secureStorage.read(key: _biometricSecretKey);
     if (secret == null || secret.isEmpty) return null;

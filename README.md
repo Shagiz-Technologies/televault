@@ -83,7 +83,7 @@ At a high level, TeleVault scans Android photos/videos, records metadata locally
 - [x] Bucket preferences for media type and sync behavior
 - [x] Vault lock/unlock support with a Vault PIN or password and device biometric authentication where supported
 - [x] Streaming authenticated vault encryption with a separate recovery key
-- [x] Metadata export/import
+- [x] Recovery-Key protected metadata v5 export/import with transactional restore
 - [x] Safe Uninstall metadata flow
 - [ ] Full polished media restore UX
 - [ ] Android 14+ selected photos access review
@@ -111,7 +111,7 @@ Read the full privacy notes in [`PRIVACY.md`](PRIVACY.md). Security reporting gu
 | Data type | Current behavior |
 | --- | --- |
 | Vault-protected media | New objects use chunked AES-256-GCM v3 encryption with a random per-file key wrapped by the Vault Recovery Key. |
-| Metadata backup packages | Encrypted with a user passphrase and bound to the Telegram account recorded in the snapshot. |
+| Metadata backup packages | Automatic v5 snapshots use the TeleVault Recovery Key; manual v5 exports also require a passphrase. Both are authenticated and bound to the current Telegram account. |
 | Normal non-vault uploads | Not client-side encrypted by TeleVault in the current implementation. |
 
 If you need all-media client-side encryption, treat that as future work and do not assume it exists today.
@@ -121,6 +121,9 @@ both the installed secure-storage copy and the exported key makes v3 vault
 objects unrecoverable; a short PIN or biometric cannot replace it. The
 container and migration design is documented in
 [`docs/vault-container-v3.md`](docs/vault-container-v3.md).
+The metadata format, retention, legacy-v4 migration risk, and logout cleanup
+model are documented in
+[`docs/metadata-snapshot-v5.md`](docs/metadata-snapshot-v5.md).
 
 ## Build from source
 
@@ -133,6 +136,8 @@ Prerequisites:
 
 The reproducible Android release baseline is pinned in [`docs/android-release-16kb.md`](docs/android-release-16kb.md).
 The typed error, flood-wait, and account-capability policy is documented in [`docs/telegram-reliability.md`](docs/telegram-reliability.md).
+Metadata v5 requires a confirmed TeleVault Recovery Key; use the same key after
+reinstalling. A Telegram account identity alone cannot decrypt a v5 snapshot.
 
 ```bash
 flutter pub get
@@ -226,6 +231,9 @@ Never commit:
 - A physical-device Telegram login and upload smoke test remains required for every release candidate.
 - Legacy vault v1/v2 objects remain readable but should be migrated to v3 after
   confirming a Vault Recovery Key.
+- Legacy automatic metadata v4 snapshots remain readable only for controlled
+  migration. They used weak, account-identifier-derived protection and should be
+  replaced by a verified v5 snapshot immediately after restore.
 
 <details>
 <summary>More limitation details</summary>

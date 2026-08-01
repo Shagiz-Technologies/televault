@@ -7,6 +7,7 @@ import 'package:tele_vault/src/core/services/telegram_error.dart';
 import 'package:tele_vault/src/core/services/telegram_reliability_service.dart';
 import 'package:tele_vault/src/features/backup/services/auto_metadata_backup_service.dart';
 import 'package:tele_vault/src/features/backup/services/metadata_backup_service.dart';
+import 'package:tele_vault/src/features/backup/services/metadata_operation_lock.dart';
 
 import 'support/fake_telegram_gateway.dart';
 
@@ -24,7 +25,15 @@ void main() {
       );
       expect(
         MetadataSettingPolicy.isSafeSettingKey('bucket.3.sync_album_ids'),
-        isTrue,
+        isFalse,
+      );
+      expect(
+        MetadataSettingPolicy.isSafeSettingKey('sync_album_mode'),
+        isFalse,
+      );
+      expect(
+        MetadataSettingPolicy.isSafeSettingKey('sync_last_scan_at'),
+        isFalse,
       );
     });
 
@@ -89,17 +98,25 @@ void main() {
     );
     await reliability.initialize();
     final exporter = _FakeMetadataBackupService();
+    final lockDirectory = await io.Directory.systemTemp.createTemp(
+      'televault_metadata_lock_test_',
+    );
+    final operationLock = MetadataOperationLock(
+      lockFileProvider: () async => io.File('${lockDirectory.path}/lock'),
+    );
     final service = AutoMetadataBackupService(
       db,
       gateway,
       exporter,
       reliability,
+      operationLock,
     );
     addTearDown(() async {
       await service.dispose();
       await reliability.dispose();
       await gateway.dispose();
       await db.close();
+      await lockDirectory.delete(recursive: true);
     });
     await db
         .into(db.appSettings)
@@ -168,15 +185,25 @@ class _FakeMetadataBackupService implements MetadataBackupService {
   }
 
   @override
-  Future<void> importAccountBoundSnapshot(io.File snapshot) {
+  Future<MetadataImportResult> importAccountBoundSnapshot(io.File snapshot) {
     throw UnimplementedError();
   }
 
   @override
-  Future<void> importEncryptedSnapshot(
+  Future<MetadataImportResult> importEncryptedSnapshot(
     io.File snapshot, {
     required String passphrase,
   }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<MetadataSnapshotInspection> inspectSnapshot(io.File snapshot) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> verifyAccountBoundSnapshot(io.File snapshot) {
     throw UnimplementedError();
   }
 }

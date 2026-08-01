@@ -8,6 +8,7 @@ import '../../../core/presentation/responsive_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_service.dart';
+import '../../auth/auth_controller.dart';
 import '../../backup/presentation/metadata_backup_screen.dart';
 import '../../buckets/services/bucket_service.dart';
 import '../../buckets/presentation/bucket_selector_sheet.dart';
@@ -399,7 +400,7 @@ class SettingsScreen extends ConsumerWidget {
                     context,
                     icon: Icons.logout_rounded,
                     title: "Logout",
-                    onTap: () => _handleLogout(context, ref, telegramService),
+                    onTap: () => _handleLogout(context, ref),
                   ),
                   const Gap(32),
                   // App Info
@@ -418,43 +419,61 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleLogout(
-    BuildContext context,
-    WidgetRef ref,
-    TelegramService telegram,
-  ) async {
+  Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
+    var preserveVaultFiles = false;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text("Logout"),
-        content: const Text(
-          "Are you sure you want to logout? This will terminate your Telegram session on this device.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              "Logout",
-              style: TextStyle(color: Colors.redAccent),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text('Log out of Telegram?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Deleted from this device: TeleVault buckets and media metadata, labels, settings, diagnostics, upload/retry state, decrypted temporary files, and the TDLib session/cache.',
+                ),
+                const Gap(12),
+                const Text(
+                  'Your private Telegram channels, uploaded media, and metadata messages remain in Telegram.',
+                ),
+                const Gap(12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: preserveVaultFiles,
+                  onChanged: (value) =>
+                      setDialogState(() => preserveVaultFiles = value ?? false),
+                  title: const Text('Keep encrypted Vault files locally'),
+                  subtitle: const Text(
+                    'They remain unreadable without the TeleVault Recovery Key. Decrypted temporary files are always deleted.',
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Delete local data and log out',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
     if (confirmed == true) {
-      try {
-        await telegram.sendAndWait({'@type': 'logOut'});
-        // The AuthController will catch the authStateLoggingOut/Closed and redirect to login
-      } catch (e) {
-        debugPrint('Error during logout: $e');
-        // Fallback: manually reset?
-      }
+      await ref
+          .read(authControllerProvider.notifier)
+          .logout(preserveEncryptedVaultFiles: preserveVaultFiles);
     }
   }
 

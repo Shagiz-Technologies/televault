@@ -2,10 +2,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/database_provider.dart';
 import '../../core/services/diagnostics_service.dart';
 import '../../core/services/telegram_error.dart';
 import '../../core/services/telegram_service.dart';
+import '../backup/services/metadata_backup_service.dart';
+import 'services/local_account_cleanup_coordinator.dart';
 
 enum AuthStatus {
   loading,
@@ -24,6 +25,7 @@ final authControllerProvider =
       return AuthController(
         ref.watch(telegramServiceProvider),
         ref.watch(diagnosticsServiceProvider),
+        ref.watch(localAccountCleanupCoordinatorProvider),
         ref,
       );
     });
@@ -31,12 +33,17 @@ final authControllerProvider =
 class AuthController extends StateNotifier<AuthStatus> {
   final TelegramService _tg;
   final DiagnosticsService _diagnosticsService;
+  final LocalAccountCleanupCoordinator _accountCleanup;
   final Ref _ref;
   StreamSubscription? _sub;
   Timer? _startupFallbackTimer;
 
-  AuthController(this._tg, this._diagnosticsService, this._ref)
-    : super(AuthStatus.loading) {
+  AuthController(
+    this._tg,
+    this._diagnosticsService,
+    this._accountCleanup,
+    this._ref,
+  ) : super(AuthStatus.loading) {
     _startStartupFallbackTimer();
     _sub = _tg.updates.listen((update) async {
       if (update['@type'] == 'updateAuthorizationState') {
@@ -53,7 +60,16 @@ class AuthController extends StateNotifier<AuthStatus> {
         if (error != null) _setError(_friendlyAuthError(error));
       }
     });
-    unawaited(refreshAuthorizationState());
+    unawaited(_initialize());
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await _accountCleanup.resumePendingCleanup();
+    } catch (error) {
+      _setError(_friendlyAuthError(error));
+    }
+    await refreshAuthorizationState();
   }
 
   void _clearError() {
@@ -226,6 +242,7 @@ class AuthController extends StateNotifier<AuthStatus> {
     _clearError();
 
     if (type == 'authorizationStateWaitPhoneNumber') {
+      await _accountCleanup.ensureReadyForNewAuthorization();
       _cancelStartupFallbackTimer();
       state = AuthStatus.enterPhone;
       return;
@@ -241,6 +258,17 @@ class AuthController extends StateNotifier<AuthStatus> {
       return;
     }
     if (type == 'authorizationStateReady') {
+      final me = await _tg.request({
+        '@type': 'getMe',
+      }, timeout: const Duration(seconds: 10));
+      _throwIfTdError(me);
+      final accountId = me['id'];
+      if (accountId == null) {
+        throw StateError('Telegram did not return the current account ID.');
+      }
+      await _accountCleanup.bindCurrentAccount(
+        DriftMetadataBackupService.fingerprintForAccountId(accountId),
+      );
       _cancelStartupFallbackTimer();
       state = AuthStatus.loggedIn;
       return;
@@ -257,13 +285,7 @@ class AuthController extends StateNotifier<AuthStatus> {
     }
     if (type == 'authorizationStateLoggingOut' ||
         type == 'authorizationStateClosed') {
-      final db = _ref.read(databaseProvider);
-      await db.transaction(() async {
-        await db.delete(db.files).go();
-        await db.delete(db.buckets).go();
-        await db.delete(db.appSettings).go();
-        await db.delete(db.telegramAccountStates).go();
-      });
+      await _accountCleanup.resumePendingCleanup();
       _cancelStartupFallbackTimer();
       state = AuthStatus.enterPhone;
       return;
@@ -273,6 +295,23 @@ class AuthController extends StateNotifier<AuthStatus> {
         !(preserveCurrentState && state != AuthStatus.loading)) {
       state = AuthStatus.loading;
     }
+  }
+
+  Future<void> logout({required bool preserveEncryptedVaultFiles}) async {
+    await _runAuthAction(() async {
+      await _accountCleanup.logout(
+        options: LocalAccountCleanupOptions(
+          preserveEncryptedVaultFiles: preserveEncryptedVaultFiles,
+        ),
+        remoteLogout: () async {
+          final response = await _tg.sendAndWait({
+            '@type': 'logOut',
+          }, timeout: const Duration(seconds: 30));
+          _throwIfTdError(response);
+        },
+      );
+      state = AuthStatus.enterPhone;
+    });
   }
 
   void _startStartupFallbackTimer() {

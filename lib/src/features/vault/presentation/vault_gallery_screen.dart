@@ -67,7 +67,11 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
       body: StreamBuilder<List<File>>(
         stream:
             (db.select(db.files)
-                  ..where((t) => t.isVaulted.equals(true))
+                  ..where(
+                    (t) =>
+                        t.isVaulted.equals(true) &
+                        t.localPathResolved.equals(true),
+                  )
                   ..orderBy([(t) => OrderingTerm.desc(t.dateAdded)]))
                 .watch(),
         builder: (context, snapshot) {

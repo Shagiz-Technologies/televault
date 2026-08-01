@@ -471,6 +471,15 @@ class TelegramReliabilityService {
     _scheduleGateTimer();
   }
 
+  Future<void> clearAccountState() async {
+    _gateTimer?.cancel();
+    await _db.delete(_db.telegramAccountStates).go();
+    _state = const TelegramReliabilityState();
+    _initialized = false;
+    _initializing = null;
+    _emitState();
+  }
+
   int normalizeUploadLimitMb(int requested) =>
       requested.clamp(32, effectiveUploadLimitMb).toInt();
 

@@ -11,6 +11,7 @@ import '../../../core/presentation/secure_text_dialog.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../sync/services/file_uploader.dart';
 import '../../sync/services/sync_service.dart';
+import '../../vault/presentation/vault_recovery_key_screen.dart';
 import '../services/auto_metadata_backup_service.dart';
 import '../services/metadata_backup_service.dart';
 import '../services/safe_uninstall_backup_service.dart';
@@ -60,7 +61,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'TeleVault keeps metadata account-bound to your Telegram login. Manual exports still use your passphrase.',
+              'Metadata is protected by your TeleVault Recovery Key and bound to your Telegram account. Manual exports also require their passphrase.',
               style: TextStyle(color: Colors.grey),
             ),
             const Gap(20),
@@ -69,7 +70,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
             _actionCard(
               icon: Icons.upload_file,
               title: 'Export Metadata Snapshot',
-              subtitle: 'Creates account-bound encrypted .tvmeta',
+              subtitle: 'Recovery key + passphrase protected .tvmeta',
               loading: _exporting,
               onTap: _exporting ? null : _exportMetadata,
             ),
@@ -77,7 +78,8 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
             _actionCard(
               icon: Icons.download_rounded,
               title: 'Import Metadata Snapshot',
-              subtitle: 'Requires the same Telegram account and passphrase',
+              subtitle:
+                  'Requires the original recovery key, account, and passphrase',
               loading: _importing,
               onTap: _importing ? null : _importMetadata,
             ),
@@ -244,25 +246,30 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
     if (!mounted) return;
 
     setState(() => _exporting = true);
+    io.File? file;
     try {
-      final file = await ref
-          .read(metadataBackupServiceProvider)
-          .exportEncryptedSnapshot(passphrase: passphrase);
+      final exported = await _withRecoveryKeyPrompt(
+        () => ref
+            .read(metadataBackupServiceProvider)
+            .exportEncryptedSnapshot(passphrase: passphrase),
+      );
+      file = exported;
       await Share.shareXFiles([
-        XFile(file.path),
+        XFile(exported.path),
       ], text: 'TeleVault metadata snapshot');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Snapshot exported: ${file.path}')),
+          const SnackBar(content: Text('Encrypted metadata snapshot shared.')),
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: ${_safeError(error)}')),
+        );
       }
     } finally {
+      if (file != null && await file.exists()) await file.delete();
       if (mounted) setState(() => _exporting = false);
     }
   }
@@ -281,9 +288,11 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       final path = result?.files.single.path;
       if (path == null || path.isEmpty) return;
 
-      await ref
-          .read(metadataBackupServiceProvider)
-          .importEncryptedSnapshot(io.File(path), passphrase: passphrase);
+      await _withRecoveryKeyPrompt(
+        () => ref
+            .read(metadataBackupServiceProvider)
+            .importEncryptedSnapshot(io.File(path), passphrase: passphrase),
+      );
       await ref.read(syncServiceProvider).syncNow(ignoreConstraints: false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -292,11 +301,11 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
           ),
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: ${_safeError(error)}')),
+        );
       }
     } finally {
       if (mounted) setState(() => _importing = false);
@@ -357,16 +366,16 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Safe Uninstall backup completed')),
       );
-    } catch (e) {
-      debugPrint('Safe Uninstall backup failed: $e');
+    } catch (error) {
+      final message = _safeError(error);
       if (!mounted) return;
       setState(() {
         _safeUninstallCompleted = false;
-        _safeUninstallStatus = 'Safe Uninstall failed: $e';
+        _safeUninstallStatus = 'Safe Uninstall failed: $message';
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Safe Uninstall failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Safe Uninstall failed: $message')),
+      );
     } finally {
       if (mounted) setState(() => _safeUninstallBackingUp = false);
     }
@@ -394,7 +403,7 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
       SafeUninstallStep.uploadingMedia =>
         'Auto-backup is paused. Waiting for the current upload to finish...',
       SafeUninstallStep.exportingMetadata =>
-        'Creating the latest account-bound metadata snapshot...',
+        'Creating a Recovery-Key protected account-bound snapshot...',
       SafeUninstallStep.uploadingMetadata =>
         'Uploading metadata to the private TeleVault metadata channel...',
       SafeUninstallStep.complete => 'Safe Uninstall backup completed.',
@@ -404,21 +413,49 @@ class _MetadataBackupScreenState extends ConsumerState<MetadataBackupScreen> {
   Future<void> _runMetadataBackupNow() async {
     setState(() => _metadataBackupNow = true);
     try {
-      final result = await ref
-          .read(autoMetadataBackupServiceProvider)
-          .backupNow(reason: 'manual');
+      final result = await _withRecoveryKeyPrompt(
+        () => ref
+            .read(autoMetadataBackupServiceProvider)
+            .backupNow(reason: 'manual'),
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Metadata backed up: ${result.messageId}')),
       );
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Metadata backup failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Metadata backup failed: ${_safeError(error)}')),
+      );
     } finally {
       if (mounted) setState(() => _metadataBackupNow = false);
     }
+  }
+
+  Future<T> _withRecoveryKeyPrompt<T>(Future<T> Function() operation) async {
+    try {
+      return await operation();
+    } on MetadataBackupException catch (error) {
+      if (error.code != MetadataBackupErrorCode.recoveryKeyRequired ||
+          !mounted) {
+        rethrow;
+      }
+      final ready = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => VaultRecoveryKeyScreen(
+            requireExistingKey: error.requiresExistingRecoveryKey,
+          ),
+        ),
+      );
+      if (ready != true) rethrow;
+      return operation();
+    }
+  }
+
+  String _safeError(Object error) {
+    if (error is MetadataBackupException) return error.message;
+    if (error is SafeUninstallBackupException) return error.message;
+    return 'The operation did not complete. Check your connection and try again.';
   }
 
   Future<void> _editAutoMetadataInterval() async {

@@ -349,7 +349,37 @@ class VaultService {
         'The legacy Vault credential is required for this file.',
       );
     }
-    return _decryptLegacy(encryptedFile, legacySecret);
+    return _decryptLegacy(
+      encryptedFile,
+      legacySecret,
+      // Legacy v1 has no version marker, so its random IV can begin with the
+      // v2 marker. Authenticated fallback resolves that ambiguity safely.
+      formatVersion: format == 1 ? 1 : null,
+    );
+  }
+
+  Future<File> decryptLegacyFile(
+    File encryptedFile,
+    String legacySecret, {
+    required int formatVersion,
+  }) {
+    if (formatVersion != 1 && formatVersion != _legacyVersionV2) {
+      throw const VaultException(
+        VaultErrorCode.unsupportedVersion,
+        'The legacy vault format version is unsupported.',
+      );
+    }
+    if (legacySecret.isEmpty) {
+      throw const VaultException(
+        VaultErrorCode.wrongRecoveryKey,
+        'The legacy Vault credential is required for this file.',
+      );
+    }
+    return _decryptLegacy(
+      encryptedFile,
+      legacySecret,
+      formatVersion: formatVersion,
+    );
   }
 
   Future<int> detectFormatVersion(File encryptedFile) async {
@@ -425,6 +455,17 @@ class VaultService {
       if (entity is File && path.basename(entity.path).contains('.partial-')) {
         await entity.delete();
       }
+    }
+  }
+
+  Future<void> deleteAllLocalVaultFiles() async {
+    final temporaryDirectory = await _temporaryDirectoryProvider();
+    if (await temporaryDirectory.exists()) {
+      await temporaryDirectory.delete(recursive: true);
+    }
+    final vaultDirectory = await _vaultDirectoryProvider();
+    if (await vaultDirectory.exists()) {
+      await vaultDirectory.delete(recursive: true);
     }
   }
 
@@ -622,7 +663,11 @@ class VaultService {
   }
 
   // Legacy v1/v2 is deliberately read-only. New writes never use this path.
-  Future<File> _decryptLegacy(File encryptedFile, String secret) async {
+  Future<File> _decryptLegacy(
+    File encryptedFile,
+    String secret, {
+    int? formatVersion,
+  }) async {
     final bytes = await encryptedFile.readAsBytes();
     if (bytes.isEmpty) {
       throw const VaultException(
@@ -631,14 +676,70 @@ class VaultService {
       );
     }
 
+    final candidateVersions = formatVersion != null
+        ? <int>[formatVersion]
+        : bytes.first == _legacyVersionV2
+        ? <int>[_legacyVersionV2, 1]
+        : <int>[1];
+    Uint8List? plaintext;
+    Object? authenticationError;
+    for (final candidateVersion in candidateVersions) {
+      try {
+        plaintext = _decryptLegacyBytes(
+          bytes,
+          secret,
+          formatVersion: candidateVersion,
+        );
+        break;
+      } catch (error) {
+        authenticationError = error;
+      }
+    }
+    if (plaintext == null) {
+      throw VaultException(
+        VaultErrorCode.integrityFailure,
+        'The legacy vault object could not be authenticated.',
+        cause: authenticationError,
+      );
+    }
+
+    final directory = await _temporaryDirectoryProvider();
+    await directory.create(recursive: true);
+    final originalName = path
+        .basename(encryptedFile.path)
+        .replaceAll(RegExp(r'\.enc$'), '');
+    final extension = _safeExtension(originalName);
+    final destination = File(
+      path.join(directory.path, '${_objectIdFactory()}$extension'),
+    );
+    final partial = File('${destination.path}.partial-${_objectIdFactory()}');
+    try {
+      await partial.writeAsBytes(plaintext, flush: true);
+      return await partial.rename(destination.path);
+    } on FileSystemException catch (error) {
+      throw _translateFileError(error);
+    } finally {
+      if (await partial.exists()) await partial.delete();
+    }
+  }
+
+  Uint8List _decryptLegacyBytes(
+    Uint8List bytes,
+    String secret, {
+    required int formatVersion,
+  }) {
     late final Uint8List ivBytes;
     late final Uint8List cipherBytes;
-    Uint8List? salt;
-    var useLegacySha = false;
-    final version = bytes.first;
-    if (version == _legacyVersionV2 &&
-        bytes.length > (1 + _legacySaltLength + _nonceLength)) {
-      salt = Uint8List.fromList(bytes.sublist(1, 1 + _legacySaltLength));
+    late final legacy.Key key;
+    if (formatVersion == _legacyVersionV2) {
+      if (bytes.first != _legacyVersionV2 ||
+          bytes.length <= (1 + _legacySaltLength + _nonceLength)) {
+        throw const VaultException(
+          VaultErrorCode.truncatedContainer,
+          'The legacy v2 vault object is truncated.',
+        );
+      }
+      final salt = Uint8List.fromList(bytes.sublist(1, 1 + _legacySaltLength));
       ivBytes = Uint8List.fromList(
         bytes.sublist(
           1 + _legacySaltLength,
@@ -648,53 +749,27 @@ class VaultService {
       cipherBytes = Uint8List.fromList(
         bytes.sublist(1 + _legacySaltLength + _nonceLength),
       );
+      key = _legacyPbkdf2Key(secret, salt);
     } else {
       if (bytes.length <= _nonceLength) {
         throw const VaultException(
           VaultErrorCode.truncatedContainer,
-          'The legacy vault object is truncated.',
+          'The legacy v1 vault object is truncated.',
         );
       }
-      useLegacySha = true;
       ivBytes = Uint8List.fromList(bytes.sublist(0, _nonceLength));
       cipherBytes = Uint8List.fromList(bytes.sublist(_nonceLength));
+      key = _legacyShaKey(secret);
     }
-
-    try {
-      final key = useLegacySha
-          ? _legacyShaKey(secret)
-          : _legacyPbkdf2Key(secret, salt!);
-      final encrypter = legacy.Encrypter(
-        legacy.AES(key, mode: legacy.AESMode.gcm),
-      );
-      final plaintext = encrypter.decryptBytes(
+    final encrypter = legacy.Encrypter(
+      legacy.AES(key, mode: legacy.AESMode.gcm),
+    );
+    return Uint8List.fromList(
+      encrypter.decryptBytes(
         legacy.Encrypted(cipherBytes),
         iv: legacy.IV(ivBytes),
-      );
-      final directory = await _temporaryDirectoryProvider();
-      await directory.create(recursive: true);
-      final originalName = path
-          .basename(encryptedFile.path)
-          .replaceAll(RegExp(r'\.enc$'), '');
-      final extension = _safeExtension(originalName);
-      final destination = File(
-        path.join(directory.path, '${_objectIdFactory()}$extension'),
-      );
-      final partial = File('${destination.path}.partial-${_objectIdFactory()}');
-      try {
-        await partial.writeAsBytes(plaintext, flush: true);
-        return await partial.rename(destination.path);
-      } finally {
-        if (await partial.exists()) await partial.delete();
-      }
-    } catch (error) {
-      if (error is VaultException) rethrow;
-      throw VaultException(
-        VaultErrorCode.integrityFailure,
-        'The legacy vault object could not be authenticated.',
-        cause: error,
-      );
-    }
+      ),
+    );
   }
 
   LinkedHashMap<String, Object?> _buildPublicContext({
