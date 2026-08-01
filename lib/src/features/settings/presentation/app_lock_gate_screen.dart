@@ -343,7 +343,7 @@ class _LockCard extends StatelessWidget {
               ),
               SizedBox(height: AppResponsive.gap(context, 8, compact: 6)),
               const Text(
-                'Use your phone security or your TeleVault password.',
+                'Use your phone security to continue.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppTheme.textSecondary,
@@ -365,7 +365,7 @@ class _LockCard extends StatelessWidget {
                     label: Text(
                       processing
                           ? 'Checking phone security...'
-                          : 'Use Phone Security',
+                          : 'Unlock with phone',
                     ),
                   ),
                 ),

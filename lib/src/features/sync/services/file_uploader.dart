@@ -12,6 +12,7 @@ import '../../../core/database/local_media_access_state.dart';
 import '../../../core/services/diagnostics_service.dart';
 import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_gateway.dart';
+import '../../../core/services/telegram_message_content.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../backup/services/auto_metadata_backup_service.dart';
@@ -46,9 +47,11 @@ class FileUploader {
   final _progressController = StreamController<Map<String, double>>.broadcast();
   final Map<String, double> _currentProgress = {};
   final Map<String, String> _uploadProgressAliases = {};
+  final Set<int> _verifiedBucketIds = {};
 
   StreamSubscription? _progressSub;
   StreamSubscription? _pendingSub;
+  StreamSubscription? _bucketsSub;
   StreamSubscription? _constraintsSub;
   StreamSubscription<TelegramReliabilityState>? _telegramStateSub;
   Timer? _retryWakeTimer;
@@ -129,7 +132,10 @@ class FileUploader {
                   ),
             ))
             .watch()
-            .listen((_) => wake());
+            .listen((_) => unawaited(_wakeActiveBucket()));
+    _bucketsSub = _db.select(_db.buckets).watch().listen((_) {
+      unawaited(_wakeActiveBucket());
+    });
     _constraintsSub = _constraintsService.watchConstraintChanges().listen((_) {
       wake();
     });
@@ -254,6 +260,12 @@ class FileUploader {
     );
   }
 
+  Future<void> _wakeActiveBucket({bool ignoreConstraints = false}) async {
+    final bucketId = await _getActiveBucketId();
+    if (bucketId == null) return;
+    wake(ignoreConstraints: ignoreConstraints, bucketId: bucketId);
+  }
+
   void suspendBackgroundWakes() {
     _backgroundWakesSuspended = true;
     _queuedWake = null;
@@ -270,9 +282,11 @@ class FileUploader {
     _UploadWakeRequest? current,
     _UploadWakeRequest next,
   ) {
-    if (current == null || next.ignoreConstraints) return next;
-    if (current.ignoreConstraints) return current;
-    return next;
+    if (current == null || current.bucketId != next.bucketId) return next;
+    return _UploadWakeRequest(
+      ignoreConstraints: current.ignoreConstraints || next.ignoreConstraints,
+      bucketId: next.bucketId,
+    );
   }
 
   Future<void> drainQueueForTesting({
@@ -329,14 +343,19 @@ class FileUploader {
     _isUploading = true;
 
     try {
+      final targetBucketId = bucketId ?? await _getActiveBucketId();
+      if (targetBucketId == null) return;
+      await _reconcileRemoteConfirmations(targetBucketId);
       while (!_disposed && !_accountCleanupRequested) {
         if (!await _canUpload(ignoreConstraints: ignoreConstraints)) {
           break;
         }
 
+        if (await _getActiveBucketId() != targetBucketId) break;
+
         final nextFile = await _nextUploadCandidate(
           ignoreConstraints: ignoreConstraints,
-          bucketId: bucketId,
+          bucketId: targetBucketId,
         );
         if (nextFile == null) {
           break;
@@ -439,10 +458,85 @@ class FileUploader {
     }
   }
 
+  Future<void> _reconcileRemoteConfirmations(int bucketId) async {
+    if (_verifiedBucketIds.contains(bucketId)) return;
+    final bucket = await (_db.select(
+      _db.buckets,
+    )..where((table) => table.id.equals(bucketId))).getSingleOrNull();
+    if (bucket == null) return;
+    final claimedRows =
+        await (_db.select(_db.files)..where(
+              (table) =>
+                  table.bucketId.equals(bucketId) &
+                  table.status.equals(FileSyncStatus.synced.dbValue),
+            ))
+            .get();
+    if (claimedRows.isEmpty) {
+      _verifiedBucketIds.add(bucketId);
+      return;
+    }
+
+    final claimedIds = claimedRows
+        .map((row) => row.telegramMessageId)
+        .whereType<int>()
+        .toSet()
+        .toList();
+    final confirmedIds = <int>{};
+    try {
+      for (var offset = 0; offset < claimedIds.length; offset += 100) {
+        final end = (offset + 100).clamp(0, claimedIds.length);
+        confirmedIds.addAll(
+          await _telegramReliability.findConfirmedMessages(
+            chatId: bucket.chatId,
+            messageIds: claimedIds.sublist(offset, end),
+          ),
+        );
+      }
+    } catch (_) {
+      // Verification is retried later; an offline check never invalidates data.
+      return;
+    }
+
+    final missingRowIds = claimedRows
+        .where(
+          (row) =>
+              row.telegramMessageId == null ||
+              !confirmedIds.contains(row.telegramMessageId),
+        )
+        .map((row) => row.id)
+        .toList();
+    for (var offset = 0; offset < missingRowIds.length; offset += 400) {
+      final end = (offset + 400).clamp(0, missingRowIds.length);
+      await (_db.update(
+        _db.files,
+      )..where((table) => table.id.isIn(missingRowIds.sublist(offset, end)))).write(
+        FilesCompanion(
+          status: Value(FileSyncStatus.failed.dbValue),
+          telegramMessageId: const Value(null),
+          nextRetryAt: const Value(null),
+          lastError: const Value(
+            'Telegram could not confirm this backup. Retry to upload it again.',
+          ),
+          telegramErrorCode: const Value(404),
+          telegramErrorCategory: Value(TelegramErrorCategory.transient.name),
+          telegramRetryAfter: const Value(null),
+          lastTelegramOperation: const Value('verify_remote_backup'),
+          userActionRequired: const Value(false),
+        ),
+      );
+    }
+    _verifiedBucketIds.add(bucketId);
+  }
+
   Future<int> retryFailed({int? limit, int? bucketId}) async {
     final gate = _telegramReliability.currentState;
     if (gate.isBlockedAt(DateTime.now())) {
       _scheduleWakeAt(gate.blockedUntil);
+      return 0;
+    }
+    final targetBucketId = bucketId ?? await _getActiveBucketId();
+    if (targetBucketId == null ||
+        await _getActiveBucketId() != targetBucketId) {
       return 0;
     }
     final failedRows =
@@ -453,9 +547,7 @@ class FileUploader {
                     t.localMediaAccessState.equals(
                       LocalMediaAccessState.available.dbValue,
                     ) &
-                    (bucketId == null
-                        ? const Constant(true)
-                        : t.bucketId.equals(bucketId)),
+                    t.bucketId.equals(targetBucketId),
               )
               ..orderBy([
                 (t) => OrderingTerm(
@@ -497,7 +589,7 @@ class FileUploader {
       ),
     );
 
-    wake(bucketId: bucketId);
+    wake(bucketId: targetBucketId);
     return ids.length;
   }
 
@@ -776,7 +868,7 @@ class FileUploader {
       file,
       preferences.uploadFormat,
       uploadPath,
-      {'@type': 'inputFileLocal', 'path': uploadPath},
+      TelegramMessageContent.localFile(uploadPath),
     );
     return _telegramReliability.sendMessageAndWait(
       operation: 'upload_media',
@@ -792,49 +884,22 @@ class FileUploader {
     String uploadPath,
     Map<String, dynamic> inputFile,
   ) {
-    final caption = {
-      '@type': 'formattedText',
-      'text':
-          uploadFormat == SyncUploadFormat.compressedMedia &&
-              _isCompressibleMedia(file)
-          ? 'Backed up by TeleVault (compressed media)'
-          : 'Backed up by TeleVault',
-    };
+    final caption =
+        uploadFormat == SyncUploadFormat.compressedMedia &&
+            _isCompressibleMedia(file)
+        ? 'Backed up by TeleVault (compressed media)'
+        : 'Backed up by TeleVault';
     if (uploadFormat == SyncUploadFormat.compressedMedia &&
         _isCompressibleMedia(file)) {
       if (_isImagePath(uploadPath)) {
-        return {
-          '@type': 'inputMessagePhoto',
-          'photo': inputFile,
-          'thumbnail': null,
-          'added_sticker_file_ids': <int>[],
-          'width': 0,
-          'height': 0,
-          'caption': caption,
-        };
+        return TelegramMessageContent.photo(file: inputFile, caption: caption);
       }
       if (_isVideoPath(uploadPath)) {
-        return {
-          '@type': 'inputMessageVideo',
-          'video': inputFile,
-          'thumbnail': null,
-          'added_sticker_file_ids': <int>[],
-          'duration': 0,
-          'width': 0,
-          'height': 0,
-          'supports_streaming': true,
-          'caption': caption,
-        };
+        return TelegramMessageContent.video(file: inputFile, caption: caption);
       }
     }
 
-    return {
-      '@type': 'inputMessageDocument',
-      'document': inputFile,
-      'thumbnail': null,
-      'disable_content_type_detection': false,
-      'caption': caption,
-    };
+    return TelegramMessageContent.document(file: inputFile, caption: caption);
   }
 
   bool _isCompressibleMedia(File file) {
@@ -890,6 +955,16 @@ class FileUploader {
     return null;
   }
 
+  Future<int?> _getActiveBucketId() async {
+    final active =
+        await (_db.select(_db.buckets)
+              ..where((bucket) => bucket.isActive.equals(true))
+              ..orderBy([(bucket) => OrderingTerm.asc(bucket.id)])
+              ..limit(1))
+            .getSingleOrNull();
+    return active?.id;
+  }
+
   Future<void> _scheduleNextWake() async {
     if (_disposed) return;
     final gate = _telegramReliability.currentState;
@@ -933,6 +1008,7 @@ class FileUploader {
     _queuedWake = null;
     await _progressSub?.cancel();
     await _pendingSub?.cancel();
+    await _bucketsSub?.cancel();
     await _constraintsSub?.cancel();
     await _telegramStateSub?.cancel();
     _retryWakeTimer?.cancel();

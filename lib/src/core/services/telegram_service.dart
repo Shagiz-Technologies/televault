@@ -89,9 +89,9 @@ class TelegramService implements TelegramGateway {
         unawaited(_writeIosSmokeMarker());
       }
       _startEventLoop();
-    } catch (e) {
-      _initializationError = e;
-      debugPrint('TDLib initialization failed: $e');
+    } catch (error) {
+      _initializationError = error;
+      debugPrint('TDLib initialization failed.');
     }
   }
 
@@ -144,8 +144,8 @@ class TelegramService implements TelegramGateway {
       await File(
         p.join(Directory.systemTemp.path, 'televault_tdlib_ready'),
       ).writeAsString('ready', flush: true);
-    } catch (error) {
-      debugPrint('Unable to write iOS smoke marker: $error');
+    } catch (_) {
+      debugPrint('Unable to write the iOS smoke marker.');
     }
   }
 
@@ -192,8 +192,8 @@ class TelegramService implements TelegramGateway {
       if (!_updatesController.isClosed) {
         _updatesController.add(update);
       }
-    } catch (e) {
-      debugPrint('TDLib update parse error: $e');
+    } catch (_) {
+      debugPrint('TDLib update parsing failed.');
     }
   }
 
@@ -218,7 +218,7 @@ class TelegramService implements TelegramGateway {
   @override
   void send(Map<String, dynamic> request) {
     if (!_isInitialized || _isDisposed) {
-      debugPrint('TDLib send skipped: ${unavailableReason ?? 'unavailable'}');
+      debugPrint('TDLib send skipped because the engine is unavailable.');
       return;
     }
     final payload = Map<String, dynamic>.from(request);
@@ -412,6 +412,17 @@ class TelegramService implements TelegramGateway {
     throw StateError('Telegram service is disposed');
   }
 
+  @override
+  Future<void> waitUntilReady({
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    final authState = await prepareAuthorization(timeout: timeout);
+    final type = authState['@type']?.toString();
+    if (type != 'authorizationStateReady') {
+      throw StateError('Telegram session is not ready. Current state: $type');
+    }
+  }
+
   Future<Map<String, dynamic>> refreshAuthorizationState({
     Duration timeout = const Duration(seconds: 8),
   }) {
@@ -431,8 +442,8 @@ class TelegramService implements TelegramGateway {
             event['authorization_state'] as Map<String, dynamic>? ?? {};
         return authState['@type'] == 'authorizationStateClosed';
       }, timeout: const Duration(seconds: 10));
-    } catch (e) {
-      debugPrint('TDLib auth reset continued after destroy warning: $e');
+    } catch (_) {
+      debugPrint('TDLib auth reset continued after a destroy warning.');
     }
 
     _clientId = _tdJson.td_create_client_id();
@@ -597,16 +608,16 @@ class TelegramService implements TelegramGateway {
   Future<void> _setTdlibParametersSafely() async {
     try {
       await setTdlibParameters();
-    } catch (e) {
-      debugPrint('TDLib parameter setup failed: $e');
+    } catch (_) {
+      debugPrint('TDLib parameter setup failed.');
     }
   }
 
   Future<void> _checkDatabaseEncryptionKeySafely() async {
     try {
       await checkDatabaseEncryptionKey();
-    } catch (e) {
-      debugPrint('TDLib database key check failed: $e');
+    } catch (_) {
+      debugPrint('TDLib database key check failed.');
     }
   }
 

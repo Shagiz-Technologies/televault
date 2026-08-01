@@ -11,7 +11,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          themeMode: ThemeMode.dark,
+          themeMode: ThemeMode.light,
+          theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           home: Builder(
             builder: (context) {
@@ -50,6 +51,7 @@ void main() {
         BorderStyle.solid,
       );
       expect(border.borderSide.width, greaterThan(0));
+      expect(field.style?.color, isNot(Colors.white));
 
       await tester.tap(find.byTooltip('Show').first);
       await tester.pumpAndSettle();
@@ -69,4 +71,44 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('secure text dialog remains usable in compact landscape', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(640, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: FilledButton(
+              onPressed: () {
+                showSecureTextDialog(
+                  context,
+                  title: 'Safe Uninstall',
+                  description:
+                      'Protect the metadata snapshot with a passphrase.',
+                  fieldLabel: 'Passphrase',
+                  actionLabel: 'Continue',
+                  confirmLabel: 'Confirm passphrase',
+                  minLength: 8,
+                  requireConfirmation: true,
+                );
+              },
+              child: const Text('Open compact dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open compact dialog'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Safe Uninstall'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -19,9 +19,8 @@ Future<void> main() async {
     () {
       runApp(const ProviderScope(child: TeleVaultApp()));
     },
-    (error, stack) {
-      debugPrint('Global error: $error');
-      debugPrintStack(stackTrace: stack);
+    (_, _) {
+      debugPrint('Unhandled application error.');
     },
   );
 }

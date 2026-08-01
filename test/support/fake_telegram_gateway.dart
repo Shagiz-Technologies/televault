@@ -26,6 +26,11 @@ class FakeTelegramGateway implements TelegramGateway {
   }
 
   @override
+  Future<void> waitUntilReady({
+    Duration timeout = const Duration(seconds: 45),
+  }) async {}
+
+  @override
   Future<TelegramResult> request(
     TelegramRequest request, {
     Duration timeout = const Duration(seconds: 15),

@@ -28,43 +28,47 @@ class MainScreen extends ConsumerWidget {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.paper,
       body: IndexedStack(index: currentIndex, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          if (index == 0) {
-            unawaited(
-              ref.read(libraryControllerProvider.notifier).showAllPhotos(),
-            );
-          }
-          ref.read(mainTabIndexProvider.notifier).state = index;
-        },
-        backgroundColor: Colors.black,
-        indicatorColor: AppTheme.primary.withValues(alpha: 0.15),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.photo_library_outlined),
-            selectedIcon: Icon(Icons.photo_library),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.photo_album_outlined),
-            selectedIcon: Icon(Icons.photo_album),
-            label: 'Albums',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.lock_outline),
-            selectedIcon: Icon(Icons.lock),
-            label: 'Vault',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppTheme.surface,
+          border: Border(top: BorderSide(color: AppTheme.outline)),
+        ),
+        child: NavigationBar(
+          selectedIndex: currentIndex,
+          onDestinationSelected: (index) {
+            if (index == 0) {
+              unawaited(
+                ref.read(libraryControllerProvider.notifier).showAllPhotos(),
+              );
+            }
+            ref.read(mainTabIndexProvider.notifier).state = index;
+          },
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.photo_library_outlined),
+              selectedIcon: Icon(Icons.photo_library_rounded),
+              label: 'Library',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.photo_album_outlined),
+              selectedIcon: Icon(Icons.photo_album_rounded),
+              label: 'Albums',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.lock_outline_rounded),
+              selectedIcon: Icon(Icons.lock_rounded),
+              label: 'Vault',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings_rounded),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

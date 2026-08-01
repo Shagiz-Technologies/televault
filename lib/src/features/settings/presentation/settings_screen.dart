@@ -5,6 +5,7 @@ import 'package:gap/gap.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_service.dart';
@@ -29,246 +30,198 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch active bucket for the "Current Bucket" tile
-    final bucketFuture = ref.watch(bucketServiceProvider).getActiveBucket();
+    final activeBucket = ref.watch(activeBucketProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: const Text(
-          "Settings",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: AppResponsive.pagePaddingWithBottomSafe(
-          context,
-          horizontal: 16,
-          top: 16,
-          bottomExtra: 24,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Profile Card
-            _buildProfileCard(context),
-            const Gap(24),
-
-            // 2. Backup Storage Section
-            const Text(
-              "Backup Storage",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const Gap(12),
-            FutureBuilder(
-              future: bucketFuture,
-              builder: (context, snapshot) {
-                final bucketName = snapshot.data?.name ?? "No Bucket Selected";
-                return _buildSectionTile(
+      appBar: AppBar(title: const Text('Settings')),
+      body: TeleVaultPage(
+        safeTop: false,
+        safeBottom: false,
+        child: SingleChildScrollView(
+          padding: AppResponsive.pagePaddingWithBottomSafe(
+            context,
+            horizontal: 16,
+            top: 8,
+            bottomExtra: 24,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildProfileCard(context),
+              const Gap(20),
+              const TeleVaultSectionTitle(title: 'Backup'),
+              const Gap(7),
+              _settingsGroup([
+                _buildSectionTile(
                   context,
                   icon: Icons.cloud_outlined,
-                  title: "Current Bucket",
-                  subtitle: bucketName,
+                  title: 'Backup spaces',
+                  subtitle: activeBucket.when(
+                    loading: () => 'Loading...',
+                    error: (_, _) => 'Unable to load',
+                    data: (bucket) => bucket?.name ?? 'No active space',
+                  ),
                   onTap: () {
                     showModalBottomSheet(
                       context: context,
                       backgroundColor: Colors.transparent,
                       isScrollControlled: true,
                       builder: (_) => const BucketSelectorSheet(),
-                    ).then((_) {
-                      // Force rebuild? relying on riverpod provider invalidation usually better
-                      // Ideally SettingsScreen listens to a Stream or StateNotifier.
-                    });
+                    );
                   },
-                );
-              },
-            ),
-            const Gap(24),
-            const Text(
-              "Sync & Recovery",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const Gap(12),
-            _buildSectionTile(
-              context,
-              icon: Icons.dashboard_customize_outlined,
-              title: "Sync Dashboard",
-              subtitle: "Queue status, sync now, retry failed",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SyncDashboardScreen(),
-                  ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.perm_media_outlined,
-              title: "Media Access",
-              subtitle: "Gallery scope and accessible item count",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const MediaPermissionDiagnosticsScreen(),
-                  ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.key_rounded,
-              title: "Vault Recovery Key",
-              subtitle: "Export or import your portable recovery key",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (unlockContext) => VaultPinScreen(
-                      mode: VaultPinMode.unlock,
-                      onUnlock: (_) {
-                        Navigator.pop(unlockContext);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const VaultRecoveryKeyScreen(),
-                          ),
-                        );
-                      },
+                  icon: Icons.donut_large_rounded,
+                  title: 'Backup status',
+                  subtitle: 'Live progress, queue, and retries',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SyncDashboardScreen(),
                     ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.tune,
-              title: "Sync Preferences",
-              subtitle: "Albums, media types, size limits",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SyncPreferencesScreen(),
+                  icon: Icons.perm_media_outlined,
+                  title: 'Media access',
+                  subtitle: 'Gallery scope and accessible item count',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MediaPermissionDiagnosticsScreen(),
+                    ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.file_copy_outlined,
-              title: "Metadata Backup",
-              subtitle: "Export/import encrypted .tvmeta",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const MetadataBackupScreen(),
+                  icon: Icons.tune_rounded,
+                  title: 'Sync preferences',
+                  subtitle: 'Media, albums, quality, and limits',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SyncPreferencesScreen(),
+                    ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.analytics_outlined,
-              title: "Diagnostics",
-              subtitle: "Operational counters only",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(builder: (_) => const DiagnosticsScreen()),
-                );
-              },
-            ),
-
-            const Gap(24),
-
-            // 3. Preferences Section
-            const Text(
-              "Preferences",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const Gap(12),
-            _buildSectionTile(
-              context,
-              icon: Icons.lock,
-              title: "Set Vault PIN",
-              subtitle: "Protect your vaulted files",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const VaultPinScreen(mode: VaultPinMode.set),
+                  icon: Icons.storage_outlined,
+                  title: 'Metadata backup',
+                  subtitle: 'Recovery and Safe Uninstall',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MetadataBackupScreen(),
+                    ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.lock_clock_outlined,
-              title: "App Lock",
-              subtitle: "PIN, password, or biometric",
-              onTap: () {
-                Navigator.push(
+                ),
+              ]),
+              const Gap(20),
+              const TeleVaultSectionTitle(title: 'Security'),
+              const Gap(7),
+              _settingsGroup([
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const AppLockSettingsScreen(),
+                  icon: Icons.shield_outlined,
+                  title: 'Vault security',
+                  subtitle: 'Password, PIN, or phone security',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const VaultPinScreen(mode: VaultPinMode.set),
+                    ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.shield_outlined,
-              title: "Privacy Policy",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const PrivacyPolicyScreen(),
+                  icon: Icons.key_rounded,
+                  title: 'Vault recovery key',
+                  subtitle: 'Export or import your portable recovery key',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (unlockContext) => VaultPinScreen(
+                        mode: VaultPinMode.unlock,
+                        onUnlock: (_) {
+                          Navigator.pop(unlockContext);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const VaultRecoveryKeyScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.new_releases_outlined,
-              title: "Release Log",
-              subtitle: "Features included in each release",
-              onTap: () {
-                Navigator.push(
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(builder: (_) => const ReleaseLogScreen()),
-                );
-              },
-            ),
-            const Gap(8),
-            _buildSectionTile(
-              context,
-              icon: Icons.info_outline,
-              title: "About TeleVault",
-              onTap: () {
-                Navigator.push(
+                  icon: Icons.phonelink_lock_rounded,
+                  title: 'App lock',
+                  subtitle: 'Phone security or TeleVault password',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AppLockSettingsScreen(),
+                    ),
+                  ),
+                ),
+                _buildSectionTile(
                   context,
-                  MaterialPageRoute(builder: (_) => const AboutScreen()),
-                );
-              },
-            ),
-            const Gap(12),
-          ],
+                  icon: Icons.visibility_outlined,
+                  title: 'Privacy & transparency',
+                  subtitle: 'What leaves your device and why',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const PrivacyPolicyScreen(),
+                    ),
+                  ),
+                ),
+              ]),
+              const Gap(20),
+              const TeleVaultSectionTitle(title: 'TeleVault'),
+              const Gap(7),
+              _settingsGroup([
+                _buildSectionTile(
+                  context,
+                  icon: Icons.monitor_heart_outlined,
+                  title: 'Diagnostics',
+                  subtitle: 'Local operational details',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DiagnosticsScreen(),
+                    ),
+                  ),
+                ),
+                _buildSectionTile(
+                  context,
+                  icon: Icons.new_releases_outlined,
+                  title: "What's new",
+                  subtitle: 'Features in each release',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ReleaseLogScreen()),
+                  ),
+                ),
+                _buildSectionTile(
+                  context,
+                  icon: Icons.info_outline_rounded,
+                  title: 'About TeleVault',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AboutScreen()),
+                  ),
+                ),
+              ]),
+            ],
+          ),
         ),
       ),
     );
@@ -301,129 +254,72 @@ class SettingsScreen extends ConsumerWidget {
             // Storage Sync Stream (separate)
             final storageFuture = _getStorageStats(db);
 
-            return Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            return TeleVaultCard(
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: AppTheme.primary,
-                        backgroundImage: photoPath != null
-                            ? FileImage(io.File(photoPath))
-                            : null,
-                        onBackgroundImageError: photoPath != null
-                            ? (_, _) {
-                                // Handle error
-                              }
-                            : null,
-                        child: photoPath == null
-                            ? Text(
-                                userName.isNotEmpty
-                                    ? userName[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const Gap(16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                                color: Colors.white,
-                              ),
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: AppTheme.primary,
+                    backgroundImage: photoPath != null
+                        ? FileImage(io.File(photoPath))
+                        : null,
+                    onBackgroundImageError: photoPath != null
+                        ? (_, _) {}
+                        : null,
+                    child: photoPath == null
+                        ? Text(
+                            userName.isNotEmpty
+                                ? userName[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          )
+                        : null,
+                  ),
+                  const Gap(13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const Gap(3),
+                        FutureBuilder<Map<String, String>>(
+                          future: storageFuture,
+                          builder: (context, storeSnap) {
+                            final stats = storeSnap.data?['stats'] ?? '';
+                            return Text(
+                              stats.isEmpty ? 'Telegram connected' : stats,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                            ),
-                            FutureBuilder<Map<String, String>>(
-                              future: storageFuture,
-                              builder: (context, storeSnap) {
-                                final stats = storeSnap.data?['stats'] ?? '';
-                                if (stats.isEmpty) {
-                                  return const SizedBox.shrink();
-                                }
-                                return Text(
-                                  stats,
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 14,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppTheme.inkMuted),
+                            );
+                          },
                         ),
-                      ),
-                    ],
+                        const Gap(6),
+                        const TeleVaultStatusPill(
+                          label: 'Telegram connected',
+                          icon: Icons.circle,
+                          color: AppTheme.success,
+                          compact: true,
+                        ),
+                      ],
+                    ),
                   ),
-                  const Gap(24),
-                  FutureBuilder<Map<String, String>>(
-                    future: storageFuture,
-                    builder: (context, storeSnap) {
-                      final storage =
-                          storeSnap.data?['storage'] ?? 'Calculating...';
-                      final progress =
-                          double.tryParse(storeSnap.data?['progress'] ?? '0') ??
-                          0.0;
-                      return Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                "Storage Used",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              Text(
-                                storage,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Gap(8),
-                          LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            backgroundColor: Colors.grey[800],
-                            color: AppTheme.primary,
-                            minHeight: 6,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  const Gap(16),
-                  _buildSectionTile(
-                    context,
-                    icon: Icons.logout_rounded,
-                    title: "Logout",
-                    onTap: () => _handleLogout(context, ref),
-                  ),
-                  const Gap(32),
-                  // App Info
-                  const Center(
-                    child: Text(
-                      "TeleVault",
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                  IconButton(
+                    tooltip: 'Log out',
+                    onPressed: () => _handleLogout(context, ref),
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: AppTheme.inkMuted,
                     ),
                   ),
                 ],
@@ -500,8 +396,8 @@ class SettingsScreen extends ConsumerWidget {
       final me = await telegram.request({'@type': 'getMe'});
       myUserId = _extractInt(me['id']);
       yield await _parseUser(telegram, me);
-    } catch (e) {
-      debugPrint('Error fetching profile: $e');
+    } catch (_) {
+      debugPrint('Unable to refresh the Telegram profile.');
       return;
     }
 
@@ -644,7 +540,7 @@ class SettingsScreen extends ConsumerWidget {
           'progress': progress.toString(),
         };
       }
-    } catch (e) {
+    } catch (_) {
       return {'storage': '0 B', 'stats': 'Error', 'progress': '0'};
     }
   }
@@ -671,6 +567,21 @@ class SettingsScreen extends ConsumerWidget {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  Widget _settingsGroup(List<Widget> children) {
+    return TeleVaultCard(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Column(
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index < children.length - 1)
+              const Divider(height: 1, indent: 64),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionTile(
     BuildContext context, {
     required IconData icon,
@@ -678,31 +589,11 @@ class SettingsScreen extends ConsumerWidget {
     String? subtitle,
     VoidCallback? onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Icon(icon, color: Colors.grey),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: subtitle != null
-            ? Text(subtitle, style: const TextStyle(color: AppTheme.primary))
-            : null,
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          color: Colors.grey,
-          size: 16,
-        ),
-        onTap: onTap,
-      ),
+    return TeleVaultSettingsTile(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      onTap: onTap,
     );
   }
 }

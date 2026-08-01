@@ -96,7 +96,12 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
       surfaceTintColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       scrollable: true,
-      title: Text(widget.title),
+      icon: const CircleAvatar(
+        radius: 24,
+        backgroundColor: AppTheme.primarySoft,
+        child: Icon(Icons.lock_outline_rounded, color: AppTheme.primary),
+      ),
+      title: Text(widget.title, textAlign: TextAlign.center),
       content: SingleChildScrollView(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -124,7 +129,6 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
                 textInputAction: _confirmationVisible
                     ? TextInputAction.next
                     : TextInputAction.done,
-                style: const TextStyle(color: Colors.white),
                 decoration: _fieldDecoration(
                   label: widget.fieldLabel,
                   hint: widget.hintText,
@@ -155,7 +159,6 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
                   keyboardType: widget.keyboardType,
                   maxLength: widget.maxLength,
                   textInputAction: TextInputAction.done,
-                  style: const TextStyle(color: Colors.white),
                   decoration: _fieldDecoration(label: widget.confirmLabel),
                   onSubmitted: (_) => _submit(),
                 ),
@@ -185,7 +188,7 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
+        FilledButton(onPressed: _submit, child: Text(widget.actionLabel)),
       ],
     );
   }
@@ -201,10 +204,10 @@ class _SecureTextDialogState extends State<_SecureTextDialog> {
       suffixIcon: suffix,
       counterText: '',
       filled: true,
-      fillColor: const Color(0xFF111217),
+      fillColor: AppTheme.paperMuted,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.22)),
+        borderSide: const BorderSide(color: AppTheme.outline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),

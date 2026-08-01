@@ -11,6 +11,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_gateway.dart';
 import '../../../core/services/telegram_error.dart';
+import '../../../core/services/telegram_message_content.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import 'metadata_backup_service.dart';
@@ -71,6 +72,7 @@ class AutoMetadataBackupService {
   static const _keyLastMessageId = 'metadata_default_channel_message_id';
   static const _keyUploadedSinceBackup = 'metadata_uploaded_since_backup';
   static const _keyBackupEveryFiles = 'metadata_backup_every_files';
+  static const _keyLastBackupAt = 'metadata_last_backup_at';
   static const _keyVerifiedSnapshots = 'metadata_verified_snapshots_v5';
   static const _captionPrefix = 'TeleVault Metadata Backup';
   static const remoteSnapshotRetention = 2;
@@ -109,6 +111,10 @@ class AutoMetadataBackupService {
         ? minBackupEveryFiles
         : value;
     await _setSetting(_keyBackupEveryFiles, normalized.toString());
+  }
+
+  Future<DateTime?> getLastBackupAt() async {
+    return DateTime.tryParse(await _getSetting(_keyLastBackupAt) ?? '');
   }
 
   Future<void> noteMediaUploadCompleted() async {
@@ -176,9 +182,11 @@ class AutoMetadataBackupService {
         (entry) => entry.chatId == chatId && entry.messageId == messageId,
       );
       history.insert(0, verified);
+      final completedAt = DateTime.now();
 
       await _setSetting(_keyChatId, chatId.toString());
       await _setSetting(_keyLastMessageId, messageId.toString());
+      await _setSetting(_keyLastBackupAt, completedAt.toIso8601String());
       await _setSetting(_keyUploadedSinceBackup, '0');
       await _saveVerifiedSnapshots(history);
       await _pruneVerifiedSnapshots(history);
@@ -186,7 +194,7 @@ class AutoMetadataBackupService {
       return AutoMetadataBackupResult(
         chatId: chatId,
         messageId: messageId,
-        completedAt: DateTime.now(),
+        completedAt: completedAt,
       );
     } finally {
       if (snapshot != null && await snapshot.exists()) {
@@ -487,13 +495,10 @@ class AutoMetadataBackupService {
     return _telegramReliability.sendMessageAndWait(
       operation: 'upload_metadata',
       chatId: chatId,
-      inputMessageContent: {
-        '@type': 'inputMessageDocument',
-        'document': {'@type': 'inputFileLocal', 'path': snapshot.path},
-        'thumbnail': null,
-        'disable_content_type_detection': false,
-        'caption': {'@type': 'formattedText', 'text': captionText},
-      },
+      inputMessageContent: TelegramMessageContent.document(
+        file: TelegramMessageContent.localFile(snapshot.path),
+        caption: captionText,
+      ),
       timeout: const Duration(minutes: 5),
     );
   }

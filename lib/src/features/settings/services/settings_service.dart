@@ -75,6 +75,13 @@ final settingsServiceProvider = Provider<SettingsService>((ref) {
   );
 });
 
+final bucketSyncPreferencesProvider = StreamProvider.autoDispose
+    .family<SyncPreferences, int>((ref, bucketId) {
+      return ref
+          .watch(settingsServiceProvider)
+          .watchSyncPreferences(bucketId: bucketId);
+    });
+
 class SettingsService {
   final AppDatabase _db;
   final int Function() _effectiveMaxFileSizeMb;
@@ -200,6 +207,9 @@ class SettingsService {
     final writeGlobal = bucketId == null || bucketId == await getMainBucketId();
     await _db.transaction(() async {
       await _writeSyncPreferences(preferences, bucketId: bucketId);
+      if (bucketId != null) {
+        await _writeBucketMediaScope(bucketId, preferences);
+      }
       if (writeGlobal && bucketId != null) {
         await _writeSyncPreferences(preferences);
       }
@@ -331,6 +341,21 @@ class SettingsService {
     await _upsert(
       _keyForScope(keyDiagnosticsEnabled, bucketId),
       preferences.diagnosticsEnabled.toString(),
+    );
+  }
+
+  Future<void> _writeBucketMediaScope(
+    int bucketId,
+    SyncPreferences preferences,
+  ) async {
+    final mediaTypes = [
+      if (preferences.includePhotos) 'photo',
+      if (preferences.includeVideos) 'video',
+    ];
+    if (mediaTypes.isEmpty) return;
+
+    await (_db.update(_db.buckets)..where((t) => t.id.equals(bucketId))).write(
+      BucketsCompanion(allowedMediaTypes: Value(mediaTypes.join(','))),
     );
   }
 

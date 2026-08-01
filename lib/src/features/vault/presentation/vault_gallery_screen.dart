@@ -8,6 +8,8 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/database/file_sync_status.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/services/app_lock_controller.dart';
 import '../services/vault_pin_service.dart';
@@ -45,10 +47,26 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
     final db = ref.watch(databaseProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.secure,
       appBar: AppBar(
-        title: Text(_isSelecting ? '${_selectedIds.length} selected' : 'Vault'),
-        backgroundColor: Colors.black,
+        title: _isSelecting
+            ? Text('${_selectedIds.length} selected')
+            : const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Vault'),
+                  Text(
+                    'Encrypted on this device',
+                    style: TextStyle(
+                      color: AppTheme.encrypted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+        backgroundColor: AppTheme.secure,
+        foregroundColor: Colors.white,
         leading: _isSelecting
             ? IconButton(
                 onPressed: _exitSelectionMode,
@@ -67,11 +85,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
       body: StreamBuilder<List<File>>(
         stream:
             (db.select(db.files)
-                  ..where(
-                    (t) =>
-                        t.isVaulted.equals(true) &
-                        t.localPathResolved.equals(true),
-                  )
+                  ..where((t) => t.isVaulted.equals(true))
                   ..orderBy([(t) => OrderingTerm.desc(t.dateAdded)]))
                 .watch(),
         builder: (context, snapshot) {
@@ -82,26 +96,13 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
           final files = snapshot.data ?? [];
 
           if (files.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.lock_open_rounded, size: 80, color: Colors.grey),
-                  SizedBox(height: 20),
-                  Text(
-                    'Vault is Empty',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Select items in Library to hide them here',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
+            return Theme(
+              data: AppTheme.darkTheme,
+              child: const TeleVaultEmptyState(
+                icon: Icons.lock_open_rounded,
+                title: 'Your Vault is empty',
+                message:
+                    'Select media in Library and choose Vault to protect it.',
               ),
             );
           }
@@ -109,30 +110,49 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
           final encryptedCount = files.where((f) => f.isEncrypted).length;
 
           return ListView(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 110),
             children: [
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(16),
+                  color: AppTheme.secureSurface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppTheme.secureOutline),
                 ),
                 child: Row(
                   children: [
-                    const CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Color(0x222AA7FF),
-                      child: Icon(Icons.lock, color: AppTheme.primary),
+                    const TeleVaultIconBadge(
+                      icon: Icons.shield_outlined,
+                      color: AppTheme.encrypted,
+                      backgroundColor: Color(0x22D7A54A),
                     ),
                     const Gap(10),
                     Expanded(
-                      child: Text(
-                        '${files.length} secured item(s), $encryptedCount encrypted',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${files.length} private items',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            '$encryptedCount encrypted before upload',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                    const TeleVaultStatusPill(
+                      label: 'Encrypted',
+                      icon: Icons.shield_outlined,
+                      color: AppTheme.encrypted,
+                      compact: true,
                     ),
                   ],
                 ),
@@ -142,10 +162,10 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.9,
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
+                  childAspectRatio: 0.82,
                 ),
                 itemCount: files.length,
                 itemBuilder: (context, index) {
@@ -176,17 +196,18 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                             }
                             _toggleSelection(file);
                           },
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(14),
+                        color: AppTheme.secureSurface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.secureOutline),
                       ),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(12),
                             child: _buildVaultPreview(file),
                           ),
                           if (selected)
@@ -196,7 +217,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                                   color: AppTheme.primary.withValues(
                                     alpha: 0.28,
                                   ),
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: AppTheme.primary,
                                     width: 2,
@@ -226,49 +247,34 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
                               ),
                             ),
                           Positioned(
-                            left: 8,
-                            right: 8,
-                            bottom: 8,
+                            left: 7,
+                            bottom: 7,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
+                              width: 24,
+                              height: 24,
+                              alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.55),
-                                borderRadius: BorderRadius.circular(10),
+                                color: AppTheme.secure.withValues(alpha: 0.82),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: AppTheme.encrypted.withValues(
+                                    alpha: 0.65,
+                                  ),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    isEncrypted
-                                        ? Icons.lock
-                                        : Icons.lock_open_outlined,
-                                    size: 14,
-                                    color: Colors.white70,
-                                  ),
-                                  const Gap(6),
-                                  Expanded(
-                                    child: Text(
-                                      isEncrypted ? 'Encrypted' : 'Vaulted',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white70,
-                                      ),
-                                    ),
-                                  ),
-                                  if (busy)
-                                    const SizedBox(
-                                      width: 12,
-                                      height: 12,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                ],
+                              child: Icon(
+                                isEncrypted
+                                    ? Icons.shield_rounded
+                                    : Icons.lock_open_outlined,
+                                size: 13,
+                                color: AppTheme.encrypted,
                               ),
                             ),
                           ),
+                          if (busy)
+                            const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                         ],
                       ),
                     ),
@@ -287,39 +293,53 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
   }
 
   Widget _buildSelectionBar() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: _bulkBusy
-          ? const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _selectionAction(Icons.share_outlined, 'Share', _shareSelected),
-                const Gap(16),
-                _selectionAction(
-                  Icons.lock_open_rounded,
-                  'Restore',
-                  _restoreSelected,
-                ),
-                const Gap(16),
-                _selectionAction(
-                  Icons.delete_outline,
-                  'Delete',
-                  _deleteSelected,
-                  danger: true,
-                ),
-              ],
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: AppTheme.secureSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.secureOutline),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black38,
+              blurRadius: 20,
+              offset: Offset(0, 8),
             ),
+          ],
+        ),
+        child: _bulkBusy
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _selectionAction(
+                    Icons.share_outlined,
+                    'Share decrypted',
+                    _shareSelected,
+                  ),
+                  const Gap(6),
+                  _selectionAction(
+                    Icons.outbox_outlined,
+                    'Restore',
+                    _restoreSelected,
+                    color: AppTheme.success,
+                  ),
+                  const Gap(6),
+                  _selectionAction(
+                    Icons.delete_outline,
+                    'Delete',
+                    _deleteSelected,
+                    color: AppTheme.error,
+                  ),
+                ],
+              ),
+      ),
     );
   }
 
@@ -327,18 +347,32 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
     IconData icon,
     String label,
     VoidCallback onTap, {
-    bool danger = false,
+    Color color = Colors.white,
   }) {
-    final color = danger ? Colors.redAccent : Colors.white;
-    return GestureDetector(
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const Gap(4),
-          Text(label, style: TextStyle(color: color, fontSize: 11)),
-        ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 78, minHeight: 58),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 21),
+              const Gap(4),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -691,7 +725,7 @@ class _VaultGalleryScreenState extends ConsumerState<VaultGalleryScreen> {
           FilesCompanion(
             localPath: Value(original.path),
             size: Value(originalSize),
-            status: const Value(0),
+            status: Value(FileSyncStatus.pending.dbValue),
             telegramMessageId: const Value(null),
             telegramFileId: const Value(null),
             retryCount: const Value(0),

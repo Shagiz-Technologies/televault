@@ -194,6 +194,14 @@ void main() {
           'sending_state': {'@type': 'messageSendingStatePending'},
         };
       }
+      if (request['@type'] == 'getMessage') {
+        return {
+          '@type': 'message',
+          'id': 72,
+          'chat_id': 9001,
+          'sending_state': null,
+        };
+      }
       throw UnimplementedError('Unexpected request: ${request['@type']}');
     };
 
@@ -205,7 +213,87 @@ void main() {
     );
 
     expect(messageId, 72);
+    expect(gateway.requestCount('getMessage'), 1);
   });
+
+  test(
+    'captures a send-success update emitted before request returns',
+    () async {
+      final service = createService();
+      addTearDown(service.dispose);
+      await service.initialize();
+      gateway.handler = (request) {
+        if (request['@type'] == 'sendMessage') {
+          gateway.emit({
+            '@type': 'updateMessageSendSucceeded',
+            'old_message_id': 73,
+            'message': {'@type': 'message', 'id': 74, 'chat_id': 9001},
+          });
+          return {
+            '@type': 'message',
+            'id': 73,
+            'chat_id': 9001,
+            'sending_state': {'@type': 'messageSendingStatePending'},
+          };
+        }
+        if (request['@type'] == 'getMessage') {
+          return {
+            '@type': 'message',
+            'id': 74,
+            'chat_id': 9001,
+            'sending_state': null,
+          };
+        }
+        throw UnimplementedError('Unexpected request: ${request['@type']}');
+      };
+
+      final messageId = await service.sendMessageAndWait(
+        operation: 'upload_media',
+        chatId: BigInt.from(9001),
+        inputMessageContent: const {'@type': 'inputMessageDocument'},
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(messageId, 74);
+    },
+  );
+
+  test(
+    'a send response is not success until the message is retrievable',
+    () async {
+      final service = createService();
+      addTearDown(service.dispose);
+      await service.initialize();
+      gateway.handler = (request) {
+        if (request['@type'] == 'sendMessage') {
+          return {'@type': 'message', 'id': 91, 'chat_id': 9001};
+        }
+        if (request['@type'] == 'getMessage') {
+          return {
+            '@type': 'error',
+            'code': 404,
+            'message': 'MESSAGE_NOT_FOUND',
+          };
+        }
+        throw UnimplementedError('Unexpected request: ${request['@type']}');
+      };
+
+      await expectLater(
+        service.sendMessageAndWait(
+          operation: 'upload_media',
+          chatId: BigInt.from(9001),
+          inputMessageContent: const {'@type': 'inputMessageDocument'},
+          timeout: const Duration(seconds: 1),
+        ),
+        throwsA(
+          isA<TelegramError>()
+              .having((error) => error.canRetry, 'canRetry', isTrue)
+              .having((error) => error.code, 'code', 404),
+        ),
+      );
+      expect(gateway.requestCount('getMessage'), 4);
+    },
+  );
 
   test('nested send failure registers an exact gate', () async {
     final service = createService();

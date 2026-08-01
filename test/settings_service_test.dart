@@ -73,6 +73,9 @@ void main() {
 
     final global = await service.getSyncPreferences();
     final scoped = await service.getSyncPreferences(bucketId: mainBucketId);
+    final bucket = await (db.select(
+      db.buckets,
+    )..where((row) => row.id.equals(mainBucketId))).getSingle();
 
     expect(global.includeVideos, isFalse);
     expect(global.wifiOnly, isTrue);
@@ -81,6 +84,7 @@ void main() {
     expect(global.uploadFormat, SyncUploadFormat.compressedMedia);
     expect(scoped.includeVideos, global.includeVideos);
     expect(scoped.uploadFormat, global.uploadFormat);
+    expect(bucket.allowedMediaTypes, 'photo');
   });
 
   test(

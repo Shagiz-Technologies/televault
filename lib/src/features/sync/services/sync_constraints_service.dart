@@ -18,22 +18,39 @@ class SyncConstraintsService {
   SyncConstraintsService(this._settingsService);
 
   Future<bool> canRunAutomaticSync({int? bucketId}) async {
+    return await automaticSyncBlockReason(bucketId: bucketId) == null;
+  }
+
+  Future<String?> automaticSyncBlockReason({int? bucketId}) async {
     final prefs = await _settingsService.getSyncPreferences(bucketId: bucketId);
+    var waitingForWifi = false;
+    var waitingForCharging = false;
 
     if (prefs.wifiOnly) {
-      final hasWifi = await _isWifiConnected();
-      if (!hasWifi) return false;
-    }
-
-    if (prefs.chargingOnly) {
-      final batteryState = await _battery.batteryState;
-      if (batteryState != BatteryState.charging &&
-          batteryState != BatteryState.full) {
-        return false;
+      try {
+        waitingForWifi = !await _isWifiConnected();
+      } catch (_) {
+        waitingForWifi = true;
       }
     }
 
-    return true;
+    if (prefs.chargingOnly) {
+      try {
+        final batteryState = await _battery.batteryState;
+        waitingForCharging =
+            batteryState != BatteryState.charging &&
+            batteryState != BatteryState.full;
+      } catch (_) {
+        waitingForCharging = true;
+      }
+    }
+
+    if (waitingForWifi && waitingForCharging) {
+      return 'Waiting for Wi-Fi and charging';
+    }
+    if (waitingForWifi) return 'Waiting for Wi-Fi';
+    if (waitingForCharging) return 'Waiting for charging';
+    return null;
   }
 
   Stream<void> watchConstraintChanges() {
@@ -59,7 +76,9 @@ class StreamGroup<T> {
     controller = StreamController<T>(
       onListen: () {
         for (final stream in streams) {
-          subscriptions.add(stream.listen(controller.add));
+          subscriptions.add(
+            stream.listen(controller.add, onError: controller.addError),
+          );
         }
       },
       onCancel: () async {

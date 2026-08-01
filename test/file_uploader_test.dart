@@ -21,9 +21,11 @@ void main() {
   late _UploaderTelegramGateway telegramGateway;
   late TelegramReliabilityService reliability;
   late FileUploader uploader;
+  var insertedBucketCount = 0;
 
   setUp(() async {
     db = AppDatabase.forTesting(NativeDatabase.memory());
+    insertedBucketCount = 0;
     telegramGateway = _UploaderTelegramGateway();
     reliability = TelegramReliabilityService(
       db,
@@ -54,10 +56,15 @@ void main() {
   });
 
   Future<int> insertBucket(String name, int chatId) {
+    final isFirstBucket = insertedBucketCount++ == 0;
     return db
         .into(db.buckets)
         .insert(
-          BucketsCompanion.insert(chatId: BigInt.from(chatId), name: name),
+          BucketsCompanion.insert(
+            chatId: BigInt.from(chatId),
+            name: name,
+            isActive: Value(isFirstBucket),
+          ),
         );
   }
 
@@ -70,6 +77,7 @@ void main() {
     String? lastTelegramOperation,
     bool userActionRequired = false,
     LocalMediaAccessState localAccessState = LocalMediaAccessState.available,
+    int? telegramMessageId,
   }) {
     return db
         .into(db.files)
@@ -84,6 +92,7 @@ void main() {
             lastTelegramOperation: Value(lastTelegramOperation),
             userActionRequired: Value(userActionRequired),
             localMediaAccessState: Value(localAccessState.dbValue),
+            telegramMessageId: Value(telegramMessageId),
           ),
         );
   }
@@ -141,6 +150,28 @@ void main() {
     expect(row.status, FileSyncStatus.pending.dbValue);
     expect(telegramGateway.requestCount('sendMessage'), 0);
   });
+
+  test(
+    'claimed uploads missing from Telegram are returned to failed',
+    () async {
+      final bucketId = await insertBucket('Photos', 1001);
+      await insertFile(
+        bucketId: bucketId,
+        path: '/not-currently-accessible/claimed.jpg',
+        status: FileSyncStatus.synced,
+        localAccessState: LocalMediaAccessState.accessUnavailable,
+        telegramMessageId: 777,
+      );
+
+      await uploader.drainQueueForTesting(ignoreConstraints: true);
+      final row = await db.select(db.files).getSingle();
+
+      expect(row.status, FileSyncStatus.failed.dbValue);
+      expect(row.telegramMessageId, isNull);
+      expect(row.lastTelegramOperation, 'verify_remote_backup');
+      expect(telegramGateway.requestCount('sendMessage'), 0);
+    },
+  );
 
   test('upload loop sends older media first using inputFileLocal', () async {
     final bucketId = await insertBucket('Photos', 1001);
@@ -384,6 +415,7 @@ class _UploaderTelegramGateway implements TelegramGateway {
   int activeSends = 0;
   int maxConcurrentSends = 0;
   int _nextMessageId = 100;
+  final Map<int, TelegramResult> _sentMessages = {};
 
   @override
   Stream<TelegramUpdate> get updates => _updates.stream;
@@ -395,6 +427,11 @@ class _UploaderTelegramGateway implements TelegramGateway {
   void send(TelegramRequest request) {
     requests.add(Map<String, dynamic>.from(request));
   }
+
+  @override
+  Future<void> waitUntilReady({
+    Duration timeout = const Duration(seconds: 45),
+  }) async {}
 
   @override
   Future<TelegramResult> request(
@@ -410,6 +447,16 @@ class _UploaderTelegramGateway implements TelegramGateway {
       },
       ('getMe', _) => {'@type': 'user', 'id': 123, 'is_premium': false},
       ('getChat', _) => {'@type': 'chat', 'id': request['chat_id']},
+      ('getMessage', _) =>
+        _sentMessages[request['message_id']] ??
+            {'@type': 'error', 'code': 404, 'message': 'MESSAGE_NOT_FOUND'},
+      ('getMessages', _) => {
+        '@type': 'messages',
+        'total_count': (request['message_ids'] as List).length,
+        'messages': (request['message_ids'] as List)
+            .map((id) => _sentMessages[id])
+            .toList(),
+      },
       ('sendMessage', _) => await _sendMessage(request),
       _ => throw UnimplementedError(
         'Unexpected Telegram request: ${request['@type']}',
@@ -422,8 +469,11 @@ class _UploaderTelegramGateway implements TelegramGateway {
     if (activeSends > maxConcurrentSends) maxConcurrentSends = activeSends;
     if (!firstSendStarted.isCompleted) firstSendStarted.complete();
     final content = request['input_message_content'] as Map<String, dynamic>;
-    final inputFile =
+    final media =
         (content['document'] ?? content['photo'] ?? content['video'])
+            as Map<String, dynamic>;
+    final inputFile =
+        (media['document'] ?? media['photo'] ?? media['video'])
             as Map<String, dynamic>;
     uploadedPaths.add(inputFile['path']?.toString() ?? '');
     sentInputFileTypes.add(inputFile['@type']?.toString() ?? '');
@@ -431,7 +481,16 @@ class _UploaderTelegramGateway implements TelegramGateway {
       final gate = nextSendGate;
       nextSendGate = null;
       if (gate != null) await gate.future;
-      return sendError ?? {'@type': 'message', 'id': _nextMessageId++};
+      if (sendError != null) return sendError!;
+      final id = _nextMessageId++;
+      final message = {
+        '@type': 'message',
+        'id': id,
+        'chat_id': request['chat_id'],
+        'sending_state': null,
+      };
+      _sentMessages[id] = message;
+      return message;
     } finally {
       activeSends--;
     }

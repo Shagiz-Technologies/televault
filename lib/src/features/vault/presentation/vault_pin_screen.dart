@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_provider.dart';
 import '../../../core/presentation/responsive_layout.dart';
+import '../../../core/presentation/tele_vault_ui.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../settings/services/app_lock_controller.dart';
 import '../services/vault_migration_service.dart';
@@ -106,287 +107,423 @@ class _VaultPinScreenState extends ConsumerState<VaultPinScreen> {
             _requireCurrentForBiometricRecovery);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: isSet ? AppTheme.paper : AppTheme.secure,
       appBar: AppBar(
+        backgroundColor: isSet ? AppTheme.paper : AppTheme.secure,
+        foregroundColor: isSet ? AppTheme.ink : Colors.white,
         title: Text(
           setupRequired
-              ? 'Set Vault Security'
+              ? 'Protect your Vault'
               : isSet
-              ? 'Vault Security'
+              ? 'Vault security'
               : 'Unlock Vault',
         ),
         leading: Navigator.canPop(context) ? const BackButton() : null,
       ),
-      body: ListView(
-        padding: AppResponsive.pagePaddingWithBottomSafe(
-          context,
-          horizontal: 20,
-          top: 20,
-          bottomExtra: 24,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: isSet
+              ? const RadialGradient(
+                  center: Alignment(-0.9, -1),
+                  radius: 1.2,
+                  colors: [Color(0xFFF0F8FE), AppTheme.paper],
+                )
+              : const RadialGradient(
+                  center: Alignment.topCenter,
+                  radius: 1.1,
+                  colors: [AppTheme.secureSurface, AppTheme.secure],
+                ),
         ),
-        children: [
-          if (setupRequired) ...[
-            Container(
-              margin: const EdgeInsets.only(bottom: 16),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.lock_person_rounded, color: AppTheme.primary),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Set a Vault PIN, password, or Phone Security before opening private files.',
-                      style: TextStyle(color: Colors.white70, height: 1.35),
-                    ),
+        child: ListView(
+          padding: AppResponsive.pagePaddingWithBottomSafe(
+            context,
+            horizontal: 20,
+            top: 12,
+            bottomExtra: 24,
+          ),
+          children: [
+            Center(
+              child: Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  color: isSet
+                      ? AppTheme.primarySoft
+                      : AppTheme.primary.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.25),
                   ),
-                ],
+                ),
+                child: Icon(
+                  isSet ? Icons.shield_outlined : Icons.lock_outline_rounded,
+                  color: AppTheme.primary,
+                  size: 38,
+                ),
               ),
             ),
-          ],
-          if (isSet) ...[
-            const Text('Unlock method', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: VaultAuthMethod.values.map((method) {
-                return ChoiceChip(
-                  label: Text(_methodLabel(method)),
-                  selected: _method == method,
-                  onSelected: _processing
-                      ? null
-                      : (value) async {
-                          if (!value) return;
-                          if (method == VaultAuthMethod.biometric &&
-                              !await ref
-                                  .read(vaultPinServiceProvider)
-                                  .canUseBiometrics()) {
-                            setState(() {
-                              _biometricsAvailable = false;
-                              _error =
-                                  'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.';
-                            });
-                            return;
-                          }
-                          _selectMethod(method);
-                        },
-                );
-              }).toList(),
+            const SizedBox(height: 14),
+            Text(
+              isSet ? 'Choose one simple way in' : 'Your private media',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: isSet ? AppTheme.ink : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isSet
+                  ? 'Phone security can help you recover access later.'
+                  : 'Unlock to decrypt and view your Vault.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: isSet ? AppTheme.inkMuted : Colors.white70,
+                height: 1.35,
+              ),
             ),
             const SizedBox(height: 20),
-          ],
-          if (isSet) ...[
-            if (showCurrentCredential) ...[
-              TextField(
-                controller: _currentSecretCtrl,
-                obscureText: _obscureCurrentSecret,
-                keyboardType: _storedMethod == VaultAuthMethod.pin
-                    ? TextInputType.number
-                    : TextInputType.visiblePassword,
-                maxLength: _storedMethod == VaultAuthMethod.pin ? 8 : 64,
-                decoration: InputDecoration(
-                  labelText: 'Current ${_credentialLabel(_storedMethod)}',
-                  hintText: 'Required to update Vault security',
-                  suffixIcon: IconButton(
-                    tooltip: _obscureCurrentSecret ? 'Show' : 'Hide',
-                    onPressed: () {
-                      setState(() {
-                        _obscureCurrentSecret = !_obscureCurrentSecret;
-                      });
-                    },
-                    icon: Icon(
-                      _obscureCurrentSecret
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_rounded,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            if (_method == VaultAuthMethod.biometric)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      _biometricsAvailable
-                          ? Icons.fingerprint
-                          : Icons.warning_amber_rounded,
-                      color: _biometricsAvailable
-                          ? AppTheme.primary
-                          : Colors.orangeAccent,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _biometricsAvailable
-                            ? 'Phone Security uses your device screen lock, fingerprint, or face unlock. A Vault password is still required for encrypted file recovery and security changes.'
-                            : 'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
+            if (setupRequired) ...[
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: TeleVaultCard(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.lock_person_rounded, color: AppTheme.primary),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Set Vault security before adding private files.',
+                          style: TextStyle(
+                            color: AppTheme.inkMuted,
+                            height: 1.35,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            TextField(
-              controller: _secretCtrl,
-              obscureText: _obscureSecret,
-              keyboardType: secretEntryMethod == VaultAuthMethod.pin
-                  ? TextInputType.number
-                  : TextInputType.visiblePassword,
-              maxLength: secretEntryMethod == VaultAuthMethod.pin ? 8 : 64,
-              decoration: InputDecoration(
-                labelText: _hasExistingSecret
-                    ? 'New ${_credentialLabel(secretEntryMethod)}'
-                    : _credentialLabel(secretEntryMethod),
-                hintText: secretEntryMethod == VaultAuthMethod.pin
-                    ? '4-8 digits'
-                    : 'At least 6 characters',
-                suffixIcon: IconButton(
-                  tooltip: _obscureSecret ? 'Show' : 'Hide',
-                  onPressed: () {
-                    setState(() {
-                      _obscureSecret = !_obscureSecret;
-                      _error = null;
-                    });
-                  },
-                  icon: Icon(
-                    _obscureSecret
-                        ? Icons.visibility_rounded
-                        : Icons.visibility_off_rounded,
+                    ],
                   ),
                 ),
               ),
-            ),
-            if (confirmSecret) ...[
+            ],
+            if (isSet) ...[
+              const TeleVaultSectionTitle(title: 'Unlock method'),
               const SizedBox(height: 8),
+              Column(
+                children: VaultAuthMethod.values.map((method) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _methodOption(
+                      method,
+                      selected: _method == method,
+                      onTap: _processing
+                          ? null
+                          : () async {
+                              if (method == VaultAuthMethod.biometric &&
+                                  !await ref
+                                      .read(vaultPinServiceProvider)
+                                      .canUseBiometrics()) {
+                                setState(() {
+                                  _biometricsAvailable = false;
+                                  _error =
+                                      'Phone security is not available. Add a device screen lock first.';
+                                });
+                                return;
+                              }
+                              _selectMethod(method);
+                            },
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+            ],
+            if (isSet) ...[
+              if (showCurrentCredential) ...[
+                TextField(
+                  key: const ValueKey('vault-current-secret-field'),
+                  controller: _currentSecretCtrl,
+                  obscureText: _obscureCurrentSecret,
+                  keyboardType: _storedMethod == VaultAuthMethod.pin
+                      ? TextInputType.number
+                      : TextInputType.visiblePassword,
+                  maxLength: _storedMethod == VaultAuthMethod.pin ? 8 : 64,
+                  decoration: InputDecoration(
+                    labelText: 'Current ${_credentialLabel(_storedMethod)}',
+                    hintText: 'Required to update Vault security',
+                    suffixIcon: IconButton(
+                      tooltip: _obscureCurrentSecret ? 'Show' : 'Hide',
+                      onPressed: () {
+                        setState(() {
+                          _obscureCurrentSecret = !_obscureCurrentSecret;
+                        });
+                      },
+                      icon: Icon(
+                        _obscureCurrentSecret
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (_method == VaultAuthMethod.biometric)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primarySoft,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.outline),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _biometricsAvailable
+                            ? Icons.fingerprint
+                            : Icons.warning_amber_rounded,
+                        color: _biometricsAvailable
+                            ? AppTheme.primary
+                            : AppTheme.warning,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _biometricsAvailable
+                              ? 'Phone Security uses your device screen lock, fingerprint, or face unlock. A Vault password is still required for encrypted file recovery and security changes.'
+                              : 'Phone security is not available. Add a screen lock, fingerprint, or face unlock in Android settings first.',
+                          style: const TextStyle(
+                            color: AppTheme.inkMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               TextField(
-                controller: _confirmCtrl,
-                obscureText: _obscureConfirm,
+                key: const ValueKey('vault-secret-field'),
+                controller: _secretCtrl,
+                obscureText: _obscureSecret,
                 keyboardType: secretEntryMethod == VaultAuthMethod.pin
                     ? TextInputType.number
                     : TextInputType.visiblePassword,
                 maxLength: secretEntryMethod == VaultAuthMethod.pin ? 8 : 64,
                 decoration: InputDecoration(
-                  labelText: 'Confirm ${_credentialLabel(secretEntryMethod)}',
+                  labelText: _hasExistingSecret
+                      ? 'New ${_credentialLabel(secretEntryMethod)}'
+                      : _credentialLabel(secretEntryMethod),
+                  hintText: secretEntryMethod == VaultAuthMethod.pin
+                      ? '4-8 digits'
+                      : 'At least 6 characters',
                   suffixIcon: IconButton(
-                    tooltip: _obscureConfirm ? 'Show' : 'Hide',
+                    tooltip: _obscureSecret ? 'Show' : 'Hide',
                     onPressed: () {
                       setState(() {
-                        _obscureConfirm = !_obscureConfirm;
+                        _obscureSecret = !_obscureSecret;
+                        _error = null;
                       });
                     },
                     icon: Icon(
-                      _obscureConfirm
+                      _obscureSecret
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
                     ),
                   ),
                 ),
               ),
-            ] else
+              if (confirmSecret) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  key: const ValueKey('vault-confirm-secret-field'),
+                  controller: _confirmCtrl,
+                  obscureText: _obscureConfirm,
+                  keyboardType: secretEntryMethod == VaultAuthMethod.pin
+                      ? TextInputType.number
+                      : TextInputType.visiblePassword,
+                  maxLength: secretEntryMethod == VaultAuthMethod.pin ? 8 : 64,
+                  decoration: InputDecoration(
+                    labelText: 'Confirm ${_credentialLabel(secretEntryMethod)}',
+                    suffixIcon: IconButton(
+                      tooltip: _obscureConfirm ? 'Show' : 'Hide',
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirm = !_obscureConfirm;
+                        });
+                      },
+                      icon: Icon(
+                        _obscureConfirm
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Confirmation is hidden because the new value is visible.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+            ] else ...[
+              if (_method == VaultAuthMethod.biometric &&
+                  !widget.forceSecretEntry) ...[
+                ElevatedButton.icon(
+                  onPressed: _processing ? null : _unlockWithBiometric,
+                  icon: const Icon(Icons.fingerprint),
+                  label: Text(
+                    _processing ? 'Checking...' : 'Unlock with Phone Security',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Row(
+                  children: [
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text('or', style: TextStyle(color: Colors.grey)),
+                    ),
+                    Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+              TextField(
+                key: const ValueKey('vault-secret-field'),
+                controller: _secretCtrl,
+                obscureText: _obscureSecret,
+                keyboardType: unlockEntryMethod == VaultAuthMethod.pin
+                    ? TextInputType.number
+                    : TextInputType.visiblePassword,
+                maxLength: unlockEntryMethod == VaultAuthMethod.pin ? 8 : 64,
+                decoration: InputDecoration(
+                  labelText: _credentialLabel(unlockEntryMethod),
+                  hintText: unlockEntryMethod == VaultAuthMethod.pin
+                      ? 'Enter your Vault PIN'
+                      : 'Enter your Vault password',
+                  suffixIcon: IconButton(
+                    tooltip: _obscureSecret ? 'Show' : 'Hide',
+                    onPressed: () {
+                      setState(() => _obscureSecret = !_obscureSecret);
+                    },
+                    icon: Icon(
+                      _obscureSecret
+                          ? Icons.visibility_rounded
+                          : Icons.visibility_off_rounded,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: AppTheme.error),
+                ),
+              ),
+            const SizedBox(height: 14),
+            ElevatedButton(
+              onPressed: _processing
+                  ? null
+                  : () {
+                      if (isSet) {
+                        _setVaultSecurity();
+                      } else {
+                        _unlockWithSecret();
+                      }
+                    },
+              child: Text(
+                _processing ? 'Please wait...' : (isSet ? 'Save' : 'Unlock'),
+              ),
+            ),
+            if (!isSet && _method == VaultAuthMethod.biometric)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
-                  'Confirmation is hidden because the new value is visible.',
+                  'Phone Security uses your device screen lock, fingerprint, or face unlock and previews encrypted items on this device.',
                   style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ),
-          ] else ...[
-            if (_method == VaultAuthMethod.biometric &&
-                !widget.forceSecretEntry) ...[
-              ElevatedButton.icon(
-                onPressed: _processing ? null : _unlockWithBiometric,
-                icon: const Icon(Icons.fingerprint),
-                label: Text(
-                  _processing ? 'Checking...' : 'Unlock with Phone Security',
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Row(
-                children: [
-                  Expanded(child: Divider()),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                    child: Text('or', style: TextStyle(color: Colors.grey)),
-                  ),
-                  Expanded(child: Divider()),
-                ],
-              ),
-              const SizedBox(height: 10),
-            ],
-            TextField(
-              controller: _secretCtrl,
-              obscureText: _obscureSecret,
-              keyboardType: unlockEntryMethod == VaultAuthMethod.pin
-                  ? TextInputType.number
-                  : TextInputType.visiblePassword,
-              maxLength: unlockEntryMethod == VaultAuthMethod.pin ? 8 : 64,
-              decoration: InputDecoration(
-                labelText: _credentialLabel(unlockEntryMethod),
-                hintText: unlockEntryMethod == VaultAuthMethod.pin
-                    ? 'Enter your Vault PIN'
-                    : 'Enter your Vault password',
-                suffixIcon: IconButton(
-                  tooltip: _obscureSecret ? 'Show' : 'Hide',
-                  onPressed: () {
-                    setState(() => _obscureSecret = !_obscureSecret);
-                  },
-                  icon: Icon(
-                    _obscureSecret
-                        ? Icons.visibility_rounded
-                        : Icons.visibility_off_rounded,
-                  ),
-                ),
-              ),
-            ),
           ],
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: AppTheme.error),
-              ),
-            ),
-          const SizedBox(height: 14),
-          ElevatedButton(
-            onPressed: _processing
-                ? null
-                : () {
-                    if (isSet) {
-                      _setVaultSecurity();
-                    } else {
-                      _unlockWithSecret();
-                    }
-                  },
-            child: Text(
-              _processing ? 'Please wait...' : (isSet ? 'Save' : 'Unlock'),
+        ),
+      ),
+    );
+  }
+
+  Widget _methodOption(
+    VaultAuthMethod method, {
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
+    final (icon, description, recommended) = switch (method) {
+      VaultAuthMethod.biometric => (
+        Icons.fingerprint_rounded,
+        'Fingerprint, face, or device screen lock',
+        true,
+      ),
+      VaultAuthMethod.password => (
+        Icons.password_rounded,
+        'A TeleVault password you choose',
+        false,
+      ),
+      VaultAuthMethod.pin => (
+        Icons.pin_outlined,
+        'A quick 4-8 digit TeleVault PIN',
+        false,
+      ),
+    };
+
+    return TeleVaultCard(
+      color: selected ? AppTheme.primarySoft : AppTheme.surface,
+      borderColor: selected ? AppTheme.primary : AppTheme.outline,
+      onTap: onTap,
+      child: Row(
+        children: [
+          TeleVaultIconBadge(icon: icon, size: 44),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _methodLabel(method),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    if (recommended) ...[
+                      const SizedBox(width: 7),
+                      const TeleVaultStatusPill(
+                        label: 'Recommended',
+                        color: AppTheme.primary,
+                        compact: true,
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppTheme.inkMuted),
+                ),
+              ],
             ),
           ),
-          if (!isSet && _method == VaultAuthMethod.biometric)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                'Phone Security uses your device screen lock, fingerprint, or face unlock and previews encrypted items on this device.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ),
+          Icon(
+            selected
+                ? Icons.radio_button_checked_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: selected ? AppTheme.primary : AppTheme.outline,
+          ),
         ],
       ),
     );

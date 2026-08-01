@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../buckets/services/bucket_service.dart';
+import 'background_sync_coordinator.dart';
 import 'file_uploader.dart';
 import 'sync_service.dart';
 
@@ -18,7 +19,7 @@ class SyncInitializer {
   Future<void> ensureStarted() {
     if (_started) {
       _ref.read(fileUploaderProvider).wake();
-      return Future.value();
+      return _ref.read(backgroundSyncCoordinatorProvider).refresh();
     }
 
     final inFlight = _starting;
@@ -48,5 +49,6 @@ class SyncInitializer {
 
     syncService.startSyncLoop();
     await uploader.startUploadLoop();
+    await _ref.read(backgroundSyncCoordinatorProvider).start();
   }
 }

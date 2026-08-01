@@ -74,7 +74,8 @@ class _TeleVaultAppState extends ConsumerState<TeleVaultApp>
         return MaterialApp(
           title: 'TeleVault',
           debugShowCheckedModeBanner: false,
-          themeMode: ThemeMode.dark,
+          themeMode: ThemeMode.light,
+          theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           builder: (context, child) {
             final mediaQuery = MediaQuery.of(context);

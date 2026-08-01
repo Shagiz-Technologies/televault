@@ -30,6 +30,15 @@ The uploader remains sequential. A file is marked synced only after
 `updateMessageSendSucceeded`, or when TDLib returns a final message with no
 sending state.
 
+## TDLib media payloads
+
+The vendored TDLib 1.8.66 build is pinned to commit
+`022d60202e446ad1287b9fb68e687c8a0760788b`. At that revision, media message
+content wraps `inputFileLocal` in `inputDocument`, `inputPhoto`, or `inputVideo`.
+`TelegramMessageContent` owns this wire format for both media and metadata
+uploads. Tests must fail if a future change restores the incompatible flat
+payload, which TDLib rejects with `400 InputFile is not specified`.
+
 ## Upload limits
 
 TeleVault obtains the current account's Premium capability from TDLib and keeps
@@ -56,6 +65,7 @@ optional during import; new exports include them.
 ```bash
 flutter test test/telegram_error_test.dart
 flutter test test/telegram_reliability_service_test.dart
+flutter test test/telegram_message_content_test.dart
 flutter test test/database_migration_test.dart
 flutter test test/file_uploader_test.dart
 flutter test test/bucket_service_test.dart

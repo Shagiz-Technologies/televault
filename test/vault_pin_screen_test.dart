@@ -38,32 +38,40 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Set Vault Security'), findsOneWidget);
-      expect(find.textContaining('Set a Vault PIN'), findsOneWidget);
+      expect(find.text('Protect your Vault'), findsOneWidget);
+      expect(
+        find.text('Set Vault security before adding private files.'),
+        findsOneWidget,
+      );
 
-      await tester.enterText(find.byType(TextField).at(0), '1234');
-      await tester.enterText(find.byType(TextField).at(1), '1234');
+      final scrollable = find.byType(Scrollable).first;
+      final secretField = find.byKey(const ValueKey('vault-secret-field'));
+      final confirmField = find.byKey(
+        const ValueKey('vault-confirm-secret-field'),
+      );
+      await tester.scrollUntilVisible(secretField, 300, scrollable: scrollable);
+      await tester.enterText(secretField, '1234');
+      await tester.enterText(confirmField, '1234');
 
-      await tester.tap(find.widgetWithText(ChoiceChip, 'Password'));
+      await tester.scrollUntilVisible(
+        find.text('Password'),
+        -300,
+        scrollable: scrollable,
+      );
+      await tester.tap(find.text('Password'));
       await tester.pumpAndSettle();
 
-      final passwordFields = tester
-          .widgetList<TextField>(find.byType(TextField))
-          .toList();
-      expect(passwordFields, hasLength(2));
-      expect(passwordFields[0].controller?.text, isEmpty);
-      expect(passwordFields[1].controller?.text, isEmpty);
+      await tester.scrollUntilVisible(secretField, 300, scrollable: scrollable);
+      expect(tester.widget<TextField>(secretField).controller?.text, isEmpty);
+      expect(tester.widget<TextField>(confirmField).controller?.text, isEmpty);
 
-      await tester.enterText(find.byType(TextField).first, 'secret1');
+      await tester.enterText(secretField, 'secret1');
       await tester.tap(find.byTooltip('Show').first);
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsOneWidget);
+      expect(secretField, findsOneWidget);
       expect(find.text('Confirm Password'), findsNothing);
-      expect(
-        tester.widget<TextField>(find.byType(TextField)).controller?.text,
-        'secret1',
-      );
+      expect(tester.widget<TextField>(secretField).controller?.text, 'secret1');
     },
   );
 
@@ -87,9 +95,15 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Vault Security'), findsOneWidget);
+      expect(find.text('Vault security'), findsOneWidget);
       expect(find.text('Phone Security'), findsOneWidget);
       expect(find.text('Current Password'), findsNothing);
+      final scrollable = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('vault-secret-field')),
+        300,
+        scrollable: scrollable,
+      );
       expect(find.text('New Password'), findsOneWidget);
       expect(find.text('Confirm Password'), findsOneWidget);
     },
