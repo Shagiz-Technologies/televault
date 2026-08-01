@@ -80,7 +80,7 @@ class _AppLockGateScreenState extends ConsumerState<AppLockGateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.paper,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -303,12 +303,9 @@ class _LockCard extends StatelessWidget {
             compact ? 18 : 22,
           ),
           decoration: BoxDecoration(
-            color: const Color(0xFF111217).withValues(alpha: 0.90),
+            color: AppTheme.surface.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.10),
-              width: 1,
-            ),
+            border: Border.all(color: AppTheme.outline, width: 1),
             boxShadow: [
               BoxShadow(
                 color: AppTheme.primary.withValues(alpha: 0.18),
@@ -338,7 +335,7 @@ class _LockCard extends StatelessWidget {
                   fontSize: 27,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
-                  color: Colors.white,
+                  color: AppTheme.ink,
                 ),
               ),
               SizedBox(height: AppResponsive.gap(context, 8, compact: 6)),
@@ -386,11 +383,7 @@ class _LockCard extends StatelessWidget {
                 SizedBox(height: AppResponsive.gap(context, 18, compact: 10)),
                 Row(
                   children: [
-                    Expanded(
-                      child: Divider(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
+                    Expanded(child: Divider(color: AppTheme.outline)),
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 10),
                       child: Text(
@@ -398,11 +391,7 @@ class _LockCard extends StatelessWidget {
                         style: TextStyle(color: AppTheme.textSecondary),
                       ),
                     ),
-                    Expanded(
-                      child: Divider(
-                        color: Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
+                    Expanded(child: Divider(color: AppTheme.outline)),
                   ],
                 ),
                 SizedBox(height: AppResponsive.gap(context, 18, compact: 10)),
@@ -446,7 +435,7 @@ class _LockCard extends StatelessWidget {
                 SizedBox(height: AppResponsive.gap(context, 14, compact: 8)),
                 _MessageBox(
                   icon: Icons.check_circle_outline_rounded,
-                  color: Colors.greenAccent,
+                  color: AppTheme.success,
                   text: notice!,
                 ),
               ],
@@ -566,7 +555,7 @@ class _MessageBox extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppTheme.ink,
                 fontSize: 13,
                 height: 1.35,
               ),
@@ -589,7 +578,7 @@ class _TrustHint extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: AppTheme.primarySoft,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -622,7 +611,7 @@ class _LockBackdrop extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF020712), Colors.black],
+          colors: [Color(0xFFEAF6FF), AppTheme.paper],
         ),
       ),
       child: Stack(
@@ -640,7 +629,7 @@ class _LockBackdrop extends StatelessWidget {
             bottom: 120,
             child: _GlowOrb(
               size: 320,
-              color: const Color(0xFF13D6FF).withValues(alpha: 0.12),
+              color: AppTheme.success.withValues(alpha: 0.10),
             ),
           ),
         ],

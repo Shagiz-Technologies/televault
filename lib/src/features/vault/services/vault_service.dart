@@ -13,6 +13,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import 'vault_recovery_service.dart';
 
 final vaultServiceProvider = Provider<VaultService>((ref) {
@@ -1164,12 +1165,19 @@ class VaultService {
 
   static Future<Directory> _defaultVaultDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
-    return Directory(path.join(documents.path, 'vault'));
+    return Directory(
+      path.join(documents.path, AppRuntimeEnvironment.cacheDirectory('vault')),
+    );
   }
 
   static Future<Directory> _defaultTemporaryDirectory() async {
     final cache = await getTemporaryDirectory();
-    return Directory(path.join(cache.path, 'vault_decrypted'));
+    return Directory(
+      path.join(
+        cache.path,
+        AppRuntimeEnvironment.cacheDirectory('vault_decrypted'),
+      ),
+    );
   }
 }
 

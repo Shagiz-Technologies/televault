@@ -20,6 +20,7 @@ void main() {
   late SettingsService settingsService;
   late _UploaderTelegramGateway telegramGateway;
   late TelegramReliabilityService reliability;
+  late _ControllableSyncConstraintsService constraints;
   late FileUploader uploader;
   var insertedBucketCount = 0;
 
@@ -38,18 +39,20 @@ void main() {
       db,
       effectiveMaxFileSizeMb: () => reliability.effectiveUploadLimitMb,
     );
+    constraints = _ControllableSyncConstraintsService(settingsService);
     uploader = FileUploader(
       db,
       telegramGateway,
       settingsService,
       DiagnosticsService(db),
-      _NoopSyncConstraintsService(settingsService),
+      constraints,
       reliability,
     );
   });
 
   tearDown(() async {
     await uploader.dispose();
+    await constraints.dispose();
     await reliability.dispose();
     await telegramGateway.dispose();
     await db.close();
@@ -78,6 +81,7 @@ void main() {
     bool userActionRequired = false,
     LocalMediaAccessState localAccessState = LocalMediaAccessState.available,
     int? telegramMessageId,
+    String? uploadOperationId,
   }) {
     return db
         .into(db.files)
@@ -93,6 +97,7 @@ void main() {
             userActionRequired: Value(userActionRequired),
             localMediaAccessState: Value(localAccessState.dbValue),
             telegramMessageId: Value(telegramMessageId),
+            uploadOperationId: Value(uploadOperationId),
           ),
         );
   }
@@ -402,6 +407,88 @@ void main() {
     expect(row.nextRetryAt, isNull);
     expect(telegramGateway.requestCount('sendMessage'), 0);
   });
+
+  test(
+    'restart reconciles an accepted operation without sending twice',
+    () async {
+      final bucketId = await insertBucket('Photos', 1001);
+      final media = await tempMedia('accepted-before-crash.jpg');
+      const operationId = '3f0967c6-a639-4b70-9ea6-0740950af771';
+      await insertFile(
+        bucketId: bucketId,
+        path: media.path,
+        status: FileSyncStatus.pending,
+        uploadOperationId: operationId,
+      );
+      telegramGateway.addRemoteUpload(operationId, messageId: 812);
+
+      await uploader.drainQueueForTesting(ignoreConstraints: true);
+      final row = await db.select(db.files).getSingle();
+
+      expect(row.status, FileSyncStatus.synced.dbValue);
+      expect(row.telegramMessageId, 812);
+      expect(row.uploadOperationId, operationId);
+      expect(telegramGateway.requestCount('sendMessage'), 0);
+    },
+  );
+
+  test(
+    'Wi-Fi loss cancels the active automatic upload and keeps it pending',
+    () async {
+      final bucketId = await insertBucket('Photos', 1001);
+      await settingsService.saveSyncPreferences(
+        const SyncPreferences(autoBackupEnabled: true, wifiOnly: true),
+        bucketId: bucketId,
+      );
+      final media = await tempMedia('wifi-loss.jpg');
+      await insertFile(
+        bucketId: bucketId,
+        path: media.path,
+        status: FileSyncStatus.pending,
+      );
+      telegramGateway.nextSendGate = Completer<void>();
+
+      await uploader.startUploadLoop();
+      await telegramGateway.firstSendStarted.future;
+      constraints.allowed = false;
+      constraints.emitChange();
+      await Future<void>.delayed(Duration.zero);
+      await telegramGateway.emitUploadProgress(
+        telegramGateway.uploadedPaths.single,
+        fileId: 77,
+      );
+
+      await _waitFor(
+        () => telegramGateway.requestCount('cancelUploadFile') == 1,
+        'TDLib upload cancellation',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final row = await db.select(db.files).getSingle();
+      expect(
+        row.status,
+        FileSyncStatus.pending.dbValue,
+        reason: 'state=${row.status} error=${row.lastError}',
+      );
+      expect(row.retryCount, 0);
+      expect(row.nextRetryAt, isNull);
+      expect(row.lastError, isNull);
+    },
+  );
+}
+
+Future<void> _waitFor(
+  FutureOr<bool> Function() condition,
+  String description,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 4));
+  while (!await condition()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TimeoutException(
+        '$description was not reached before the deadline.',
+      );
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
 }
 
 class _UploaderTelegramGateway implements TelegramGateway {
@@ -411,11 +498,47 @@ class _UploaderTelegramGateway implements TelegramGateway {
   final List<String> sentInputFileTypes = [];
   final Completer<void> firstSendStarted = Completer<void>();
   Completer<void>? nextSendGate;
+  Completer<void>? activeSendGate;
   TelegramResult? sendError;
   int activeSends = 0;
   int maxConcurrentSends = 0;
   int _nextMessageId = 100;
   final Map<int, TelegramResult> _sentMessages = {};
+  final List<TelegramResult> _remoteMessages = [];
+
+  void addRemoteUpload(String operationId, {required int messageId}) {
+    _remoteMessages.add({
+      '@type': 'message',
+      'id': messageId,
+      'chat_id': 1001,
+      'sending_state': null,
+      'content': {
+        '@type': 'messageDocument',
+        'caption': {
+          '@type': 'formattedText',
+          'text': '#TeleVaultUpload:$operationId',
+        },
+      },
+    });
+  }
+
+  Future<void> emitUploadProgress(String path, {required int fileId}) async {
+    _updates.add({
+      '@type': 'updateFile',
+      'file': {
+        '@type': 'file',
+        'id': fileId,
+        'expected_size': 100,
+        'local': {'path': path},
+        'remote': {
+          'is_uploading_active': true,
+          'is_uploading_completed': false,
+          'uploaded_size': 25,
+        },
+      },
+    });
+    await Future<void>.delayed(Duration.zero);
+  }
 
   @override
   Stream<TelegramUpdate> get updates => _updates.stream;
@@ -457,6 +580,17 @@ class _UploaderTelegramGateway implements TelegramGateway {
             .map((id) => _sentMessages[id])
             .toList(),
       },
+      ('searchChatMessages', _) => {
+        '@type': 'foundChatMessages',
+        'total_count': _remoteMessages.length,
+        'messages': _remoteMessages,
+      },
+      ('getChatHistory', _) => {
+        '@type': 'messages',
+        'total_count': _remoteMessages.length,
+        'messages': _remoteMessages,
+      },
+      ('cancelUploadFile', _) => _cancelUpload(),
       ('sendMessage', _) => await _sendMessage(request),
       _ => throw UnimplementedError(
         'Unexpected Telegram request: ${request['@type']}',
@@ -480,6 +614,7 @@ class _UploaderTelegramGateway implements TelegramGateway {
     try {
       final gate = nextSendGate;
       nextSendGate = null;
+      activeSendGate = gate;
       if (gate != null) await gate.future;
       if (sendError != null) return sendError!;
       final id = _nextMessageId++;
@@ -492,8 +627,16 @@ class _UploaderTelegramGateway implements TelegramGateway {
       _sentMessages[id] = message;
       return message;
     } finally {
+      activeSendGate = null;
       activeSends--;
     }
+  }
+
+  TelegramResult _cancelUpload() {
+    sendError = {'@type': 'error', 'code': 400, 'message': 'UPLOAD_CANCELED'};
+    final gate = activeSendGate;
+    if (gate != null && !gate.isCompleted) gate.complete();
+    return const {'@type': 'ok'};
   }
 
   @override
@@ -506,12 +649,19 @@ class _UploaderTelegramGateway implements TelegramGateway {
   Future<void> dispose() => _updates.close();
 }
 
-class _NoopSyncConstraintsService extends SyncConstraintsService {
-  _NoopSyncConstraintsService(super.settingsService);
+class _ControllableSyncConstraintsService extends SyncConstraintsService {
+  final _changes = StreamController<void>.broadcast();
+  bool allowed = true;
+
+  _ControllableSyncConstraintsService(super.settingsService);
 
   @override
-  Future<bool> canRunAutomaticSync({int? bucketId}) async => true;
+  Future<bool> canRunAutomaticSync({int? bucketId}) async => allowed;
 
   @override
-  Stream<void> watchConstraintChanges() => const Stream.empty();
+  Stream<void> watchConstraintChanges() => _changes.stream;
+
+  void emitChange() => _changes.add(null);
+
+  Future<void> dispose() => _changes.close();
 }

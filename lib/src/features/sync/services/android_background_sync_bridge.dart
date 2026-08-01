@@ -1,16 +1,16 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import 'sync_status_service.dart';
 
 class AndroidBackgroundSyncBridge {
   static const _channel = MethodChannel('et.shagiz.tele_vault/background_sync');
-  Future<void> Function()? _syncWakeHandler;
+  Future<bool> Function()? _syncWakeHandler;
 
-  void setSyncWakeHandler(Future<void> Function() handler) {
+  void setSyncWakeHandler(Future<bool> Function() handler) {
     _syncWakeHandler = handler;
     if (!Platform.isAndroid) return;
     _channel.setMethodCallHandler(_handleNativeMethod);
@@ -28,12 +28,12 @@ class AndroidBackgroundSyncBridge {
     }
     final handler = _syncWakeHandler;
     if (handler == null) return false;
-    unawaited(
-      handler().catchError((Object _, StackTrace _) {
-        debugPrint('Native background sync wake failed.');
-      }),
-    );
-    return true;
+    try {
+      return await handler();
+    } catch (_) {
+      debugPrint('Native background sync wake failed.');
+      return false;
+    }
   }
 
   Future<bool> requestNotificationPermission() async {
@@ -66,6 +66,21 @@ class AndroidBackgroundSyncBridge {
   Future<void> stop() async {
     if (!Platform.isAndroid) return;
     await _channel.invokeMethod<void>('stop');
+  }
+
+  Future<void> configurePersistentWork({required bool wifiOnly}) async {
+    if (!Platform.isAndroid) return;
+    await _channel.invokeMethod<void>('configurePersistentWork', {
+      'namespace': AppRuntimeEnvironment.workerNamespace,
+      'wifiOnly': wifiOnly,
+    });
+  }
+
+  Future<void> cancelPersistentWork() async {
+    if (!Platform.isAndroid) return;
+    await _channel.invokeMethod<void>('cancelPersistentWork', {
+      'namespace': AppRuntimeEnvironment.workerNamespace,
+    });
   }
 
   Map<String, Object> _payload(

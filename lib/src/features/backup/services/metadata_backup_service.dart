@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
@@ -291,7 +292,10 @@ class DriftMetadataBackupService implements MetadataBackupService {
     try {
       final directory = await _temporaryDirectoryProvider();
       final metadataDirectory = io.Directory(
-        path.join(directory.path, 'televault_metadata'),
+        path.join(
+          directory.path,
+          AppRuntimeEnvironment.cacheDirectory('televault_metadata'),
+        ),
       );
       await metadataDirectory.create(recursive: true);
       final output = io.File(

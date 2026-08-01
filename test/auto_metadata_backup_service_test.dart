@@ -69,12 +69,25 @@ void main() {
       expect(stored!.difference(result.completedAt).abs().inMilliseconds, 0);
     },
   );
+
+  test('backs up metadata after every five confirmed uploads', () async {
+    for (var count = 0; count < 5; count++) {
+      await service.noteMediaUploadCompleted();
+    }
+
+    final status = await service.getStatus();
+    expect(telegram.sendMessageCount, 1);
+    expect(status.uploadedSinceBackup, 0);
+    expect(status.lastBackupAt, isNotNull);
+    expect(status.lastError, anyOf(isNull, isEmpty));
+  });
 }
 
 class _FakeTelegramGateway implements TelegramGateway {
   final _updates = StreamController<TelegramUpdate>.broadcast();
   final List<TelegramUpdate> _bufferedUpdates = [];
   String? _uploadedPath;
+  int sendMessageCount = 0;
 
   @override
   Stream<TelegramUpdate> get updates => _updates.stream;
@@ -119,6 +132,7 @@ class _FakeTelegramGateway implements TelegramGateway {
   }
 
   Future<TelegramResult> _sendMessage(TelegramRequest request) async {
+    sendMessageCount++;
     final content = request['input_message_content'] as Map<String, dynamic>;
     final document = content['document'] as Map<String, dynamic>;
     final inputFile = document['document'] as Map<String, dynamic>;

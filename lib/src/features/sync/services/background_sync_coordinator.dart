@@ -49,8 +49,10 @@ class BackgroundSyncCoordinator {
   Set<int> _trackedBucketIds = const {};
   bool _started = false;
   bool _nativeServiceStarted = false;
+  bool _nativeServiceStarting = false;
   bool _stopWhenCurrentUploadFinishes = false;
   bool _nativeWakeRunning = false;
+  bool? _persistentWifiOnly;
   int _configurationGeneration = 0;
 
   BackgroundSyncCoordinator(
@@ -83,20 +85,22 @@ class BackgroundSyncCoordinator {
     await _configure();
   }
 
-  Future<void> _handleNativeWake() async {
+  Future<bool> _handleNativeWake() async {
     final onNativeWake = _onNativeWake;
     if (!_started ||
         _nativeWakeRunning ||
         _autoBucketIds.isEmpty ||
         onNativeWake == null) {
-      return;
+      return false;
     }
 
     _nativeWakeRunning = true;
     try {
       await onNativeWake();
+      return true;
     } catch (_) {
       debugPrint('Background sync heartbeat failed.');
+      return false;
     } finally {
       _nativeWakeRunning = false;
     }
@@ -136,6 +140,7 @@ class BackgroundSyncCoordinator {
     final generation = ++_configurationGeneration;
     final buckets = await _db.select(_db.buckets).get();
     final autoBucketIds = <int>{};
+    var wifiOnly = false;
     final activeBuckets = buckets.where((bucket) => bucket.isActive).toList();
     if (activeBuckets.isNotEmpty) {
       final bucket = activeBuckets.first;
@@ -144,19 +149,29 @@ class BackgroundSyncCoordinator {
       );
       if (preferences.autoBackupEnabled) {
         autoBucketIds.add(bucket.id);
+        wifiOnly = preferences.wifiOnly;
       }
     }
     final constraintBlockReason = await _blockReasonFor(autoBucketIds);
+    final persistentWifiOnly = autoBucketIds.isEmpty ? null : wifiOnly;
     if (!_started || generation != _configurationGeneration) return;
     if (_sameIds(_autoBucketIds, autoBucketIds) &&
         constraintBlockReason == _constraintBlockReason &&
-        ((_autoBucketIds.isNotEmpty && _nativeServiceStarted) ||
-            (_autoBucketIds.isEmpty && !_nativeServiceStarted))) {
+        persistentWifiOnly == _persistentWifiOnly &&
+        _statusSubscription != null) {
       return;
     }
 
     _autoBucketIds = Set.unmodifiable(autoBucketIds);
     _constraintBlockReason = constraintBlockReason;
+    _persistentWifiOnly = persistentWifiOnly;
+    if (_autoBucketIds.isEmpty) {
+      await _runNative(_bridge.cancelPersistentWork);
+    } else {
+      await _runNative(
+        () => _bridge.configurePersistentWork(wifiOnly: wifiOnly),
+      );
+    }
     await _statusSubscription?.cancel();
     _statusSubscription = null;
 
@@ -181,14 +196,6 @@ class BackgroundSyncCoordinator {
       _stopWhenCurrentUploadFinishes = false;
     }
 
-    if (!_nativeServiceStarted) {
-      await _runNative(_bridge.requestNotificationPermission);
-      const initial = SyncStatusSnapshot.empty();
-      _nativeServiceStarted = await _runNative(
-        () => _bridge.start(initial, pauseReason: _constraintBlockReason),
-      );
-      if (!_nativeServiceStarted) return;
-    }
     _statusSubscription = _statusService
         .watch(bucketIds: _trackedBucketIds)
         .listen(_queueNotificationUpdate, onError: _onStatusError);
@@ -198,6 +205,14 @@ class BackgroundSyncCoordinator {
     _latestStatus = status;
     if (_stopWhenCurrentUploadFinishes && status.uploadingCount == 0) {
       unawaited(_stopNativeService());
+      return;
+    }
+    if (status.pendingCount == 0 && status.uploadingCount == 0) {
+      unawaited(_stopNativeService(keepStatusSubscription: true));
+      return;
+    }
+    if (!_nativeServiceStarted) {
+      unawaited(_startNativeService(status));
       return;
     }
     _pendingNotification = status;
@@ -228,6 +243,33 @@ class BackgroundSyncCoordinator {
 
   void _onStatusError(Object _, StackTrace _) {
     debugPrint('Unable to update background sync status.');
+  }
+
+  Future<void> _startNativeService(SyncStatusSnapshot status) async {
+    if (!_started ||
+        _nativeServiceStarted ||
+        _nativeServiceStarting ||
+        _trackedBucketIds.isEmpty) {
+      return;
+    }
+    _nativeServiceStarting = true;
+    try {
+      await _runNative(_bridge.requestNotificationPermission);
+      final started = await _runNative(
+        () => _bridge.start(status, pauseReason: _constraintBlockReason),
+      );
+      if (!_started || _trackedBucketIds.isEmpty) {
+        if (started) await _runNative(_bridge.stop);
+        return;
+      }
+      _nativeServiceStarted = started;
+      final latest = _latestStatus;
+      if (started && latest != null && !identical(latest, status)) {
+        _queueNotificationUpdate(latest);
+      }
+    } finally {
+      _nativeServiceStarting = false;
+    }
   }
 
   Future<bool> _runNative(Future<Object?> Function() action) async {
@@ -270,19 +312,43 @@ class BackgroundSyncCoordinator {
     }
   }
 
-  Future<void> _stopNativeService() async {
-    await _statusSubscription?.cancel();
-    _statusSubscription = null;
+  Future<void> _stopNativeService({bool keepStatusSubscription = false}) async {
+    if (!keepStatusSubscription) {
+      await _statusSubscription?.cancel();
+      _statusSubscription = null;
+    }
     _notificationThrottle?.cancel();
     _notificationThrottle = null;
     _pendingNotification = null;
-    _latestStatus = null;
-    _constraintBlockReason = null;
-    _trackedBucketIds = const {};
-    _stopWhenCurrentUploadFinishes = false;
+    if (!keepStatusSubscription) {
+      _latestStatus = null;
+      _constraintBlockReason = null;
+      _trackedBucketIds = const {};
+      _stopWhenCurrentUploadFinishes = false;
+    }
     if (!_nativeServiceStarted) return;
     _nativeServiceStarted = false;
     await _runNative(_bridge.stop);
+  }
+
+  Future<void> stopForAccountCleanup() async {
+    _started = false;
+    _configurationGeneration++;
+    _bridge.clearSyncWakeHandler();
+    _configureDebounce?.cancel();
+    _notificationThrottle?.cancel();
+    await _bucketsSubscription?.cancel();
+    await _settingsSubscription?.cancel();
+    await _constraintsSubscription?.cancel();
+    await _statusSubscription?.cancel();
+    _bucketsSubscription = null;
+    _settingsSubscription = null;
+    _constraintsSubscription = null;
+    _statusSubscription = null;
+    _autoBucketIds = const {};
+    _persistentWifiOnly = null;
+    await _runNative(_bridge.cancelPersistentWork);
+    await _stopNativeService();
   }
 
   Future<void> dispose() async {

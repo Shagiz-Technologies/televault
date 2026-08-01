@@ -167,7 +167,7 @@ class _VaultRecoveryKeyScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(title: const Text('TeleVault Recovery Key')),
+      appBar: AppBar(title: const Text('Recovery key')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -175,17 +175,36 @@ class _VaultRecoveryKeyScreenState
             const Icon(Icons.key_rounded, color: AppTheme.primary, size: 54),
             const SizedBox(height: 14),
             const Text(
-              'Your portable recovery key',
+              'Save your recovery key',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 10),
             const Text(
-              'This key, not your short PIN or biometrics, recovers encrypted vault files and metadata backups on another installation.',
+              'This key lets you restore protected Vault files and metadata after reinstalling TeleVault or moving to another phone. Your PIN, password, or phone security cannot replace it.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, height: 1.4),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
+            const _RecoveryStep(
+              number: '1',
+              title: 'Save a private copy',
+              text:
+                  'Tap Copy recovery key. Paste it into a password manager, or write it down and keep it locked away. Do not share it.',
+            ),
+            const _RecoveryStep(
+              number: '2',
+              title: 'Check the saved copy',
+              text:
+                  'Enter the last 8 characters from your saved copy below. This checks that you saved the full key.',
+            ),
+            const _RecoveryStep(
+              number: '3',
+              title: 'Keep it available',
+              text:
+                  'You will need this key if TeleVault is removed, your phone is lost, or you restore on another phone.',
+            ),
+            const SizedBox(height: 16),
             if (_busy && _recoveryKey == null)
               const Center(child: CircularProgressIndicator())
             else if (_requiresExistingKey)
@@ -196,8 +215,8 @@ class _VaultRecoveryKeyScreenState
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Text(
-                  'Protected TeleVault data was found, but this installation does not have its recovery key. Import the original TVRK1 key below. Creating a new key would not unlock that data.',
-                  style: TextStyle(color: Colors.orangeAccent, height: 1.4),
+                  'TeleVault found protected data, but this phone does not have the key that was used to protect it. Enter your previously saved recovery key below. A new key cannot open older protected data.',
+                  style: TextStyle(color: AppTheme.ink, height: 1.4),
                 ),
               )
             else if (_recoveryKey != null) ...[
@@ -206,7 +225,7 @@ class _VaultRecoveryKeyScreenState
                 decoration: BoxDecoration(
                   color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white12),
+                  border: Border.all(color: AppTheme.outline),
                 ),
                 child: SelectableText(
                   _recoveryKey!,
@@ -232,8 +251,8 @@ class _VaultRecoveryKeyScreenState
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Text(
-                  'If you uninstall TeleVault or lose this phone without saving this key, encrypted vault files and v5 metadata snapshots cannot be recovered. Shagiz Technologies cannot reset it.',
-                  style: TextStyle(color: Colors.orangeAccent, height: 1.4),
+                  'Important: if this phone and your saved key are both lost, protected Vault files and metadata backups cannot be restored. TeleVault and Shagiz Technologies cannot create a replacement key for you.',
+                  style: TextStyle(color: AppTheme.ink, height: 1.4),
                 ),
               ),
               if (!_confirmed) ...[
@@ -243,7 +262,10 @@ class _VaultRecoveryKeyScreenState
                   onChanged: _busy
                       ? null
                       : (value) => setState(() => _recorded = value ?? false),
-                  title: const Text('I stored this key somewhere private'),
+                  title: const Text('I saved this key somewhere private'),
+                  subtitle: const Text(
+                    'Do not continue until you can find and open your saved copy.',
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
                 TextField(
@@ -253,14 +275,14 @@ class _VaultRecoveryKeyScreenState
                   autocorrect: false,
                   enableSuggestions: false,
                   decoration: const InputDecoration(
-                    labelText: 'Final 8 characters',
-                    hintText: 'Confirm your saved copy',
+                    labelText: 'Last 8 characters from your saved copy',
+                    hintText: 'Example: Ab12Cd34',
                   ),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
                   onPressed: _busy ? null : _confirm,
-                  child: const Text('Confirm recovery key'),
+                  child: const Text('Confirm my saved key'),
                 ),
               ] else
                 const ListTile(
@@ -268,7 +290,7 @@ class _VaultRecoveryKeyScreenState
                   leading: Icon(Icons.verified_rounded, color: Colors.green),
                   title: Text('Recovery key confirmed'),
                   subtitle: Text(
-                    'Keep your exported copy private and offline.',
+                    'Your protected backups can now be restored with the saved key.',
                   ),
                 ),
             ],
@@ -285,7 +307,7 @@ class _VaultRecoveryKeyScreenState
               const Divider(),
               const SizedBox(height: 12),
               const Text(
-                'Restore an existing vault',
+                'Already have a recovery key?',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
@@ -297,17 +319,74 @@ class _VaultRecoveryKeyScreenState
                 autocorrect: false,
                 enableSuggestions: false,
                 decoration: const InputDecoration(
-                  labelText: 'Existing TVRK1 recovery key',
+                  labelText: 'Paste your saved recovery key',
+                  helperText:
+                      'Recovery keys begin with TVRK1-. Spaces are ignored.',
                 ),
               ),
               const SizedBox(height: 10),
               OutlinedButton(
                 onPressed: _busy ? null : _import,
-                child: const Text('Import recovery key'),
+                child: const Text('Use this recovery key'),
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecoveryStep extends StatelessWidget {
+  final String number;
+  final String title;
+  final String text;
+
+  const _RecoveryStep({
+    required this.number,
+    required this.title,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 15,
+            backgroundColor: AppTheme.primarySoft,
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: AppTheme.primaryDeep,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: AppTheme.inkMuted,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

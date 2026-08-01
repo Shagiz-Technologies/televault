@@ -31,6 +31,7 @@ class Files extends Table {
   IntColumn get telegramMessageId =>
       integer().nullable()(); // Null = not uploaded yet
   IntColumn get telegramFileId => integer().nullable()();
+  TextColumn get uploadOperationId => text().nullable()();
   BoolColumn get remoteStateVerified =>
       boolean().withDefault(const Constant(true))();
 

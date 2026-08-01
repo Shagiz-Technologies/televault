@@ -4,12 +4,15 @@ import 'dart:io' as io;
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/database/file_sync_status.dart';
 import '../../../core/database/local_media_access_state.dart';
+import '../../../core/config/app_runtime_environment.dart';
 import '../../../core/services/diagnostics_service.dart';
+import '../../../core/services/runtime_ownership.dart';
 import '../../../core/services/telegram_error.dart';
 import '../../../core/services/telegram_gateway.dart';
 import '../../../core/services/telegram_message_content.dart';
@@ -48,6 +51,9 @@ class FileUploader {
   final Map<String, double> _currentProgress = {};
   final Map<String, String> _uploadProgressAliases = {};
   final Set<int> _verifiedBucketIds = {};
+  final RuntimeOwnershipLease _queueLease = RuntimeOwnershipLease(
+    'upload_queue.${AppRuntimeEnvironment.name}',
+  );
 
   StreamSubscription? _progressSub;
   StreamSubscription? _pendingSub;
@@ -62,6 +68,10 @@ class FileUploader {
   bool _disposed = false;
   bool _backgroundWakesSuspended = false;
   bool _accountCleanupRequested = false;
+  File? _activeFile;
+  int? _activeUploadFileId;
+  bool _activeUploadIgnoresConstraints = false;
+  bool _constraintPauseRequested = false;
 
   FileUploader(
     this._db,
@@ -88,6 +98,10 @@ class FileUploader {
       final remote = file['remote'] as Map<String, dynamic>?;
       if (localPath == null || remote == null) return;
       final progressKey = _uploadProgressAliases[localPath] ?? localPath;
+      if (_activeFile?.localPath == progressKey) {
+        _activeUploadFileId = _extractInt(file['id']);
+        if (_constraintPauseRequested) unawaited(_cancelActiveUpload());
+      }
 
       final isUploading = remote['is_uploading_active'] == true;
       final uploadedSize = _extractInt(remote['uploaded_size']) ?? 0;
@@ -137,7 +151,7 @@ class FileUploader {
       unawaited(_wakeActiveBucket());
     });
     _constraintsSub = _constraintsService.watchConstraintChanges().listen((_) {
-      wake();
+      unawaited(_handleConstraintChange());
     });
     _telegramStateSub = _telegramReliability.states.listen((state) {
       unawaited(_handleTelegramState(state));
@@ -340,6 +354,7 @@ class FileUploader {
     int? bucketId,
   }) async {
     if (_isUploading || _disposed) return;
+    if (!_queueLease.tryAcquire()) return;
     _isUploading = true;
 
     try {
@@ -378,11 +393,14 @@ class FileUploader {
           continue;
         }
 
+        final existingOperationId = nextFile.uploadOperationId;
+        final uploadOperationId = existingOperationId ?? const Uuid().v4();
         await (_db.update(
           _db.files,
         )..where((t) => t.id.equals(nextFile.id))).write(
           FilesCompanion(
             status: Value(FileSyncStatus.uploading.dbValue),
+            uploadOperationId: Value(uploadOperationId),
             lastAttemptAt: Value(DateTime.now()),
             lastError: const Value(null),
           ),
@@ -390,9 +408,18 @@ class FileUploader {
 
         _currentProgress[nextFile.localPath] = 0.0;
         _progressController.add(Map.from(_currentProgress));
+        _activeFile = nextFile;
+        _activeUploadFileId = null;
+        _activeUploadIgnoresConstraints = ignoreConstraints;
+        _constraintPauseRequested = false;
 
         try {
-          final messageId = await _uploadFile(nextFile, bucket.chatId);
+          final messageId = await _uploadFile(
+            nextFile,
+            bucket.chatId,
+            uploadOperationId: uploadOperationId,
+            reconcileExisting: existingOperationId != null,
+          );
           await (_db.update(
             _db.files,
           )..where((t) => t.id.equals(nextFile.id))).write(
@@ -414,7 +441,7 @@ class FileUploader {
           );
           final autoMetadataBackupService = _autoMetadataBackupService;
           if (autoMetadataBackupService != null) {
-            unawaited(autoMetadataBackupService.noteMediaUploadCompleted());
+            await autoMetadataBackupService.noteMediaUploadCompleted();
           }
         } on _LocalMediaAccessException {
           await (_db.update(
@@ -430,12 +457,20 @@ class FileUploader {
             ),
           );
         } catch (error) {
+          if (_constraintPauseRequested) {
+            await _returnToPendingAfterConstraintLoss(nextFile);
+            break;
+          }
           final failure = _normalizeFailure(error);
           await _markFailed(nextFile, failure);
           if (!failure.continueQueue) {
             break;
           }
         } finally {
+          _activeFile = null;
+          _activeUploadFileId = null;
+          _activeUploadIgnoresConstraints = false;
+          _constraintPauseRequested = false;
           _currentProgress.remove(nextFile.localPath);
           _progressController.add(Map.from(_currentProgress));
         }
@@ -446,6 +481,7 @@ class FileUploader {
       }
     } finally {
       _isUploading = false;
+      _queueLease.release();
       unawaited(_scheduleNextWake());
       final queuedWake = _queuedWake;
       _queuedWake = null;
@@ -456,6 +492,52 @@ class FileUploader {
         );
       }
     }
+  }
+
+  Future<void> _handleConstraintChange() async {
+    final active = _activeFile;
+    if (active == null || _activeUploadIgnoresConstraints) {
+      wake();
+      return;
+    }
+    final allowed = await _constraintsService.canRunAutomaticSync(
+      bucketId: active.bucketId,
+    );
+    if (allowed) {
+      wake();
+      return;
+    }
+    _constraintPauseRequested = true;
+    await _cancelActiveUpload();
+  }
+
+  Future<void> _cancelActiveUpload() async {
+    final fileId = _activeUploadFileId;
+    if (fileId == null) return;
+    try {
+      await _telegramService.request({
+        '@type': 'cancelUploadFile',
+        'file_id': fileId,
+      }, timeout: const Duration(seconds: 10));
+    } catch (_) {
+      // The send result decides whether the confirmed message or resumable
+      // queue state wins this race.
+    }
+  }
+
+  Future<void> _returnToPendingAfterConstraintLoss(File file) async {
+    await (_db.update(_db.files)..where((row) => row.id.equals(file.id))).write(
+      FilesCompanion(
+        status: Value(FileSyncStatus.pending.dbValue),
+        nextRetryAt: const Value(null),
+        lastError: const Value(null),
+        telegramErrorCode: const Value(null),
+        telegramErrorCategory: const Value(null),
+        telegramRetryAfter: const Value(null),
+        lastTelegramOperation: const Value(null),
+        userActionRequired: const Value(false),
+      ),
+    );
   }
 
   Future<void> _reconcileRemoteConfirmations(int bucketId) async {
@@ -772,7 +854,12 @@ class FileUploader {
     );
   }
 
-  Future<int> _uploadFile(File file, BigInt chatId) async {
+  Future<int> _uploadFile(
+    File file,
+    BigInt chatId, {
+    required String uploadOperationId,
+    required bool reconcileExisting,
+  }) async {
     if (!_telegramReliability.canUploadBytes(file.size)) {
       final limit = _telegramReliability.effectiveUploadLimitMb;
       throw _LocalUploadException(
@@ -787,12 +874,16 @@ class FileUploader {
         ),
       );
     }
+    if (reconcileExisting) {
+      final existing = await _findExistingUpload(chatId, uploadOperationId);
+      if (existing != null) return existing;
+    }
     final localFile = await _resolveUploadFile(file);
     final uploadPath = localFile.absolute.path;
     _uploadProgressAliases[uploadPath] = file.localPath;
 
     try {
-      return await _sendFile(file, chatId, uploadPath);
+      return await _sendFile(file, chatId, uploadPath, uploadOperationId);
     } finally {
       _uploadProgressAliases.remove(uploadPath);
     }
@@ -834,7 +925,12 @@ class FileUploader {
     return resolved;
   }
 
-  Future<int> _sendFile(File file, BigInt chatId, String uploadPath) async {
+  Future<int> _sendFile(
+    File file,
+    BigInt chatId,
+    String uploadPath,
+    String uploadOperationId,
+  ) async {
     final chatIdInt = _toTdInt64(chatId);
     if (chatIdInt == null) {
       throw TelegramError(
@@ -869,6 +965,7 @@ class FileUploader {
       preferences.uploadFormat,
       uploadPath,
       TelegramMessageContent.localFile(uploadPath),
+      uploadOperationId,
     );
     return _telegramReliability.sendMessageAndWait(
       operation: 'upload_media',
@@ -883,12 +980,14 @@ class FileUploader {
     SyncUploadFormat uploadFormat,
     String uploadPath,
     Map<String, dynamic> inputFile,
+    String uploadOperationId,
   ) {
-    final caption =
+    final description =
         uploadFormat == SyncUploadFormat.compressedMedia &&
             _isCompressibleMedia(file)
         ? 'Backed up by TeleVault (compressed media)'
         : 'Backed up by TeleVault';
+    final caption = '$description\n#TeleVaultUpload:$uploadOperationId';
     if (uploadFormat == SyncUploadFormat.compressedMedia &&
         _isCompressibleMedia(file)) {
       if (_isImagePath(uploadPath)) {
@@ -900,6 +999,79 @@ class FileUploader {
     }
 
     return TelegramMessageContent.document(file: inputFile, caption: caption);
+  }
+
+  Future<int?> _findExistingUpload(BigInt chatId, String operationId) async {
+    final chatIdInt = _toTdInt64(chatId);
+    if (chatIdInt == null) return null;
+    final marker = '#TeleVaultUpload:$operationId';
+    final candidates = <Map<String, dynamic>>[];
+    final search = await _telegramService.request({
+      '@type': 'searchChatMessages',
+      'chat_id': chatIdInt,
+      'query': marker,
+      'sender_id': null,
+      'from_message_id': 0,
+      'offset': 0,
+      'limit': 20,
+      'filter': null,
+      'message_thread_id': 0,
+    }, timeout: const Duration(seconds: 20));
+    if (search['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        search,
+        operation: 'reconcile_upload_operation',
+        chatId: chatId,
+      )!;
+    }
+    candidates.addAll(_messageList(search));
+    final history = await _telegramService.request({
+      '@type': 'getChatHistory',
+      'chat_id': chatIdInt,
+      'from_message_id': 0,
+      'offset': 0,
+      'limit': 100,
+      'only_local': false,
+    }, timeout: const Duration(seconds: 20));
+    if (history['@type'] == 'error') {
+      throw TelegramErrorParser.parse(
+        history,
+        operation: 'reconcile_upload_operation',
+        chatId: chatId,
+      )!;
+    }
+    candidates.addAll(_messageList(history));
+
+    for (final message in candidates) {
+      if (!_messageCaption(message).contains(marker)) continue;
+      final messageId = _extractInt(message['id']);
+      if (messageId == null) continue;
+      if (message['sending_state'] == null) return messageId;
+      throw TelegramError(
+        code: null,
+        tdlibMessage: 'A previous upload is still being finalized by Telegram',
+        operation: 'reconcile_upload_operation',
+        chatId: chatId,
+        category: TelegramErrorCategory.transient,
+        canRetry: true,
+      );
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> _messageList(Map<String, dynamic> response) {
+    return (response['messages'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList(growable: false);
+  }
+
+  String _messageCaption(Map<String, dynamic> message) {
+    final content = message['content'];
+    if (content is! Map) return '';
+    final caption = content['caption'];
+    if (caption is! Map) return '';
+    return caption['text']?.toString() ?? '';
   }
 
   bool _isCompressibleMedia(File file) {
@@ -1013,6 +1185,7 @@ class FileUploader {
     await _telegramStateSub?.cancel();
     _retryWakeTimer?.cancel();
     await _progressController.close();
+    _queueLease.release();
   }
 }
 

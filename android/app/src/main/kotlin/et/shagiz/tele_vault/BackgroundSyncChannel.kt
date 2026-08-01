@@ -30,9 +30,34 @@ object BackgroundSyncChannel : MethodChannel.MethodCallHandler {
         }
     }
 
-    fun requestDartSync() {
+    fun requestDartSync(onComplete: ((Boolean) -> Unit)? = null) {
         Handler(Looper.getMainLooper()).post {
-            channel?.invokeMethod("wakeSync", null)
+            val activeChannel = channel
+            if (activeChannel == null) {
+                onComplete?.invoke(false)
+                return@post
+            }
+            activeChannel.invokeMethod(
+                "wakeSync",
+                null,
+                object : MethodChannel.Result {
+                    override fun success(result: Any?) {
+                        onComplete?.invoke(result == true)
+                    }
+
+                    override fun error(
+                        errorCode: String,
+                        errorMessage: String?,
+                        errorDetails: Any?,
+                    ) {
+                        onComplete?.invoke(false)
+                    }
+
+                    override fun notImplemented() {
+                        onComplete?.invoke(false)
+                    }
+                },
+            )
         }
     }
 
@@ -62,6 +87,30 @@ object BackgroundSyncChannel : MethodChannel.MethodCallHandler {
                 result.success(null)
             }
             "isRunning" -> result.success(TeleVaultSyncService.isRunning)
+            "configurePersistentWork" -> {
+                val arguments = call.arguments as? Map<*, *>
+                val namespace = arguments?.get("namespace") as? String
+                if (namespace.isNullOrBlank()) {
+                    result.error("invalid_namespace", "Worker namespace is required.", null)
+                    return
+                }
+                TeleVaultSyncWorkScheduler.configure(
+                    applicationContext,
+                    namespace,
+                    arguments["wifiOnly"] == true,
+                )
+                result.success(null)
+            }
+            "cancelPersistentWork" -> {
+                val arguments = call.arguments as? Map<*, *>
+                val namespace = arguments?.get("namespace") as? String
+                if (namespace.isNullOrBlank()) {
+                    result.error("invalid_namespace", "Worker namespace is required.", null)
+                    return
+                }
+                TeleVaultSyncWorkScheduler.cancel(applicationContext, namespace)
+                result.success(null)
+            }
             "stop" -> {
                 applicationContext.stopService(
                     Intent(applicationContext, TeleVaultSyncService::class.java),

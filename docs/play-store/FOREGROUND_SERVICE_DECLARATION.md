@@ -2,19 +2,30 @@
 
 ## Current release state
 
-The current TeleVault production manifest does not declare an Android foreground service or a foreground-service permission. No foreground-service declaration should be submitted in Play Console for this release unless the implementation and merged manifest change.
+TeleVault declares `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_DATA_SYNC`. Its non-exported `TeleVaultSyncService` uses the `dataSync` type and displays a private, low-priority ongoing notification while automatic backup work is queued or uploading. It stops when that work finishes. The notification reports queued, uploading, completed, failed, and transferred-byte status.
 
-## Required behavior if added later
+The service keeps the active Flutter/TDLib upload session alive and provides visible progress. A unique WorkManager schedule provides periodic restart recovery; it does not create a second uploader or TDLib client. Android may still defer work, enforce data-sync foreground-service time limits, or stop the process.
 
-A future long-running, user-initiated sync may use a visible and cancellable foreground service only when Android requires it and only while the user-beneficial transfer is active. It must:
+`TeleVaultSyncService.onTimeout` removes the notification and stops the service when Android applies the data-sync time limit. WorkManager can wake the existing sequential Drift queue later when its network constraint is met.
 
-- use the correct data-sync or user-initiated transfer mechanism for the targeted Android version;
-- display an ongoing notification that clearly identifies TeleVault backup activity;
-- provide a stop action;
-- stop promptly when work completes, is cancelled, the user logs out, or required constraints are lost;
-- never run as a silent or permanent service;
-- be documented consistently in the manifest, Play Console declaration, Privacy Policy, and review video.
+## User benefit and initiation
 
-## Release check
+The service supports TeleVault's core user-facing purpose: continuous backup of newly available photos and videos to the user's selected private Telegram channel. It runs only for a bucket whose Auto Backup setting is enabled, or long enough to finish an upload that was already active when Auto Backup was disabled. Logout cancels persistent work and stops the service before TDLib account storage is cleared.
 
-Inspect the merged manifest from the final AAB. If any `FOREGROUND_SERVICE` permission, `foregroundServiceType`, service component, or long-running worker notification is present, replace this document with an exact declaration matching the implementation before submission.
+## Play Console declaration
+
+Declare the `dataSync` foreground-service type in Play Console. The review video must show:
+
+1. The user enabling Auto Backup for a bucket.
+2. A media item entering the backup queue.
+3. The TeleVault ongoing notification showing live progress.
+4. The Telegram channel receiving the completed item.
+5. Auto Backup being disabled and the service stopping after the active transfer finishes.
+
+## Release checks
+
+- Inspect the final merged manifest for the two foreground-service permissions, the non-exported service, and `android:foregroundServiceType="dataSync"`.
+- Verify the notification appears during a real upload and its counts match the selected bucket.
+- Verify logout cancels WorkManager jobs and removes the notification.
+- Verify Android 15+ timeout handling does not leave a stale notification.
+- Keep the Play Console declaration and review video synchronized with the submitted build.

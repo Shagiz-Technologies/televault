@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
+
 typedef MetadataLockFileProvider = Future<File> Function();
 
 final metadataOperationLockProvider = Provider<MetadataOperationLock>((ref) {
@@ -69,6 +71,12 @@ class MetadataOperationLock {
 
   static Future<File> _defaultLockFile() async {
     final support = await getApplicationSupportDirectory();
-    return File(path.join(support.path, 'metadata', 'metadata-operation.lock'));
+    return File(
+      path.join(
+        support.path,
+        AppRuntimeEnvironment.cacheDirectory('metadata'),
+        'metadata-operation.lock',
+      ),
+    );
   }
 }

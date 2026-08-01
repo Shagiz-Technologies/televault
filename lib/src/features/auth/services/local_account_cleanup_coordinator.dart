@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/config/app_runtime_environment.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_provider.dart';
 import '../../../core/services/telegram_reliability_service.dart';
 import '../../../core/services/telegram_service.dart';
 import '../../backup/services/metadata_operation_lock.dart';
 import '../../sync/services/file_uploader.dart';
+import '../../sync/services/background_sync_coordinator.dart';
 import '../../sync/services/sync_initializer.dart';
 import '../../sync/services/sync_service.dart';
 import '../../vault/services/vault_pin_service.dart';
@@ -26,6 +28,7 @@ final localAccountCleanupCoordinatorProvider =
       final syncService = ref.watch(syncServiceProvider);
       final syncInitializer = ref.watch(syncInitializerProvider);
       final uploader = ref.watch(fileUploaderProvider);
+      final background = ref.watch(backgroundSyncCoordinatorProvider);
       final reliability = ref.watch(telegramReliabilityServiceProvider);
       final telegram = ref.watch(telegramServiceProvider);
       final vault = ref.watch(vaultServiceProvider);
@@ -35,6 +38,7 @@ final localAccountCleanupCoordinatorProvider =
         ref.watch(databaseProvider),
         ref.watch(metadataOperationLockProvider),
         stopAccountWorkers: () async {
+          await background.stopForAccountCleanup();
           syncService.stopSyncLoop();
           syncInitializer.resetForAccountCleanup();
           await uploader.stopForAccountCleanup();
@@ -307,9 +311,9 @@ class LocalAccountCleanupCoordinator {
 
   Future<void> _deleteMetadataTemporaryFiles() async {
     final root = await _temporaryDirectoryProvider();
-    for (final directoryName in const [
-      'televault_metadata',
-      'televault_metadata_downloads',
+    for (final directoryName in [
+      AppRuntimeEnvironment.cacheDirectory('televault_metadata'),
+      AppRuntimeEnvironment.cacheDirectory('televault_metadata_downloads'),
     ]) {
       final directory = io.Directory(path.join(root.path, directoryName));
       if (await directory.exists()) await directory.delete(recursive: true);
@@ -388,7 +392,11 @@ class LocalAccountCleanupCoordinator {
   static Future<io.File> _defaultMarkerFile() async {
     final support = await getApplicationSupportDirectory();
     return io.File(
-      path.join(support.path, 'account', 'pending-local-cleanup.json'),
+      path.join(
+        support.path,
+        AppRuntimeEnvironment.cacheDirectory('account'),
+        'pending-local-cleanup.json',
+      ),
     );
   }
 }

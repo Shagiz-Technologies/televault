@@ -13,6 +13,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../config/app_runtime_environment.dart';
+import 'runtime_ownership.dart';
 import 'telegram_gateway.dart';
 import 'telegram_error.dart';
 
@@ -26,7 +28,8 @@ final telegramServiceProvider = Provider<TelegramService>((ref) {
 
 class TelegramService implements TelegramGateway {
   static const _iosSmokeTest = bool.fromEnvironment('TELEVAULT_IOS_SMOKE_TEST');
-  static const _iosDatabaseKeyName = 'telegram_tdlib_database_key_v1';
+  static String get _iosDatabaseKeyName =>
+      AppRuntimeEnvironment.secureStorageKey('telegram_tdlib_database_key_v1');
   static const _secureStorage = FlutterSecureStorage(
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.unlocked_this_device,
@@ -42,6 +45,9 @@ class TelegramService implements TelegramGateway {
   final Uuid _uuid = const Uuid();
   final Duration _minRequestSpacing = const Duration(milliseconds: 120);
   final Duration _idlePollDelay = const Duration(milliseconds: 40);
+  final RuntimeOwnershipLease _storageLease = RuntimeOwnershipLease(
+    'tdlib.${AppRuntimeEnvironment.name}',
+  );
 
   DateTime _lastRequestAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _isInitialized = false;
@@ -74,6 +80,12 @@ class TelegramService implements TelegramGateway {
   }
 
   void _init() {
+    if (!_storageLease.tryAcquire()) {
+      _initializationError = StateError(
+        'A TDLib client already owns this account storage.',
+      );
+      return;
+    }
     try {
       _tdJson = NativeClient();
       if (Platform.isIOS) {
@@ -91,6 +103,7 @@ class TelegramService implements TelegramGateway {
       _startEventLoop();
     } catch (error) {
       _initializationError = error;
+      _storageLease.release();
       debugPrint('TDLib initialization failed.');
     }
   }
@@ -321,14 +334,23 @@ class TelegramService implements TelegramGateway {
     final storageRoot = Platform.isIOS
         ? await getApplicationSupportDirectory()
         : await getApplicationDocumentsDirectory();
-    final tdlibRoot = p.join(storageRoot.path, 'tdlib');
+    final tdlibRoot = p.join(
+      storageRoot.path,
+      AppRuntimeEnvironment.tdlibDirectoryName,
+    );
     final dbPath = Platform.isIOS ? p.join(tdlibRoot, 'database') : tdlibRoot;
     final filesPath = Platform.isIOS ? p.join(tdlibRoot, 'files') : tdlibRoot;
 
-    const apiIdDefine = String.fromEnvironment('TELEGRAM_API_ID');
-    const apiHashDefine = String.fromEnvironment('TELEGRAM_API_HASH');
-    const apiIdString = apiIdDefine;
-    const apiHash = apiHashDefine;
+    const productionApiId = String.fromEnvironment('TELEGRAM_API_ID');
+    const productionApiHash = String.fromEnvironment('TELEGRAM_API_HASH');
+    const reviewApiId = String.fromEnvironment('TELEGRAM_TEST_API_ID');
+    const reviewApiHash = String.fromEnvironment('TELEGRAM_TEST_API_HASH');
+    const apiIdString = AppRuntimeEnvironment.isPlayStoreReview
+        ? reviewApiId
+        : productionApiId;
+    const apiHash = AppRuntimeEnvironment.isPlayStoreReview
+        ? reviewApiHash
+        : productionApiHash;
     final apiId = int.tryParse(apiIdString) ?? 0;
 
     if (apiId <= 0 || apiHash.isEmpty) {
@@ -347,7 +369,7 @@ class TelegramService implements TelegramGateway {
 
     final response = await request({
       '@type': 'setTdlibParameters',
-      'use_test_dc': false,
+      'use_test_dc': AppRuntimeEnvironment.isPlayStoreReview,
       'database_directory': dbPath,
       'files_directory': filesPath,
       'use_file_database': true,
@@ -493,7 +515,9 @@ class TelegramService implements TelegramGateway {
     final storageRoot = Platform.isIOS
         ? await getApplicationSupportDirectory()
         : await getApplicationDocumentsDirectory();
-    return Directory(p.join(storageRoot.path, 'tdlib'));
+    return Directory(
+      p.join(storageRoot.path, AppRuntimeEnvironment.tdlibDirectoryName),
+    );
   }
 
   Future<Map<String, dynamic>> _getAuthorizationState({
@@ -660,5 +684,6 @@ class TelegramService implements TelegramGateway {
     if (!_authStateController.isClosed) {
       await _authStateController.close();
     }
+    _storageLease.release();
   }
 }
