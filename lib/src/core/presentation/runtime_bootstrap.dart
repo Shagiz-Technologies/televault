@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import '../../app.dart';
 import '../../features/settings/presentation/privacy_policy_screen.dart';
 import '../../features/settings/presentation/terms_summary_screen.dart';
+import '../../features/reviewer_demo/presentation/reviewer_demo_app.dart';
 import '../../features/vault/services/vault_service.dart';
 import '../config/app_runtime_environment.dart';
 import '../config/runtime_environment_store.dart';
@@ -92,8 +93,7 @@ class _TeleVaultRuntimeBootstrapState extends State<TeleVaultRuntimeBootstrap> {
     }
   }
 
-  Future<void> _activateProductionAfterReview() async {
-    if (AppRuntimeEnvironment.compileTimeReviewEnabled) return;
+  Future<void> _activateProductionAfterDemo() async {
     if (mounted) {
       setState(() {
         _activeMode = null;
@@ -112,16 +112,36 @@ class _TeleVaultRuntimeBootstrapState extends State<TeleVaultRuntimeBootstrap> {
     });
   }
 
+  Future<void> _activateDemoAfterProduction() async {
+    if (mounted) {
+      setState(() {
+        _activeMode = null;
+        _busy = true;
+        _error = null;
+      });
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    await _bootstrapper.activateReviewerDemoAfterShutdown();
+    if (!mounted) return;
+    setState(() {
+      _activeMode = AppRuntimeMode.reviewerDemo;
+      _busy = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final mode = _activeMode;
     if (mode != null) {
+      if (mode == AppRuntimeMode.reviewerDemo) {
+        return ReviewerDemoApp(onExitDemo: _activateProductionAfterDemo);
+      }
       return ProviderScope(
         key: ValueKey(mode),
         overrides: [
           runtimeHostActionsProvider.overrideWithValue(
             RuntimeHostActions(
-              activateProductionAfterReview: _activateProductionAfterReview,
+              activateReviewerDemoAfterProduction: _activateDemoAfterProduction,
             ),
           ),
         ],
@@ -138,7 +158,7 @@ class _TeleVaultRuntimeBootstrapState extends State<TeleVaultRuntimeBootstrap> {
         busy: _busy,
         error: _error,
         onProduction: () => _select(_bootstrapper.defaultMode),
-        onReview: () => _select(AppRuntimeMode.playReview),
+        onReview: () => _select(AppRuntimeMode.reviewerDemo),
       ),
     );
   }
@@ -203,11 +223,11 @@ class _RuntimeChoiceScreen extends StatelessWidget {
               TextButton.icon(
                 onPressed: busy ? null : onReview,
                 icon: const Icon(Icons.fact_check_outlined, size: 19),
-                label: const Text('Google Play reviewer access'),
+                label: const Text('Google Play Reviewer Demo'),
               ),
               const Gap(8),
               const Text(
-                'Reviewer access uses Telegram\'s separate Test Environment. It never opens your normal TeleVault data.',
+                'Explore sample workflows without signing in. Demo activity stays on this device and never contacts Telegram.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: AppTheme.inkMuted,

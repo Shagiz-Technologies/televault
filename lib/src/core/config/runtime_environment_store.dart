@@ -33,9 +33,6 @@ class RuntimeEnvironmentBootstrapper {
   AppRuntimeMode get defaultMode => AppRuntimeMode.production;
 
   Future<AppRuntimeMode?> readInitialMode() async {
-    if (AppRuntimeEnvironment.compileTimeReviewEnabled) {
-      return AppRuntimeMode.playReview;
-    }
     return store.read();
   }
 
@@ -45,7 +42,7 @@ class RuntimeEnvironmentBootstrapper {
   }) async {
     AppRuntimeEnvironment.configure(mode);
     await store.write(mode);
-    await initializeServices();
+    if (mode == AppRuntimeMode.production) await initializeServices();
   }
 
   Future<void> initializePersisted(
@@ -53,7 +50,7 @@ class RuntimeEnvironmentBootstrapper {
     required Future<void> Function() initializeServices,
   }) async {
     AppRuntimeEnvironment.configure(mode);
-    await initializeServices();
+    if (mode == AppRuntimeMode.production) await initializeServices();
   }
 
   Future<void> activateProductionAfterShutdown({
@@ -63,5 +60,11 @@ class RuntimeEnvironmentBootstrapper {
     AppRuntimeEnvironment.resetAfterRuntimeShutdown();
     AppRuntimeEnvironment.configure(AppRuntimeMode.production);
     await initializeServices();
+  }
+
+  Future<void> activateReviewerDemoAfterShutdown() async {
+    await store.write(AppRuntimeMode.reviewerDemo);
+    AppRuntimeEnvironment.resetAfterRuntimeShutdown();
+    AppRuntimeEnvironment.configure(AppRuntimeMode.reviewerDemo);
   }
 }

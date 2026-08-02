@@ -81,6 +81,7 @@ jobs:
         run: >-
           python3 -m unittest
           tool.android.test_verify_16kb
+          tool.android.test_check_release_logs
           tool.android.test_verify_media_permissions
           tool.android.test_verify_play_store_readiness
           -v
@@ -116,13 +117,6 @@ jobs:
           python3 tool/android/verify_media_permissions.py \
             --manifest build/reports/merged-release-manifest.xml \
             --lockfile pubspec.lock
-
-      - name: Compile isolated Play review mode
-        run: >-
-          flutter build apk --debug
-          --dart-define=TELEVAULT_PLAY_REVIEW=true
-          --dart-define=TELEGRAM_API_ID=0
-          --dart-define=TELEGRAM_API_HASH=placeholder
 
       - name: Upload native inventory
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

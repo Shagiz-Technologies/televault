@@ -18,8 +18,12 @@ class TeleVaultSyncService : Service() {
         const val ACTION_UPDATE = "et.shagiz.tele_vault.sync.UPDATE"
         const val ACTION_STOP = "et.shagiz.tele_vault.sync.STOP"
 
-        private const val CHANNEL_ID = "televault_background_sync"
-        private const val NOTIFICATION_ID = 1207
+        // Keep the shipped production channel stable so existing notification
+        // preferences survive this update.
+        private const val PRODUCTION_CHANNEL_ID = "televault_background_sync"
+        private const val REVIEWER_DEMO_CHANNEL_ID = "televault_background_sync_reviewer_demo"
+        private const val PRODUCTION_NOTIFICATION_ID = 1207
+        private const val REVIEWER_DEMO_NOTIFICATION_ID = 1208
         private const val INITIAL_SYNC_WAKE_DELAY_MS = 2_500L
         private const val SYNC_WAKE_INTERVAL_MS = 30_000L
 
@@ -53,6 +57,7 @@ class TeleVaultSyncService : Service() {
         intent?.getStringExtra("namespace")
             ?.takeIf(String::isNotBlank)
             ?.let { runtimeNamespace = it }
+        createNotificationChannel()
         when (intent?.action) {
             ACTION_STOP -> {
                 removeForegroundNotification()
@@ -60,17 +65,17 @@ class TeleVaultSyncService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_START -> startForeground(
-                NOTIFICATION_ID,
+                notificationId(),
                 buildNotification(intent),
             )
             ACTION_UPDATE -> {
                 notificationManager().notify(
-                    NOTIFICATION_ID,
+                    notificationId(),
                     buildNotification(intent),
                 )
             }
             else -> startForeground(
-                NOTIFICATION_ID,
+                notificationId(),
                 buildNotification(intent),
             )
         }
@@ -111,7 +116,7 @@ class TeleVaultSyncService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, notificationChannelId())
             .setSmallIcon(R.drawable.ic_stat_televault)
             .setContentTitle(title)
             .setContentText(text)
@@ -135,7 +140,7 @@ class TeleVaultSyncService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
-            CHANNEL_ID,
+            notificationChannelId(),
             "Background backup",
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
@@ -150,6 +155,15 @@ class TeleVaultSyncService : Service() {
     private fun notificationManager(): NotificationManager {
         return getSystemService(NotificationManager::class.java)
     }
+
+    private fun isReviewerDemoNamespace(): Boolean =
+        runtimeNamespace == "et.shagiz.tele_vault.reviewer_demo"
+
+    private fun notificationChannelId(): String =
+        if (isReviewerDemoNamespace()) REVIEWER_DEMO_CHANNEL_ID else PRODUCTION_CHANNEL_ID
+
+    private fun notificationId(): Int =
+        if (isReviewerDemoNamespace()) REVIEWER_DEMO_NOTIFICATION_ID else PRODUCTION_NOTIFICATION_ID
 
     @Suppress("DEPRECATION")
     private fun removeForegroundNotification() {

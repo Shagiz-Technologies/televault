@@ -147,9 +147,9 @@ void main() {
     expect(fixture.tdlibCleared, isTrue);
   });
 
-  test('review cleanup preserves legacy production metadata snapshots', () async {
+  test('demo cleanup preserves legacy production metadata snapshots', () async {
     AppRuntimeEnvironment.resetForTesting();
-    AppRuntimeEnvironment.configure(AppRuntimeMode.playReview);
+    AppRuntimeEnvironment.configure(AppRuntimeMode.reviewerDemo);
     addTearDown(() {
       AppRuntimeEnvironment.resetForTesting();
       AppRuntimeEnvironment.configure(AppRuntimeMode.production);
@@ -158,7 +158,7 @@ void main() {
     addTearDown(fixture.dispose);
     await fixture.seed();
     final reviewDirectory = io.Directory(
-      '${fixture.temporaryDirectory.path}/televault_metadata_play_review',
+      '${fixture.temporaryDirectory.path}/televault_metadata_reviewer_demo',
     );
     await reviewDirectory.create(recursive: true);
     await io.File(

@@ -1,50 +1,41 @@
 # Google Play app access
 
-Status: **reviewer access is included in the same production AAB; verify it on the exact signed release before submission.**
+TeleVault normally requires the user's own Telegram account before its backup features can operate. The production AAB also includes a credential-free, network-free **Google Play Reviewer Demo** so reviewers can inspect restricted workflows without a Telegram account.
 
-TeleVault requires Telegram authorization before its main backup features are available. The production AAB therefore provides a pre-login `Google Play reviewer access` action that selects Telegram's Test DC before TDLib or any account-scoped TeleVault service starts.
-
-## Runtime isolation
-
-Normal startup remains the default and uses Telegram Production DC plus the existing production storage names.
-
-Reviewer access:
-
-- sets TDLib `use_test_dc` to `true`;
-- uses the same build-time `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` as normal startup;
-- uses separate TDLib, Drift, cache, Vault, secure-storage, WorkManager, metadata-temporary, and cleanup-marker namespaces;
-- shows a persistent `Telegram Test Environment` banner;
-- rejects worker wake-ups from another runtime namespace;
-- never opens, clears, or modifies production sessions or local data.
-
-No phone number, login code, Telegram session, API credential, private media, or reviewer identity is hardcoded in the app. The older `TELEVAULT_PLAY_REVIEW=true` switch remains available only for development builds; it is not required for Play review.
+No Telegram account or reviewer credential is required for the demo. It does not initialize TDLib, connect to Telegram, inspect production TeleVault data, or read the reviewer's media. When the reviewer starts the simulated backup, TeleVault requests Android photo/video and notification permissions so the declared permission and foreground-service flows can be reviewed with real system prompts.
 
 ## Reviewer steps
 
-1. Install and launch the normal signed TeleVault AAB delivered by Google Play.
-2. On the first connection screen, select **Google Play reviewer access**.
-3. Confirm that the persistent **Telegram Test Environment** banner is visible.
-4. Enter a Telegram Test DC phone number in the `99966XYYYY` format, where `X` is Test DC `1`, `2`, or `3`, and `YYYY` is any available four-digit suffix.
-5. Enter the reusable verification code `XXXXX`, where every `X` is the same Test DC number used in the phone number.
-6. Complete the normal TeleVault onboarding and grant the photo/video access needed for the test.
-7. Create a private test bucket and upload test media.
-8. Confirm the item reaches `Synced` only after the test channel receives it.
-9. Confirm Terms and Privacy remain readable from the pre-login flow.
-10. Use **Return to normal Telegram** when finished. Confirm Test Environment state is removed and normal TeleVault data is unchanged.
+1. Launch TeleVault from a fresh install or cleared app-data state.
+2. On the first connection screen, select **Google Play Reviewer Demo**.
+3. Confirm that the persistent banner reads **REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM**.
+4. Inspect the deterministic sample Library and Albums.
+5. Open **Albums** to inspect sample buckets or create a local demo bucket.
+6. In **Library**, run the simulated backup and respond to the Android photo/video and notification permission prompts.
+7. Confirm that Android displays an ongoing notification labeled **Reviewer Demo — simulated** and **No data sent to Telegram**.
+8. Inspect pending, uploading, synced, and failed states. Every transfer operation is labeled as simulated.
+9. Turn the demo Wi-Fi control off during a simulated upload. Confirm that the notification stops, the active item returns to pending, and the interface becomes resumable.
+10. Restore demo Wi-Fi and complete one simulated operation.
+11. Open **Vault** to inspect the local encryption and Recovery Key demonstration.
+12. Open **Settings** to inspect metadata backup status, Privacy, Terms, deletion information, and logout behavior.
+13. Select **Exit reviewer demo** to delete only demo data and return to normal Telegram startup.
+14. Select **Continue with Telegram** to confirm that the normal authorization screen opens without a stale Test or Demo environment.
 
-Use only non-sensitive test media and messages. Telegram documents that these
-synthetic test accounts can be used by others and may be periodically cleared.
+## Isolation and behavior
 
-## Play Console instructions
+- Production Telegram login remains the default normal-user path and always uses Telegram Production DC.
+- Reviewer Demo starts before production TDLib, Drift, Vault, secure storage, cache, or background workers are initialized.
+- Demo Drift, cache, temporary files, Vault secrets, Recovery Key data, WorkManager names, foreground-service identifiers, queue ownership, and cleanup state use dedicated namespaces.
+- TDLib is disabled in demo mode, so no Telegram network request, channel, message, or upload is created.
+- Sample media are generated descriptions and colored placeholders. The photo/video permission prompt demonstrates the production permission flow, but the demo does not enumerate or read device media.
+- Backup and metadata operations are deterministic local simulations and are visibly identified as simulated.
+- The demo uses TeleVault's real Android foreground-service notification mechanism only to demonstrate visible background progress. The transferred content and completion result remain local simulations.
+- The demo notification stops on interruption, completion, exit, and cleanup.
+- Before production switches into Reviewer Demo, TeleVault stops workers and closes TDLib cleanly so its local database can be reopened safely later without logging out the user.
+- Exiting the demo cancels current demo work and legacy Test DC worker names, then removes only demo secrets, databases, and files. Production sessions and data are neither opened nor deleted.
 
-Copy the reviewer steps above into Play Console App access. State explicitly that the number and code use Telegram's synthetic Test DC format and do not belong to a real person. Do not provide a personal production Telegram account or an unpredictable production OTP.
+## Production verification
 
-## Submission blockers
+Reviewers who choose **Continue with Telegram** use the normal production path and must authorize their own real Telegram account. TeleVault does not ship phone numbers, login codes, sessions, API credentials, reviewer identities, or private media.
 
-Do not submit until:
-
-- the exact signed production AAB has completed this Test DC flow;
-- the banner remains visible throughout the reviewer session;
-- a test bucket and test-media upload succeed;
-- returning to production has been verified not to remove production data;
-- Play-generated APKs have been tested after bundle processing.
+The demo supports Play review of application behavior; it is not evidence of successful Telegram delivery. Production Telegram login and upload are validated separately during release testing.

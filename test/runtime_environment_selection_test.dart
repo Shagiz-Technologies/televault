@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tele_vault/src/core/config/app_runtime_environment.dart';
 import 'package:tele_vault/src/core/config/runtime_environment_store.dart';
-import 'package:tele_vault/src/core/services/review_environment_exit_service.dart';
+import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_cleanup_service.dart';
 
 void main() {
   setUp(AppRuntimeEnvironment.resetForTesting);
@@ -18,7 +18,7 @@ void main() {
     expect(bootstrapper.defaultMode, AppRuntimeMode.production);
   });
 
-  test('review mode is selected before service initialization', () async {
+  test('reviewer demo is selected without service initialization', () async {
     final events = <String>[];
     final store = _MemoryRuntimeEnvironmentStore(
       onWrite: (mode) {
@@ -28,43 +28,50 @@ void main() {
     final bootstrapper = RuntimeEnvironmentBootstrapper(store);
 
     await bootstrapper.activate(
-      AppRuntimeMode.playReview,
+      AppRuntimeMode.reviewerDemo,
       initializeServices: () async {
         events.add('initialized:${AppRuntimeEnvironment.current.name}');
       },
     );
 
-    expect(events, ['stored:play_review', 'initialized:play_review']);
-    expect(AppRuntimeEnvironment.isPlayStoreReview, isTrue);
+    expect(events, ['stored:reviewer_demo']);
+    expect(AppRuntimeEnvironment.isReviewerDemo, isTrue);
   });
 
-  test('returning to production clears only review state', () async {
-    AppRuntimeEnvironment.configure(AppRuntimeMode.playReview);
+  test('returning to production clears only demo state', () async {
+    AppRuntimeEnvironment.configure(AppRuntimeMode.reviewerDemo);
     final productionData = <String, String>{'session': 'keep'};
-    final reviewData = <String, String>{'session': 'remove'};
+    final demoData = <String, String>{'session': 'remove'};
     final events = <String>[];
-    final service = ReviewEnvironmentExitService(
-      cleanupReviewEnvironment: () async {
-        events.add('cleanup:${AppRuntimeEnvironment.current.name}');
-        reviewData.clear();
+    final service = ReviewerDemoCleanupService(
+      cancelDemoWork: () async => events.add('cancel-demo-work'),
+      clearDemoSecrets: () async {
+        events.add('clear-demo-secrets');
+        demoData.clear();
       },
-      disposeTelegram: () async => events.add('dispose-review'),
-      activateProduction: () async {
-        AppRuntimeEnvironment.resetAfterRuntimeShutdown();
-        AppRuntimeEnvironment.configure(AppRuntimeMode.production);
-        events.add('activate:${AppRuntimeEnvironment.current.name}');
-      },
+      deleteDemoFiles: () async => events.add('delete-demo-files'),
     );
 
-    await service.returnToProduction();
+    await service.clear();
 
-    expect(reviewData, isEmpty);
+    expect(demoData, isEmpty);
     expect(productionData, {'session': 'keep'});
     expect(events, [
-      'cleanup:play_review',
-      'dispose-review',
-      'activate:production',
+      'cancel-demo-work',
+      'clear-demo-secrets',
+      'delete-demo-files',
     ]);
+  });
+
+  test('production can shut down into reviewer demo', () async {
+    final store = _MemoryRuntimeEnvironmentStore();
+    final bootstrapper = RuntimeEnvironmentBootstrapper(store);
+    AppRuntimeEnvironment.configure(AppRuntimeMode.production);
+
+    await bootstrapper.activateReviewerDemoAfterShutdown();
+
+    expect(store.value, AppRuntimeMode.reviewerDemo);
+    expect(AppRuntimeEnvironment.isReviewerDemo, isTrue);
   });
 }
 

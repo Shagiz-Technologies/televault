@@ -57,6 +57,20 @@ FORBIDDEN_DEPENDENCIES = (
     "google_mobile_ads:",
 )
 
+FORBIDDEN_REVIEW_ACCESS_MARKERS = (
+    "99966XYYYY",
+    "XXXXX",
+    "TELEVAULT_PLAY_REVIEW=true",
+    "Google Play reviewer access",
+)
+
+REQUIRED_REVIEW_DEMO_MARKERS = (
+    "Google Play Reviewer Demo",
+    "REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM",
+    "No Telegram account or reviewer credential is required",
+    "Exit reviewer demo",
+)
+
 
 def _read(root: Path, relative: str) -> str:
     path = root / relative
@@ -107,6 +121,22 @@ def verify(root: Path) -> list[str]:
     for dependency in FORBIDDEN_DEPENDENCIES:
         if dependency in pubspec:
             errors.append(f"Disallowed release dependency is present: {dependency[:-1]}")
+
+    review_docs = "\n".join(
+        _read(root, relative)
+        for relative in (
+            "docs/play-store/APP_ACCESS.md",
+            "docs/play-store/RELEASE_CHECKLIST.md",
+            "docs/play-store/REVIEW_VIDEO_SCRIPT.md",
+        )
+    )
+    for marker in FORBIDDEN_REVIEW_ACCESS_MARKERS:
+        if marker in review_docs:
+            errors.append(f"Obsolete Test DC reviewer guidance remains: {marker}")
+    app_access = _read(root, "docs/play-store/APP_ACCESS.md")
+    for marker in REQUIRED_REVIEW_DEMO_MARKERS:
+        if marker not in app_access:
+            errors.append(f"App access guide is missing Reviewer Demo copy: {marker}")
 
     manifest = _read(root, "android/app/src/main/AndroidManifest.xml")
     for permission in ("MANAGE_EXTERNAL_STORAGE", "ACCESS_MEDIA_LOCATION"):

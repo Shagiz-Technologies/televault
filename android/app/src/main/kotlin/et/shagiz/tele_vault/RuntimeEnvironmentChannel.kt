@@ -9,7 +9,7 @@ object RuntimeEnvironmentChannel : MethodChannel.MethodCallHandler {
     private const val CHANNEL_NAME = "et.shagiz.tele_vault/runtime_environment"
     private const val PREFERENCES_NAME = "televault_runtime_environment"
     private const val SELECTED_MODE_KEY = "selected_mode"
-    private val allowedModes = setOf("production", "play_review")
+    private val allowedModes = setOf("production", "reviewer_demo")
 
     private lateinit var applicationContext: Context
 
@@ -18,9 +18,11 @@ object RuntimeEnvironmentChannel : MethodChannel.MethodCallHandler {
         MethodChannel(messenger, CHANNEL_NAME).setMethodCallHandler(this)
     }
 
-    fun selectedMode(context: Context): String? = context
-        .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-        .getString(SELECTED_MODE_KEY, null)
+    fun selectedMode(context: Context): String? = normalizeMode(
+        context
+            .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .getString(SELECTED_MODE_KEY, null),
+    )
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         val preferences = applicationContext.getSharedPreferences(
@@ -29,7 +31,7 @@ object RuntimeEnvironmentChannel : MethodChannel.MethodCallHandler {
         )
         when (call.method) {
             "getSelectedMode" -> result.success(
-                preferences.getString(SELECTED_MODE_KEY, null),
+                normalizeMode(preferences.getString(SELECTED_MODE_KEY, null)),
             )
             "setSelectedMode" -> {
                 val mode = call.arguments as? String
@@ -46,5 +48,11 @@ object RuntimeEnvironmentChannel : MethodChannel.MethodCallHandler {
             }
             else -> result.notImplemented()
         }
+    }
+
+    private fun normalizeMode(value: String?): String? = when (value) {
+        // Migrate the retired Test DC runtime without initializing Telegram.
+        "play_review" -> "reviewer_demo"
+        else -> value
     }
 }

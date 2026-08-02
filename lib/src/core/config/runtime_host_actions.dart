@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class RuntimeHostActions {
-  final Future<void> Function() activateProductionAfterReview;
+  final Future<void> Function() activateReviewerDemoAfterProduction;
 
-  const RuntimeHostActions({required this.activateProductionAfterReview});
+  const RuntimeHostActions({required this.activateReviewerDemoAfterProduction});
 }
 
 final runtimeHostActionsProvider = Provider<RuntimeHostActions>((ref) {
