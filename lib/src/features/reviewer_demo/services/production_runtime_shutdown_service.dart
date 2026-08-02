@@ -22,6 +22,13 @@ final productionRuntimeShutdownServiceProvider =
       );
     });
 
+bool _isClosedAuthorizationUpdate(Map<String, dynamic> event) {
+  if (event['@type'] != 'updateAuthorizationState') return false;
+  final state = event['authorization_state'];
+  if (state is! Map) return false;
+  return state['@type'] == 'authorizationStateClosed';
+}
+
 Future<void> _closeTelegramForRuntimeSwitch(TelegramService telegram) async {
   if (!telegram.isAvailable) {
     await telegram.dispose();
@@ -32,12 +39,7 @@ Future<void> _closeTelegramForRuntimeSwitch(TelegramService telegram) async {
     final currentState = telegram.currentAuthorizationStateType;
     if (currentState != 'authorizationStateClosed') {
       final closed = telegram.waitForUpdate(
-        (event) {
-          if (event['@type'] != 'updateAuthorizationState') return false;
-          final state = event['authorization_state'];
-          return state is Map &&
-              state['@type'] == 'authorizationStateClosed';
-        },
+        _isClosedAuthorizationUpdate,
         timeout: const Duration(seconds: 15),
       );
       if (currentState != 'authorizationStateClosing') {
