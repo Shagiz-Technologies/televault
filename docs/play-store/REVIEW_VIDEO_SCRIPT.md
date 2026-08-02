@@ -1,68 +1,48 @@
 # Google Play review video script
 
-Target length: 2-4 minutes. Record the exact production release candidate or
-Play-generated APK, with no private notifications or personal media visible.
+Target length: 2-4 minutes. Record the exact production release candidate or a Play-generated APK. Hide personal notifications and do not use private media.
 
-## 1. Environment and legal access
+## 1. Enter Reviewer Demo
 
-- Launch the app.
-- Select `Google Play reviewer access` on the first connection screen.
-- Show the persistent `Telegram Test Environment` banner.
-- Open Privacy Policy and Terms of Service before entering a phone number.
-- Return to login.
+- Launch the app from a fresh install or cleared app-data state.
+- Select `Google Play Reviewer Demo` on the first connection screen.
+- Show the persistent `REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM` banner.
+- Explain that the demo uses deterministic local data and does not initialize TDLib or contact Telegram.
 
-## 2. Reviewer authorization
+## 2. Library, albums, and buckets
 
-- Enter a Telegram Test DC number in the `99966XYYYY` format. Use Test DC 1,
-  2, or 3 for `X` and an available four-digit suffix for `YYYY`.
-- Enter `XXXXX` as the code, repeating the selected Test DC number five times.
-- Do not show production credentials, API secrets, or a personal Telegram account.
-- Do not store private or important information in the synthetic test account.
+- Show the sample Library and Albums.
+- Create a local demo bucket and show the confirmation that no Telegram channel was created.
+- Point out pending, uploading, synced, and failed sample states.
 
-## 3. Photo/video permission
+## 3. Simulated backup and interruption
 
-- Show the Android photo/video permission prompt.
-- Demonstrate selected-media access and the partial-access notice.
-- Open Settings > Media Access.
-- Expand or change access and show that only accessible items appear.
+- Start a simulated upload and show its explicit `simulated` label and progress.
+- Turn off the demo Wi-Fi control while progress is active.
+- Show that the item returns to pending without any network transfer.
+- Restore demo Wi-Fi and complete one simulated operation.
 
-## 4. Core backup
+## 4. Vault and metadata
 
-- Create or select a private test bucket.
-- Queue one small test photo and one small test video.
-- Show queued, uploading, and synced states.
-- Explain that Telegram/TDLib process the account, channel, messages, and uploaded files.
-- State that normal non-vault uploads are not client-side end-to-end encrypted by TeleVault.
+- Open Vault and generate a demo Recovery Key.
+- Confirm the key, then run local sample encryption.
+- Open Settings and run the simulated metadata snapshot.
+- State that all of these operations remain inside the isolated demo namespace.
 
-## 5. Vault boundary
+## 5. Legal, deletion, and exit
 
-- Open Vault setup.
-- Generate, record, and confirm the Vault Recovery Key using non-sensitive test data.
-- Vault one test item and show its status.
-- Explain that the PIN/biometric is a local access control and the Recovery Key is required for portable recovery.
-
-## 6. Background and constraints
-
-- Show Sync Preferences.
-- Explain that Android may defer background work.
-- Demonstrate persistent work and active Wi-Fi-loss handling using the release candidate.
-
-## 7. Logout and deletion boundary
-
-- Open logout.
-- Show the explanation of local data removal and the option to retain encrypted Vault files.
-- Show that remote Telegram channels/messages are not automatically deleted.
-- Complete logout and return to the login screen.
-- Select `Return to normal Telegram` and show that only Test Environment state is cleared.
+- Open Privacy, Terms, and deletion information from Settings.
+- Select `Exit reviewer demo`.
+- Show the normal Telegram startup screen.
+- Explain that exit deletes only demo state and does not access or remove production data.
 
 ## Recording evidence
 
-Capture or retain separately:
+Retain separately:
 
 - app version and build number;
-- commit SHA;
-- AAB SHA-256;
+- commit SHA and AAB SHA-256;
 - Android version and device model;
-- whether the installed APK came from Play internal testing;
-- date of the recording;
-- the synthetic reviewer number entered privately in Play Console.
+- whether the APK came from Play internal testing;
+- recording date;
+- confirmation that no production credentials or user media were shown.

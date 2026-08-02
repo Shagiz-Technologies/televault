@@ -46,6 +46,18 @@ class VerifyPlayStoreReadinessTest(unittest.TestCase):
             "# Store listing\n## Short description\nPrivate Telegram backup.\n"
             "## Full description\nAccurate details.\n",
         )
+        self._write(
+            root,
+            "docs/play-store/APP_ACCESS.md",
+            "\n".join(
+                (
+                    "Google Play Reviewer Demo",
+                    "REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM",
+                    "No Telegram account or reviewer credential is required",
+                    "Exit reviewer demo",
+                )
+            ),
+        )
         self._write(root, "pubspec.yaml", "dependencies:\n  flutter:\n")
         self._write(
             root,
@@ -81,6 +93,21 @@ class VerifyPlayStoreReadinessTest(unittest.TestCase):
             self.assertTrue(any("ACCESS_MEDIA_LOCATION" in error for error in errors))
             self.assertTrue(any("google_sign_in" in error for error in errors))
             self.assertTrue(any("unlimited cloud storage" in error for error in errors))
+
+    def test_rejects_retired_test_dc_reviewer_instructions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._valid_tree(root)
+            self._write(
+                root,
+                "docs/play-store/APP_ACCESS.md",
+                "Google Play reviewer access: enter 99966XYYYY and XXXXX.\n",
+            )
+
+            errors = verify(root)
+
+            self.assertTrue(any("99966XYYYY" in error for error in errors))
+            self.assertTrue(any("XXXXX" in error for error in errors))
 
 
 if __name__ == "__main__":

@@ -6,25 +6,25 @@ import org.junit.Test
 
 class TeleVaultSyncWorkNamesTest {
     @Test
-    fun productionAndReviewWorkNeverShareUniqueNames() {
+    fun productionAndReviewerDemoWorkNeverShareUniqueNames() {
         val production = "et.shagiz.tele_vault.production"
-        val review = "et.shagiz.tele_vault.play_review"
+        val demo = "et.shagiz.tele_vault.reviewer_demo"
 
         assertEquals(
             "et.shagiz.tele_vault.production.periodic_backup",
             TeleVaultSyncWorkNames.periodic(production),
         )
         assertEquals(
-            "et.shagiz.tele_vault.play_review.immediate_backup",
-            TeleVaultSyncWorkNames.immediate(review),
+            "et.shagiz.tele_vault.reviewer_demo.immediate_backup",
+            TeleVaultSyncWorkNames.immediate(demo),
         )
         assertNotEquals(
             TeleVaultSyncWorkNames.periodic(production),
-            TeleVaultSyncWorkNames.periodic(review),
+            TeleVaultSyncWorkNames.periodic(demo),
         )
         assertNotEquals(
             TeleVaultSyncWorkNames.immediate(production),
-            TeleVaultSyncWorkNames.immediate(review),
+            TeleVaultSyncWorkNames.immediate(demo),
         )
     }
 }

@@ -20,11 +20,12 @@ A release is not production-ready until every P0 item is complete against the ex
 
 ## P0 — reviewer access
 
-- [x] The production AAB exposes Test DC reviewer access before account-scoped services start.
-- [x] Review mode uses separate TDLib, Drift, cache, secure-storage, worker, and cleanup namespaces.
-- [x] A persistent `Telegram Test Environment` indicator is visible.
-- [ ] Reusable reviewer credentials and exact steps are entered privately in Play Console.
-- [ ] The Play-generated APKs from the submitted AAB are tested with the reviewer flow.
+- [x] The production AAB exposes a credential-free Reviewer Demo before production services start.
+- [x] Demo mode uses separate Drift, cache, temporary-file, Vault, Recovery Key, worker, foreground-service, queue, and cleanup namespaces.
+- [x] TDLib is not initialized and Telegram is not contacted in Reviewer Demo.
+- [x] A persistent `REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM` banner is visible.
+- [x] All demo uploads and metadata operations are explicitly labeled as simulated.
+- [ ] The Play-generated APKs from the submitted AAB are tested through enter, workflow, interruption, cleanup, and exit.
 
 ## P0 — privacy and Play Console
 
@@ -53,13 +54,10 @@ flutter build appbundle --release \
   --dart-define=TELEGRAM_API_HASH=<release-secret>
 ```
 
-The same production AAB contains reviewer access. The compile-time mode remains only for development checks:
+The same production AAB contains the credential-free Reviewer Demo. No alternate build flag or reviewer credential is required.
 
 ```bash
-flutter build appbundle --release \
-  --dart-define=TELEVAULT_PLAY_REVIEW=true \
-  --dart-define=TELEGRAM_API_ID=<release-secret> \
-  --dart-define=TELEGRAM_API_HASH=<release-secret>
+python3 tool/android/check_release_logs.py --log <captured-log-file>
 ```
 
 Then run the existing API 36, 16 KB, merged-manifest, dependency, and secret/artifact verification. Record the commit SHA, version code, AAB SHA-256, signing-certificate fingerprints, and Play Console track.
@@ -70,6 +68,6 @@ Do not submit or promote the release when:
 
 - any P0 item remains unchecked;
 - legal pages contain placeholders or contradict the app;
-- review access depends on a personal production Telegram OTP;
+- Reviewer Demo initializes TDLib, contacts Telegram, or accesses production data;
 - the signed AAB has not been tested through Play's generated APK delivery;
 - a critical workflow passes only with uncommitted local changes.

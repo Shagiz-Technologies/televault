@@ -80,6 +80,12 @@ class TelegramService implements TelegramGateway {
   }
 
   void _init() {
+    if (AppRuntimeEnvironment.isReviewerDemo) {
+      _initializationError = StateError(
+        'TDLib is disabled in Google Play Reviewer Demo.',
+      );
+      return;
+    }
     if (!_storageLease.tryAcquire()) {
       _initializationError = StateError(
         'A TDLib client already owns this account storage.',
@@ -88,9 +94,9 @@ class TelegramService implements TelegramGateway {
     }
     try {
       _tdJson = NativeClient();
-      if (Platform.isIOS) {
-        _configureIosNativeLogging();
-      }
+      // TDLib's default native verbosity can include authorization payloads.
+      // Disable it before a client ID or authorization request is created.
+      _configureNativeLogging();
       _clientId = _tdJson.td_create_client_id();
       if (Platform.isIOS) {
         _runIosNativeSmokeTest();
@@ -108,8 +114,8 @@ class TelegramService implements TelegramGateway {
     }
   }
 
-  void _configureIosNativeLogging() {
-    _executeIosNativeRequest(
+  void _configureNativeLogging() {
+    _executeNativeRequest(
       const {'@type': 'setLogVerbosityLevel', 'new_verbosity_level': 0},
       expectedType: 'ok',
       operation: 'privacy logging configuration',
@@ -117,14 +123,14 @@ class TelegramService implements TelegramGateway {
   }
 
   void _runIosNativeSmokeTest() {
-    _executeIosNativeRequest(
+    _executeNativeRequest(
       const {'@type': 'getTextEntities', 'text': 'TeleVault'},
       expectedType: 'textEntities',
       operation: 'startup smoke test',
     );
   }
 
-  Map<String, dynamic> _executeIosNativeRequest(
+  Map<String, dynamic> _executeNativeRequest(
     Map<String, dynamic> requestBody, {
     required String expectedType,
     required String operation,
@@ -363,7 +369,7 @@ class TelegramService implements TelegramGateway {
 
     final response = await request({
       '@type': 'setTdlibParameters',
-      'use_test_dc': AppRuntimeEnvironment.isPlayStoreReview,
+      'use_test_dc': false,
       'database_directory': dbPath,
       'files_directory': filesPath,
       'use_file_database': true,
@@ -462,6 +468,7 @@ class TelegramService implements TelegramGateway {
       debugPrint('TDLib auth reset continued after a destroy warning.');
     }
 
+    _configureNativeLogging();
     _clientId = _tdJson.td_create_client_id();
     _tdlibParametersSent = false;
     _databaseEncryptionKeyChecked = false;
@@ -480,6 +487,7 @@ class TelegramService implements TelegramGateway {
       // Cleanup remains safe to retry after TDLib has already closed.
     }
 
+    _configureNativeLogging();
     _clientId = _tdJson.td_create_client_id();
     _tdlibParametersSent = false;
     _databaseEncryptionKeyChecked = false;

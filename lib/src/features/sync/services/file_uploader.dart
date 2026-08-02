@@ -52,7 +52,7 @@ class FileUploader {
   final Map<String, String> _uploadProgressAliases = {};
   final Set<int> _verifiedBucketIds = {};
   final RuntimeOwnershipLease _queueLease = RuntimeOwnershipLease(
-    'upload_queue.${AppRuntimeEnvironment.name}',
+    AppRuntimeEnvironment.queueOwnershipNamespace,
   );
 
   StreamSubscription? _progressSub;

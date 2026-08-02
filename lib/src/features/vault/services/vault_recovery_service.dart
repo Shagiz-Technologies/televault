@@ -72,8 +72,10 @@ abstract interface class VaultRecoveryKeyProvider {
 }
 
 class VaultRecoveryService implements VaultRecoveryKeyProvider {
-  static const String _keyStorageKey = 'vault_recovery_key_v1';
-  static const String _confirmedStorageKey = 'vault_recovery_key_confirmed_v1';
+  static String get _keyStorageKey =>
+      AppRuntimeEnvironment.secureStorageKey('vault_recovery_key_v1');
+  static String get _confirmedStorageKey =>
+      AppRuntimeEnvironment.secureStorageKey('vault_recovery_key_confirmed_v1');
   static const String recoveryPrefix = 'TVRK1-';
   static const int keyLength = 32;
   static const int checksumLength = 4;

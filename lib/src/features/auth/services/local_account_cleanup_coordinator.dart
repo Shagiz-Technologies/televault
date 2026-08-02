@@ -179,8 +179,8 @@ class LocalAccountCleanupCoordinator {
   }
 
   Future<void> clearReviewEnvironment() {
-    if (!AppRuntimeEnvironment.isPlayStoreReview) {
-      throw StateError('Review cleanup cannot run in the production runtime.');
+    if (!AppRuntimeEnvironment.isReviewerDemo) {
+      throw StateError('Demo cleanup cannot run in the production runtime.');
     }
     return _operationLock.synchronized(() async {
       var marker = const _CleanupMarker(
@@ -201,7 +201,7 @@ class LocalAccountCleanupCoordinator {
       } catch (error) {
         throw LocalAccountCleanupException(
           LocalAccountCleanupErrorCode.localCleanupFailed,
-          'The Test Environment could not be cleared completely.',
+          'Reviewer Demo could not be cleared completely.',
           cause: error,
         );
       }
@@ -348,9 +348,9 @@ class LocalAccountCleanupCoordinator {
       final directory = io.Directory(path.join(root.path, directoryName));
       if (await directory.exists()) await directory.delete(recursive: true);
     }
-    // Review cleanup must never remove legacy production snapshots that may
+    // Demo cleanup must never remove legacy production snapshots that may
     // still exist directly under the shared system temporary directory.
-    if (AppRuntimeEnvironment.isPlayStoreReview) return;
+    if (AppRuntimeEnvironment.isReviewerDemo) return;
     if (!await root.exists()) return;
     await for (final entity in root.list(followLinks: false)) {
       if (entity is! io.File) continue;
@@ -427,7 +427,7 @@ class LocalAccountCleanupCoordinator {
     return io.File(
       path.join(
         support.path,
-        AppRuntimeEnvironment.cacheDirectory('account'),
+        AppRuntimeEnvironment.cleanupStateDirectoryName,
         'pending-local-cleanup.json',
       ),
     );

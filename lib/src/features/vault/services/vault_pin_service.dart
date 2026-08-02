@@ -113,17 +113,24 @@ class VaultPinService {
       await clearBiometricSecret();
       return;
     }
-    await _secureStorage.write(key: _biometricSecretKey, value: secret);
+    await _secureStorage.write(
+      key: AppRuntimeEnvironment.secureStorageKey(_biometricSecretKey),
+      value: secret,
+    );
   }
 
   Future<void> clearBiometricSecret() async {
-    await _secureStorage.delete(key: _biometricSecretKey);
+    await _secureStorage.delete(
+      key: AppRuntimeEnvironment.secureStorageKey(_biometricSecretKey),
+    );
   }
 
   Future<void> clearAccountSecrets() => clearBiometricSecret();
 
   Future<String?> readVerifiedBiometricSecret() async {
-    final secret = await _secureStorage.read(key: _biometricSecretKey);
+    final secret = await _secureStorage.read(
+      key: AppRuntimeEnvironment.secureStorageKey(_biometricSecretKey),
+    );
     if (secret == null || secret.isEmpty) return null;
 
     final matches = await _credentialMatches(secret);
