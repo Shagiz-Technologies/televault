@@ -11,11 +11,14 @@ No Telegram account or reviewer credential is required for the demo. It does not
 3. Confirm that the persistent banner reads **REVIEWER DEMO — NO DATA IS SENT TO TELEGRAM**.
 4. Inspect the deterministic sample Library and Albums.
 5. Open **Albums** to inspect sample buckets or create a local demo bucket.
-6. In **Library**, run the simulated backup and inspect pending, uploading, synced, and failed states. Every operation is labeled as simulated.
-7. Turn the demo Wi-Fi control off during a simulated upload to inspect safe pause and resumable behavior.
-8. Open **Vault** to inspect the local encryption and Recovery Key demonstration.
-9. Open **Settings** to inspect metadata backup status, Privacy, Terms, deletion information, and logout behavior.
-10. Select **Exit reviewer demo** to delete only demo data and return to normal Telegram startup.
+6. In **Library**, run the simulated backup and allow notification permission if Android asks.
+7. Confirm that Android displays an ongoing notification labeled **Reviewer Demo — simulated** and **No data sent to Telegram**.
+8. Inspect pending, uploading, synced, and failed states. Every transfer operation is labeled as simulated.
+9. Turn the demo Wi-Fi control off during a simulated upload. Confirm that the notification stops, the active item returns to pending, and the interface becomes resumable.
+10. Restore demo Wi-Fi and complete one simulated operation.
+11. Open **Vault** to inspect the local encryption and Recovery Key demonstration.
+12. Open **Settings** to inspect metadata backup status, Privacy, Terms, deletion information, and logout behavior.
+13. Select **Exit reviewer demo** to delete only demo data and return to normal Telegram startup.
 
 ## Isolation and behavior
 
@@ -25,7 +28,9 @@ No Telegram account or reviewer credential is required for the demo. It does not
 - TDLib is disabled in demo mode, so no Telegram network request, channel, message, or upload is created.
 - Sample media are generated descriptions and colored placeholders. They are not read from the device gallery.
 - Backup and metadata operations are deterministic local simulations and are visibly identified as simulated.
-- Exiting the demo cancels and removes only demo work, secrets, databases, and files. Production sessions and data are neither opened nor deleted.
+- The demo uses TeleVault's real Android foreground-service notification mechanism only to demonstrate visible background progress. The transferred content and completion result remain local simulations.
+- The demo notification stops on interruption, completion, exit, and cleanup.
+- Exiting the demo cancels current demo work and legacy Test DC worker names, then removes only demo secrets, databases, and files. Production sessions and data are neither opened nor deleted.
 
 ## Production verification
 
