@@ -15,9 +15,11 @@ Target length: 2-4 minutes. Record the exact production release candidate or a P
 - Create a local demo bucket and show the confirmation that no Telegram channel was created.
 - Point out pending, uploading, synced, and failed sample states.
 
-## 3. Simulated backup, foreground notification, and interruption
+## 3. Permissions, simulated backup, notification, and interruption
 
-- Start a simulated upload and allow notification permission if Android requests it.
+- Start a simulated upload.
+- Show the Android photo/video permission prompt and explain that the demo demonstrates the production permission flow but does not enumerate or read device media.
+- Allow notification permission if Android requests it.
 - Show the Android ongoing notification labeled `Reviewer Demo — simulated` and `No data sent to Telegram`.
 - Show the explicit `simulated` labels and in-app progress.
 - Turn off the demo Wi-Fi control while progress is active.
@@ -32,13 +34,14 @@ Target length: 2-4 minutes. Record the exact production release candidate or a P
 - Open Settings and run the simulated metadata snapshot.
 - State that all of these operations remain inside the isolated demo namespace.
 
-## 5. Legal, deletion, and exit
+## 5. Legal, deletion, exit, and normal startup
 
 - Open Privacy, Terms, and deletion information from Settings.
 - Select `Exit reviewer demo`.
 - Confirm that no demo foreground notification remains.
-- Show the normal Telegram startup screen.
-- Explain that exit deletes only demo state and does not access or remove production data.
+- Show the environment selection or normal Telegram startup screen.
+- Select `Continue with Telegram` and show that the production phone-login screen becomes ready without a stale demo or TDLib state error.
+- Explain that switching modes removes only demo state and preserves production Telegram session data.
 
 ## Recording evidence
 
