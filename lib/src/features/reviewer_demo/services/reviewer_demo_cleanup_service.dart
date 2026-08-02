@@ -5,11 +5,14 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../../core/config/app_runtime_environment.dart';
-import '../../sync/services/android_background_sync_bridge.dart';
+import 'reviewer_demo_system_bridge.dart';
 
 typedef ReviewerDemoCleanupAction = Future<void> Function();
 
 class ReviewerDemoCleanupService {
+  static const legacyPlayReviewWorkerNamespace =
+      'et.shagiz.tele_vault.play_review';
+
   final ReviewerDemoCleanupAction _cancelDemoWork;
   final ReviewerDemoCleanupAction _clearDemoSecrets;
   final ReviewerDemoCleanupAction _deleteDemoFiles;
@@ -31,8 +34,14 @@ class ReviewerDemoCleanupService {
     await _deleteDemoFiles();
   }
 
-  static Future<void> _cancelPlatformWork() =>
-      AndroidBackgroundSyncBridge().cancelPersistentWork();
+  static Future<void> _cancelPlatformWork() async {
+    const bridge = PlatformReviewerDemoSystemBridge();
+    await bridge.stop();
+    await bridge.cancelPersistentWork(
+      AppRuntimeEnvironment.workerNamespace,
+    );
+    await bridge.cancelPersistentWork(legacyPlayReviewWorkerNamespace);
+  }
 
   static Future<void> _clearPlatformSecrets() async {
     final vaultSecrets = FlutterSecureStorage(
