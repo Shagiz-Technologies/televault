@@ -12,6 +12,7 @@ import '../../vault/services/vault_recovery_service.dart';
 import '../../vault/services/vault_service.dart';
 import 'reviewer_demo_cleanup_service.dart';
 import 'reviewer_demo_gateway.dart';
+import 'reviewer_demo_system_bridge.dart';
 
 enum ReviewerDemoUploadState { pending, uploading, synced, failed }
 
@@ -53,6 +54,7 @@ class ReviewerDemoController extends ChangeNotifier {
   final database.AppDatabase _database;
   final ReviewerDemoGateway gateway;
   final VaultRecoveryService _recoveryService;
+  final ReviewerDemoSystemBridge _systemBridge;
   late final VaultService _vaultService;
   final ReviewerDemoCleanupService _cleanupService;
 
@@ -78,10 +80,13 @@ class ReviewerDemoController extends ChangeNotifier {
     VaultRecoveryService? recoveryService,
     VaultService? vaultService,
     ReviewerDemoCleanupService? cleanupService,
+    ReviewerDemoSystemBridge? systemBridge,
   }) : _database = appDatabase ?? database.AppDatabase(),
        gateway = gateway ?? ReviewerDemoGateway(),
        _recoveryService = recoveryService ?? VaultRecoveryService(),
-       _cleanupService = cleanupService ?? ReviewerDemoCleanupService() {
+       _cleanupService = cleanupService ?? ReviewerDemoCleanupService(),
+       _systemBridge =
+           systemBridge ?? const PlatformReviewerDemoSystemBridge() {
     _vaultService =
         vaultService ?? VaultService(recoveryKeyProvider: _recoveryService);
   }
@@ -157,9 +162,11 @@ class ReviewerDemoController extends ChangeNotifier {
         ),
       );
       await _reload();
+      busy = false;
+      await _stopSystemProgress();
     } else {
       pauseReason = null;
-      notice = 'Demo Wi-Fi restored. Select Resume simulated backup.';
+      notice = 'Demo Wi-Fi restored. Select Run simulated backup.';
     }
     notifyListeners();
   }
@@ -189,6 +196,7 @@ class ReviewerDemoController extends ChangeNotifier {
     notice = 'Simulated upload started. No data is sent to Telegram.';
     await _updateStatus(item.id, ReviewerDemoUploadState.uploading);
     activeUploadProgress = 0;
+    await _startSystemProgress();
     notifyListeners();
 
     try {
@@ -200,20 +208,33 @@ class ReviewerDemoController extends ChangeNotifier {
           activeUploadProgress = 0;
           pauseReason =
               'Wi-Fi unavailable — simulated upload returned to pending.';
+          busy = false;
+          await _stopSystemProgress();
           return;
         }
         activeUploadProgress = step / 10;
+        await _updateSystemProgress();
         notifyListeners();
       }
       final result = await gateway.simulateUpload();
       if (!result.simulated) {
         throw StateError('Reviewer Demo gateway returned a non-demo result.');
       }
+      if (_closed || generation != _simulationGeneration) return;
       await _updateStatus(item.id, ReviewerDemoUploadState.synced);
       activeUploadProgress = 1;
+      await _updateSystemProgress();
       notice = 'Simulated upload complete. No Telegram message was created.';
+    } catch (_) {
+      if (!_closed && generation == _simulationGeneration) {
+        await _updateStatus(item.id, ReviewerDemoUploadState.failed);
+        notice = 'Simulated upload failed safely. No data was sent.';
+      }
     } finally {
-      if (generation == _simulationGeneration) busy = false;
+      if (generation == _simulationGeneration) {
+        busy = false;
+        await _stopSystemProgress();
+      }
       notifyListeners();
     }
   }
@@ -302,9 +323,50 @@ class ReviewerDemoController extends ChangeNotifier {
     if (_closed) return;
     _closed = true;
     _simulationGeneration += 1;
+    busy = false;
+    await _stopSystemProgress();
     await gateway.dispose();
     await _database.close();
     await _cleanupService.clear();
+  }
+
+  Future<void> _startSystemProgress() async {
+    try {
+      await _systemBridge.start(
+        pending: pendingCount,
+        uploading: uploadingCount,
+        completed: syncedCount,
+        failed: failedCount,
+        total: media.length,
+        progress: activeUploadProgress,
+      );
+    } catch (_) {
+      notice =
+          'Simulated upload started. Android progress notification is unavailable.';
+    }
+  }
+
+  Future<void> _updateSystemProgress() async {
+    try {
+      await _systemBridge.update(
+        pending: pendingCount,
+        uploading: uploadingCount,
+        completed: syncedCount,
+        failed: failedCount,
+        total: media.length,
+        progress: activeUploadProgress,
+      );
+    } catch (_) {
+      // The in-app demo remains usable if the platform notification is blocked.
+    }
+  }
+
+  Future<void> _stopSystemProgress() async {
+    try {
+      await _systemBridge.stop();
+    } catch (_) {
+      // Cleanup continues even if Android has already stopped the service.
+    }
   }
 
   Future<void> _seedIfNeeded() async {
@@ -407,6 +469,7 @@ class ReviewerDemoController extends ChangeNotifier {
   @override
   void dispose() {
     _simulationGeneration += 1;
+    unawaited(_stopSystemProgress());
     if (!_closed) {
       _closed = true;
       unawaited(gateway.dispose());
