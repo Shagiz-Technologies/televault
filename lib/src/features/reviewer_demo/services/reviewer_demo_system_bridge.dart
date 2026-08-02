@@ -32,6 +32,9 @@ abstract interface class ReviewerDemoSystemBridge {
 
 class PlatformReviewerDemoSystemBridge implements ReviewerDemoSystemBridge {
   static const _channel = MethodChannel('et.shagiz.tele_vault/background_sync');
+  static const _mediaPermissionChannel = MethodChannel(
+    'et.shagiz.tele_vault/media_permissions',
+  );
 
   const PlatformReviewerDemoSystemBridge();
 
@@ -40,6 +43,19 @@ class PlatformReviewerDemoSystemBridge implements ReviewerDemoSystemBridge {
     if (!Platform.isAndroid) return false;
     return await _channel.invokeMethod<bool>('requestNotificationPermission') ??
         false;
+  }
+
+  Future<void> _requestMediaPermissionForReview() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _mediaPermissionChannel.invokeMethod<Map<Object?, Object?>>(
+        'requestAccess',
+        const {'includeImages': true, 'includeVideos': true},
+      );
+    } on PlatformException {
+      // The isolated demo remains usable if access is denied or unavailable.
+      // It never reads the user's media and continues with generated samples.
+    }
   }
 
   @override
@@ -52,6 +68,7 @@ class PlatformReviewerDemoSystemBridge implements ReviewerDemoSystemBridge {
     required double progress,
   }) async {
     if (!Platform.isAndroid) return;
+    await _requestMediaPermissionForReview();
     await requestNotificationPermission();
     await _channel.invokeMethod<void>(
       'start',
