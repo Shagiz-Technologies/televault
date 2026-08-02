@@ -30,8 +30,7 @@ abstract interface class ReviewerDemoSystemBridge {
   Future<void> cancelPersistentWork(String namespace);
 }
 
-class PlatformReviewerDemoSystemBridge
-    implements ReviewerDemoSystemBridge {
+class PlatformReviewerDemoSystemBridge implements ReviewerDemoSystemBridge {
   static const _channel = MethodChannel(
     'et.shagiz.tele_vault/background_sync',
   );
