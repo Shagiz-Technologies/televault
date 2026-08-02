@@ -31,9 +31,7 @@ abstract interface class ReviewerDemoSystemBridge {
 }
 
 class PlatformReviewerDemoSystemBridge implements ReviewerDemoSystemBridge {
-  static const _channel = MethodChannel(
-    'et.shagiz.tele_vault/background_sync',
-  );
+  static const _channel = MethodChannel('et.shagiz.tele_vault/background_sync');
 
   const PlatformReviewerDemoSystemBridge();
 
