@@ -136,8 +136,7 @@ Future<void> _waitUntil(
 class _DemoFixture {
   final AppDatabase database = AppDatabase.forTesting(NativeDatabase.memory());
   final _MemorySecretStore secrets = _MemorySecretStore();
-  final _RecordingDemoSystemBridge systemBridge =
-      _RecordingDemoSystemBridge();
+  final _RecordingDemoSystemBridge systemBridge = _RecordingDemoSystemBridge();
   late final ReviewerDemoController controller;
 
   _DemoFixture() {
