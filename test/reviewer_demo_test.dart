@@ -46,26 +46,29 @@ void main() {
     },
   );
 
-  test('production runtime shutdown stops workers before closing TDLib', () async {
-    final events = <String>[];
-    final service = ProductionRuntimeShutdownService(
-      stopBackground: () async => events.add('background'),
-      stopSync: () => events.add('scanner'),
-      resetSyncInitializer: () => events.add('initializer'),
-      stopUploader: () async => events.add('uploader'),
-      closeTelegram: () async => events.add('telegram-close'),
-    );
+  test(
+    'production runtime shutdown stops workers before closing TDLib',
+    () async {
+      final events = <String>[];
+      final service = ProductionRuntimeShutdownService(
+        stopBackground: () async => events.add('background'),
+        stopSync: () => events.add('scanner'),
+        resetSyncInitializer: () => events.add('initializer'),
+        stopUploader: () async => events.add('uploader'),
+        closeTelegram: () async => events.add('telegram-close'),
+      );
 
-    await service.shutdownForReviewerDemo();
+      await service.shutdownForReviewerDemo();
 
-    expect(events, [
-      'background',
-      'scanner',
-      'initializer',
-      'uploader',
-      'telegram-close',
-    ]);
-  });
+      expect(events, [
+        'background',
+        'scanner',
+        'initializer',
+        'uploader',
+        'telegram-close',
+      ]);
+    },
+  );
 
   test('sample queue exposes all states and Wi-Fi loss is resumable', () async {
     final fixture = _DemoFixture();
