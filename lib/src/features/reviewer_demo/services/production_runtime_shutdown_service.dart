@@ -35,7 +35,8 @@ Future<void> _closeTelegramForRuntimeSwitch(TelegramService telegram) async {
         (event) {
           if (event['@type'] != 'updateAuthorizationState') return false;
           final state = event['authorization_state'];
-          return state is Map && state['@type'] == 'authorizationStateClosed';
+          return state is Map &&
+              state['@type'] == 'authorizationStateClosed';
         },
         timeout: const Duration(seconds: 15),
       );
