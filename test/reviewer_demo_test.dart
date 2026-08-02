@@ -46,14 +46,14 @@ void main() {
     },
   );
 
-  test('production runtime shutdown stops workers before TDLib', () async {
+  test('production runtime shutdown stops workers before closing TDLib', () async {
     final events = <String>[];
     final service = ProductionRuntimeShutdownService(
       stopBackground: () async => events.add('background'),
       stopSync: () => events.add('scanner'),
       resetSyncInitializer: () => events.add('initializer'),
       stopUploader: () async => events.add('uploader'),
-      disposeTelegram: () async => events.add('telegram'),
+      closeTelegram: () async => events.add('telegram-close'),
     );
 
     await service.shutdownForReviewerDemo();
@@ -63,7 +63,7 @@ void main() {
       'scanner',
       'initializer',
       'uploader',
-      'telegram',
+      'telegram-close',
     ]);
   });
 
