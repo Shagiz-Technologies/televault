@@ -26,7 +26,8 @@ SENSITIVE_PATTERNS = {
     ),
     "Recovery Key": re.compile(r"TVRK1-[A-Z2-7-]{12,}", re.IGNORECASE),
     "private local path": re.compile(
-        r"(?:/data/(?:user/\d+|data)/et\.shagiz\.tele_vault|"
+        r"(?:/data/(?:user/\d+|data)/et\.shagiz\.tele_vault/"
+        r"(?:files|cache|databases|app_flutter|no_backup)/[^\s,;]+|"
         r"/storage/emulated/\d+|[A-Z]:\\Users\\)",
         re.IGNORECASE,
     ),
