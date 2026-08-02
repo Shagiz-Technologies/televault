@@ -62,6 +62,17 @@ void main() {
       'delete-demo-files',
     ]);
   });
+
+  test('production can shut down into reviewer demo', () async {
+    final store = _MemoryRuntimeEnvironmentStore();
+    final bootstrapper = RuntimeEnvironmentBootstrapper(store);
+    AppRuntimeEnvironment.configure(AppRuntimeMode.production);
+
+    await bootstrapper.activateReviewerDemoAfterShutdown();
+
+    expect(store.value, AppRuntimeMode.reviewerDemo);
+    expect(AppRuntimeEnvironment.isReviewerDemo, isTrue);
+  });
 }
 
 class _MemoryRuntimeEnvironmentStore implements RuntimeEnvironmentStore {

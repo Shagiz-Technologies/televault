@@ -11,6 +11,7 @@ import '../../features/reviewer_demo/presentation/reviewer_demo_app.dart';
 import '../../features/vault/services/vault_service.dart';
 import '../config/app_runtime_environment.dart';
 import '../config/runtime_environment_store.dart';
+import '../config/runtime_host_actions.dart';
 import '../theme/app_theme.dart';
 import 'responsive_layout.dart';
 import 'tele_vault_ui.dart';
@@ -111,6 +112,23 @@ class _TeleVaultRuntimeBootstrapState extends State<TeleVaultRuntimeBootstrap> {
     });
   }
 
+  Future<void> _activateDemoAfterProduction() async {
+    if (mounted) {
+      setState(() {
+        _activeMode = null;
+        _busy = true;
+        _error = null;
+      });
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    await _bootstrapper.activateReviewerDemoAfterShutdown();
+    if (!mounted) return;
+    setState(() {
+      _activeMode = AppRuntimeMode.reviewerDemo;
+      _busy = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final mode = _activeMode;
@@ -118,7 +136,17 @@ class _TeleVaultRuntimeBootstrapState extends State<TeleVaultRuntimeBootstrap> {
       if (mode == AppRuntimeMode.reviewerDemo) {
         return ReviewerDemoApp(onExitDemo: _activateProductionAfterDemo);
       }
-      return ProviderScope(key: ValueKey(mode), child: const TeleVaultApp());
+      return ProviderScope(
+        key: ValueKey(mode),
+        overrides: [
+          runtimeHostActionsProvider.overrideWithValue(
+            RuntimeHostActions(
+              activateReviewerDemoAfterProduction: _activateDemoAfterProduction,
+            ),
+          ),
+        ],
+        child: const TeleVaultApp(),
+      );
     }
 
     return MaterialApp(

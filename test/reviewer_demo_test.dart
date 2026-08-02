@@ -7,6 +7,7 @@ import 'package:tele_vault/src/core/config/app_runtime_environment.dart';
 import 'package:tele_vault/src/core/database/app_database.dart';
 import 'package:tele_vault/src/core/services/telegram_service.dart';
 import 'package:tele_vault/src/features/reviewer_demo/presentation/reviewer_demo_app.dart';
+import 'package:tele_vault/src/features/reviewer_demo/services/production_runtime_shutdown_service.dart';
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_cleanup_service.dart';
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_controller.dart';
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_gateway.dart';
@@ -44,6 +45,27 @@ void main() {
       await gateway.dispose();
     },
   );
+
+  test('production runtime shutdown stops workers before TDLib', () async {
+    final events = <String>[];
+    final service = ProductionRuntimeShutdownService(
+      stopBackground: () async => events.add('background'),
+      stopSync: () => events.add('scanner'),
+      resetSyncInitializer: () => events.add('initializer'),
+      stopUploader: () async => events.add('uploader'),
+      disposeTelegram: () async => events.add('telegram'),
+    );
+
+    await service.shutdownForReviewerDemo();
+
+    expect(events, [
+      'background',
+      'scanner',
+      'initializer',
+      'uploader',
+      'telegram',
+    ]);
+  });
 
   test('sample queue exposes all states and Wi-Fi loss is resumable', () async {
     final fixture = _DemoFixture();

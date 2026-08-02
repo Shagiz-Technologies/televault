@@ -6,10 +6,12 @@ import 'package:gap/gap.dart';
 import '../../core/presentation/responsive_layout.dart';
 import '../../core/presentation/tele_vault_ui.dart';
 import '../../core/presentation/televault_logo_mark.dart';
+import '../../core/config/runtime_host_actions.dart';
 import '../../core/services/telegram_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../settings/presentation/privacy_policy_screen.dart';
 import '../settings/presentation/terms_summary_screen.dart';
+import '../reviewer_demo/services/production_runtime_shutdown_service.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -22,6 +24,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneCtrl = TextEditingController();
   final _focusNode = FocusNode();
+  bool _enteringReviewerDemo = false;
 
   @override
   void initState() {
@@ -140,6 +143,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       : const Text('Continue'),
                 ),
               ).animate().slideY(begin: 0.2, end: 0, delay: 500.ms).fadeIn(),
+              const Gap(10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isLoading || _enteringReviewerDemo
+                      ? null
+                      : _openReviewerDemo,
+                  icon: _enteringReviewerDemo
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.fact_check_outlined),
+                  label: const Text('Google Play Reviewer Demo'),
+                ),
+              ),
               if (authError != null) ...[
                 Gap(AppResponsive.gap(context, 14, compact: 10)),
                 Text(
@@ -200,5 +219,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openReviewerDemo() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Open Reviewer Demo?'),
+        content: const Text(
+          'TeleVault will pause normal background work and open a separate demo with sample data. Your Telegram session, media, buckets, and settings will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Open demo'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _enteringReviewerDemo = true);
+    try {
+      await ref
+          .read(productionRuntimeShutdownServiceProvider)
+          .shutdownForReviewerDemo();
+      await ref
+          .read(runtimeHostActionsProvider)
+          .activateReviewerDemoAfterProduction();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _enteringReviewerDemo = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Reviewer Demo could not start. No data was deleted.'),
+        ),
+      );
+    }
   }
 }

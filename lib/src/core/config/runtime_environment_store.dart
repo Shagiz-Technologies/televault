@@ -61,4 +61,10 @@ class RuntimeEnvironmentBootstrapper {
     AppRuntimeEnvironment.configure(AppRuntimeMode.production);
     await initializeServices();
   }
+
+  Future<void> activateReviewerDemoAfterShutdown() async {
+    await store.write(AppRuntimeMode.reviewerDemo);
+    AppRuntimeEnvironment.resetAfterRuntimeShutdown();
+    AppRuntimeEnvironment.configure(AppRuntimeMode.reviewerDemo);
+  }
 }
