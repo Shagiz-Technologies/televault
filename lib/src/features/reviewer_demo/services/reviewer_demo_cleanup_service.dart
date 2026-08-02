@@ -37,9 +37,7 @@ class ReviewerDemoCleanupService {
   static Future<void> _cancelPlatformWork() async {
     const bridge = PlatformReviewerDemoSystemBridge();
     await bridge.stop();
-    await bridge.cancelPersistentWork(
-      AppRuntimeEnvironment.workerNamespace,
-    );
+    await bridge.cancelPersistentWork(AppRuntimeEnvironment.workerNamespace);
     await bridge.cancelPersistentWork(legacyPlayReviewWorkerNamespace);
   }
 
