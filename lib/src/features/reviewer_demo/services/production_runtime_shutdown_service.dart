@@ -8,6 +8,7 @@ import '../../sync/services/sync_service.dart';
 
 final productionRuntimeShutdownServiceProvider =
     Provider<ProductionRuntimeShutdownService>((ref) {
+      final telegram = ref.watch(telegramServiceProvider);
       return ProductionRuntimeShutdownService(
         stopBackground: ref
             .watch(backgroundSyncCoordinatorProvider)
@@ -17,16 +18,44 @@ final productionRuntimeShutdownServiceProvider =
             .watch(syncInitializerProvider)
             .resetForAccountCleanup,
         stopUploader: ref.watch(fileUploaderProvider).stopForAccountCleanup,
-        disposeTelegram: ref.watch(telegramServiceProvider).dispose,
+        closeTelegram: () => _closeTelegramForRuntimeSwitch(telegram),
       );
     });
+
+Future<void> _closeTelegramForRuntimeSwitch(TelegramService telegram) async {
+  if (!telegram.isAvailable) {
+    await telegram.dispose();
+    return;
+  }
+
+  try {
+    final currentState = telegram.currentAuthorizationStateType;
+    if (currentState != 'authorizationStateClosed') {
+      final closed = telegram.waitForUpdate(
+        (event) {
+          if (event['@type'] != 'updateAuthorizationState') return false;
+          final state =
+              event['authorization_state'] as Map<String, dynamic>? ?? {};
+          return state['@type'] == 'authorizationStateClosed';
+        },
+        timeout: const Duration(seconds: 15),
+      );
+      if (currentState != 'authorizationStateClosing') {
+        telegram.send(const {'@type': 'close'});
+      }
+      await closed;
+    }
+  } finally {
+    await telegram.dispose();
+  }
+}
 
 class ProductionRuntimeShutdownService {
   final Future<void> Function() _stopBackground;
   final void Function() _stopSync;
   final void Function() _resetSyncInitializer;
   final Future<void> Function() _stopUploader;
-  final Future<void> Function() _disposeTelegram;
+  final Future<void> Function() _closeTelegram;
   bool _running = false;
 
   ProductionRuntimeShutdownService({
@@ -34,12 +63,12 @@ class ProductionRuntimeShutdownService {
     required void Function() stopSync,
     required void Function() resetSyncInitializer,
     required Future<void> Function() stopUploader,
-    required Future<void> Function() disposeTelegram,
+    required Future<void> Function() closeTelegram,
   }) : _stopBackground = stopBackground,
        _stopSync = stopSync,
        _resetSyncInitializer = resetSyncInitializer,
        _stopUploader = stopUploader,
-       _disposeTelegram = disposeTelegram;
+       _closeTelegram = closeTelegram;
 
   Future<void> shutdownForReviewerDemo() async {
     if (_running) return;
@@ -49,7 +78,7 @@ class ProductionRuntimeShutdownService {
       _stopSync();
       _resetSyncInitializer();
       await _stopUploader();
-      await _disposeTelegram();
+      await _closeTelegram();
     } finally {
       _running = false;
     }
