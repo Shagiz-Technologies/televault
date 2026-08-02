@@ -10,6 +10,7 @@ import 'package:tele_vault/src/features/reviewer_demo/presentation/reviewer_demo
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_cleanup_service.dart';
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_controller.dart';
 import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_gateway.dart';
+import 'package:tele_vault/src/features/reviewer_demo/services/reviewer_demo_system_bridge.dart';
 import 'package:tele_vault/src/features/vault/services/vault_recovery_service.dart';
 
 void main() {
@@ -58,8 +59,46 @@ void main() {
     expect(fixture.controller.uploadingCount, 0);
     expect(fixture.controller.pendingCount, greaterThan(1));
     expect(fixture.controller.pauseReason, contains('returned to pending'));
+    expect(fixture.controller.busy, isFalse);
     await fixture.close();
   });
+
+  test(
+    'active Wi-Fi interruption clears busy and can resume to completion',
+    () async {
+      final fixture = _DemoFixture();
+      await fixture.controller.initialize();
+      final syncedBefore = fixture.controller.syncedCount;
+
+      final interruptedUpload = fixture.controller.startSimulatedBackup();
+      await _waitUntil(
+        () =>
+            fixture.controller.busy &&
+            fixture.controller.activeUploadProgress > 0,
+      );
+
+      await fixture.controller.setWifiAvailable(false);
+      await interruptedUpload;
+
+      expect(fixture.controller.busy, isFalse);
+      expect(fixture.controller.uploadingCount, 0);
+      expect(fixture.controller.pendingCount, greaterThan(0));
+      expect(fixture.controller.pauseReason, contains('returned to pending'));
+      expect(fixture.systemBridge.starts, 1);
+      expect(fixture.systemBridge.updates, greaterThan(0));
+      expect(fixture.systemBridge.stops, greaterThanOrEqualTo(1));
+
+      await fixture.controller.setWifiAvailable(true);
+      await fixture.controller.startSimulatedBackup();
+
+      expect(fixture.controller.busy, isFalse);
+      expect(fixture.controller.syncedCount, syncedBefore + 1);
+      expect(fixture.controller.uploadingCount, 0);
+      expect(fixture.systemBridge.starts, 2);
+      expect(fixture.systemBridge.stops, greaterThanOrEqualTo(2));
+      await fixture.close();
+    },
+  );
 
   testWidgets('reviewer UI persistently identifies all uploads as simulated', (
     tester,
@@ -81,9 +120,24 @@ void main() {
   });
 }
 
+Future<void> _waitUntil(
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!predicate()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TestFailure('Timed out waiting for Reviewer Demo state.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+}
+
 class _DemoFixture {
   final AppDatabase database = AppDatabase.forTesting(NativeDatabase.memory());
   final _MemorySecretStore secrets = _MemorySecretStore();
+  final _RecordingDemoSystemBridge systemBridge =
+      _RecordingDemoSystemBridge();
   late final ReviewerDemoController controller;
 
   _DemoFixture() {
@@ -99,10 +153,59 @@ class _DemoFixture {
         clearDemoSecrets: () async => secrets.values.clear(),
         deleteDemoFiles: () async {},
       ),
+      systemBridge: systemBridge,
     );
   }
 
   Future<void> close() => controller.clearAndClose();
+}
+
+class _RecordingDemoSystemBridge implements ReviewerDemoSystemBridge {
+  int permissionRequests = 0;
+  int starts = 0;
+  int updates = 0;
+  int stops = 0;
+  final List<String> cancelledNamespaces = [];
+
+  @override
+  Future<bool> requestNotificationPermission() async {
+    permissionRequests += 1;
+    return true;
+  }
+
+  @override
+  Future<void> start({
+    required int pending,
+    required int uploading,
+    required int completed,
+    required int failed,
+    required int total,
+    required double progress,
+  }) async {
+    starts += 1;
+  }
+
+  @override
+  Future<void> update({
+    required int pending,
+    required int uploading,
+    required int completed,
+    required int failed,
+    required int total,
+    required double progress,
+  }) async {
+    updates += 1;
+  }
+
+  @override
+  Future<void> stop() async {
+    stops += 1;
+  }
+
+  @override
+  Future<void> cancelPersistentWork(String namespace) async {
+    cancelledNamespaces.add(namespace);
+  }
 }
 
 class _MemorySecretStore implements VaultSecretStore {
