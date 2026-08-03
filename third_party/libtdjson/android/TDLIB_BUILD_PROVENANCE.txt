@@ -1,9 +1,9 @@
 TeleVault Android TDLib native binary provenance
 ================================================
 
-Build date: 2026-07-31
+Build date: 2026-08-03
 Builder recipe: tool/android/tdlib/Dockerfile
-Builder recipe SHA-256: df69398d8bdecd1d09d52e933ccd61859350ce18ce614f68b64e2d9ba5540154
+Builder recipe SHA-256: 6515033f944dcf9d6979babbbef23e3e4ed2071577c8afc173a5b9f1679b40f5
 
 Source inputs
 -------------
@@ -20,7 +20,8 @@ OpenSSL license: Apache License 2.0
 The build uses TDLib's official example/android/build-openssl.sh and
 example/android/build-tdlib.sh scripts from the pinned commit. The recipe
 changes only the OpenSSL source URL from a mutable tag archive to the exact
-commit archive and limits the script ABI loops to arm64-v8a and x86_64.
+commit archive and validates a configurable ABI loop. The reviewed release
+set is armeabi-v7a, arm64-v8a, and x86_64.
 
 Build toolchain
 ---------------
@@ -36,10 +37,11 @@ TDLib interface: JSON
 Android STL: c++_static
 CMake build type: RelWithDebInfo
 Requested Android platform: android-16
+Effective 32-bit Android platform: android-16
 Effective 64-bit Android platform: android-21
-ABIs: arm64-v8a, x86_64
+ABIs: armeabi-v7a, arm64-v8a, x86_64
 
-Host packages recorded by the successful build:
+Host packages recorded by the successful armeabi-v7a build:
 default-jdk 2:1.21-75+exp1
 g++ 4:13.2.0-7ubuntu1
 git 1:2.43.0-1ubuntu7.3
@@ -60,15 +62,18 @@ TDLib CMake configuration from the pinned official script:
 -DANDROID_PLATFORM=android-16
 -DTD_ANDROID_JSON=ON
 
-NDK r28 adds the 16 KB linker behavior. The observed final link included
--z now, -z relro, and -z max-page-size=16384 for both outputs.
+NDK r28 supplies the linker behavior used by the reviewed outputs. The
+armeabi-v7a binary is a 32-bit ARM EABI5 shared object with GNU_RELRO and
+4 KB LOAD alignment. The 64-bit binaries retain 16 KB LOAD alignment.
 
 Vendored outputs
 ----------------
+16bb8829e757d15450f4f7a3a43f27601fc895e1ecd04807d66b77f02c5abd49  android/src/main/jniLibs/armeabi-v7a/libtdjson.so
 180fe842a2a192ab19ff0a124e4289199f5359b17fa17b84065ef36f208db03b  android/src/main/jniLibs/arm64-v8a/libtdjson.so
 9cac8a88e0f8d7ee5d0002801e2c92ef74018dd1fc5eebf55475a53b4288f5ad  android/src/main/jniLibs/x86_64/libtdjson.so
 
-ELF verification with NDK 28.2.13676358 llvm-readelf:
+ELF verification with NDK 28.2.13676358 tools:
+armeabi-v7a: 16,424,224 bytes; all LOAD alignments 0x1000; GNU_RELRO present
 arm64-v8a: 23,793,448 bytes; all LOAD alignments 0x4000; GNU_RELRO present
 x86_64: 26,027,200 bytes; all LOAD alignments 0x4000; GNU_RELRO present
 
