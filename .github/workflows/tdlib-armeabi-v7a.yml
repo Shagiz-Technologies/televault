@@ -1,15 +1,10 @@
 name: Build pinned TDLib armeabi-v7a
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "tool/android/tdlib/Dockerfile"
-      - ".github/workflows/tdlib-armeabi-v7a.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: tdlib-armeabi-v7a-${{ github.workflow }}-${{ github.ref }}
@@ -22,10 +17,8 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout source branch
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Build pinned armeabi-v7a output
         env:
@@ -67,33 +60,10 @@ jobs:
             readelf -lW "$library" | grep -E '^  (LOAD|GNU_RELRO)'
           } > "$output/ARMEABI_V7A_BUILD_REPORT.txt"
 
-      - name: Upload armeabi-v7a build
+      - name: Upload armeabi-v7a build evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tdlib-armeabi-v7a-${{ github.sha }}
           path: build/tdlib-armeabi-v7a
           if-no-files-found: error
           retention-days: 7
-
-      - name: Vendor reviewed native output on the source branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          destination="third_party/libtdjson/android/src/main/jniLibs/armeabi-v7a"
-          mkdir -p "$destination"
-          cp build/tdlib-armeabi-v7a/libs/armeabi-v7a/libtdjson.so "$destination/libtdjson.so"
-          cp build/tdlib-armeabi-v7a/ARMEABI_V7A_BUILD_REPORT.txt \
-            third_party/libtdjson/android/ARMEABI_V7A_BUILD_REPORT.txt
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            "$destination/libtdjson.so" \
-            third_party/libtdjson/android/ARMEABI_V7A_BUILD_REPORT.txt
-          if git diff --cached --quiet; then
-            echo "Generated armeabi-v7a output is already current."
-            exit 0
-          fi
-          git commit -m "[Build]: Vendor armeabi-v7a TDLib binary;"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
