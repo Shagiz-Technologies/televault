@@ -44,15 +44,15 @@ android {
         versionName = flutter.versionName
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
     }
 
     packaging {
         jniLibs {
-            // Flutter's target list is 64-bit only, but transitive AARs can
-            // still contribute orphaned 32-bit native libraries.
-            excludes += setOf("**/armeabi-v7a/*.so", "**/x86/*.so")
+            // Flutter has no 32-bit x86 release target. Keep ARMv7, ARM64 and
+            // x86_64, and exclude only orphaned x86 native libraries.
+            excludes += setOf("**/x86/*.so")
         }
     }
 
