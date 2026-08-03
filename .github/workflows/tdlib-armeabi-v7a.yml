@@ -1,0 +1,57 @@
+name: Build pinned TDLib armeabi-v7a
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tool/android/tdlib/Dockerfile"
+      - ".github/workflows/tdlib-armeabi-v7a.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tdlib-armeabi-v7a-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and inspect armeabi-v7a libtdjson
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build pinned armeabi-v7a output
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: >-
+          docker build
+          --build-arg TDLIB_ABIS=armeabi-v7a
+          --output type=local,dest=build/tdlib-armeabi-v7a
+          --file tool/android/tdlib/Dockerfile
+          .
+
+      - name: Inspect native output
+        shell: bash
+        run: |
+          set -euo pipefail
+          library="build/tdlib-armeabi-v7a/libs/armeabi-v7a/libtdjson.so"
+          test -s "$library"
+          file "$library" | tee build/tdlib-armeabi-v7a/inspection.txt
+          file "$library" | grep -Fq "ELF 32-bit LSB shared object, ARM"
+          readelf -hW "$library" >> build/tdlib-armeabi-v7a/inspection.txt
+          readelf -lW "$library" >> build/tdlib-armeabi-v7a/inspection.txt
+          readelf -lW "$library" | grep -Fq "GNU_RELRO"
+          sha256sum "$library" | tee build/tdlib-armeabi-v7a/armeabi-v7a-SHA256SUMS
+
+      - name: Upload armeabi-v7a build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tdlib-armeabi-v7a-${{ github.sha }}
+          path: build/tdlib-armeabi-v7a
+          if-no-files-found: error
+          retention-days: 7
