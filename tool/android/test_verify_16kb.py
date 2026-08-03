@@ -5,6 +5,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from verify_16kb import (  # noqa: E402
+    MINIMUM_LOAD_ALIGNMENT_BY_ABI,
     VerificationError,
     parse_badging,
     parse_load_alignments,
@@ -15,6 +16,11 @@ from verify_16kb import (  # noqa: E402
 
 
 class Verify16KbTest(unittest.TestCase):
+    def test_uses_abi_specific_alignment_policy(self) -> None:
+        self.assertEqual(MINIMUM_LOAD_ALIGNMENT_BY_ABI["armeabi-v7a"], 0x1000)
+        self.assertEqual(MINIMUM_LOAD_ALIGNMENT_BY_ABI["arm64-v8a"], 0x4000)
+        self.assertEqual(MINIMUM_LOAD_ALIGNMENT_BY_ABI["x86_64"], 0x4000)
+
     def test_parses_aapt_badging(self) -> None:
         package, min_sdk, target_sdk = parse_badging(
             "package: name='et.shagiz.tele_vault' versionCode='1' platformBuildVersionCode='36'\n"

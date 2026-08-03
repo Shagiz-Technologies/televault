@@ -92,9 +92,43 @@ jobs:
       - name: Build unsigned release bundle
         run: >-
           flutter build appbundle --release
-          --target-platform=android-arm64,android-x64
+          --target-platform=android-arm,android-arm64,android-x64
           --dart-define=TELEGRAM_API_ID=0
           --dart-define=TELEGRAM_API_HASH=placeholder
+
+      - name: Verify release ABI payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          bundle = Path("build/app/outputs/bundle/release/app-release.aab")
+          expected_abis = {"armeabi-v7a", "arm64-v8a", "x86_64"}
+          required_libraries = {"libapp.so", "libflutter.so", "libtdjson.so"}
+          with ZipFile(bundle) as archive:
+              entries = set(archive.namelist())
+          for abi in sorted(expected_abis):
+              missing = sorted(
+                  library
+                  for library in required_libraries
+                  if f"base/lib/{abi}/{library}" not in entries
+              )
+              if missing:
+                  raise SystemExit(f"{abi} is missing required libraries: {missing}")
+          packaged_abis = {
+              entry.split("/")[2]
+              for entry in entries
+              if entry.startswith("base/lib/") and entry.endswith(".so")
+          }
+          if packaged_abis != expected_abis:
+              raise SystemExit(
+                  f"Unexpected AAB ABIs: {sorted(packaged_abis)}; "
+                  f"expected {sorted(expected_abis)}"
+              )
+          print(f"Verified complete native payloads for {sorted(expected_abis)}")
+          PY
 
       - name: Verify API 36 and 16 KB compatibility
         run: >-

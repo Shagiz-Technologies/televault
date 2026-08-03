@@ -11,6 +11,7 @@
   "libtdjson.so": {
     "origin": "TDLib 1.8.66 commit 022d60202e446ad1287b9fb68e687c8a0760788b",
     "sha256_by_abi": {
+      "armeabi-v7a": "16bb8829e757d15450f4f7a3a43f27601fc895e1ecd04807d66b77f02c5abd49",
       "arm64-v8a": "180fe842a2a192ab19ff0a124e4289199f5359b17fa17b84065ef36f208db03b",
       "x86_64": "9cac8a88e0f8d7ee5d0002801e2c92ef74018dd1fc5eebf55475a53b4288f5ad"
     }

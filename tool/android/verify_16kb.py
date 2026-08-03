@@ -17,11 +17,15 @@ import zipfile
 
 
 EXPECTED_APPLICATION_ID = "et.shagiz.tele_vault"
-EXPECTED_ABIS = {"arm64-v8a", "x86_64"}
+EXPECTED_ABIS = {"armeabi-v7a", "arm64-v8a", "x86_64"}
 EXPECTED_COMPILE_SDK = 36
 EXPECTED_MIN_SDK = 24
 EXPECTED_TARGET_SDK = 36
-MINIMUM_LOAD_ALIGNMENT = 1 << 14
+MINIMUM_LOAD_ALIGNMENT_BY_ABI = {
+    "armeabi-v7a": 1 << 12,
+    "arm64-v8a": 1 << 14,
+    "x86_64": 1 << 14,
+}
 
 
 class VerificationError(RuntimeError):
@@ -117,13 +121,13 @@ def verify_source_configuration(repo_root: Path) -> None:
         "namespace": (app_gradle, rf'namespace\s*=\s*"{re.escape(EXPECTED_APPLICATION_ID)}"'),
         "Java 17 source": (app_gradle, r"sourceCompatibility\s*=\s*JavaVersion\.VERSION_17"),
         "Java 17 target": (app_gradle, r"targetCompatibility\s*=\s*JavaVersion\.VERSION_17"),
-        "64-bit app ABIs": (
+        "release app ABIs": (
             app_gradle,
-            r'abiFilters\s*\+=\s*listOf\("arm64-v8a",\s*"x86_64"\)',
+            r'abiFilters\s*\+=\s*listOf\("armeabi-v7a",\s*"arm64-v8a",\s*"x86_64"\)',
         ),
-        "32-bit JNI exclusion": (
+        "unsupported x86 JNI exclusion": (
             app_gradle,
-            r'excludes\s*\+=\s*setOf\("\*\*/armeabi-v7a/\*\.so",\s*"\*\*/x86/\*\.so"\)',
+            r'excludes\s*\+=\s*setOf\("\*\*/x86/\*\.so"\)',
         ),
         "AGP 8.11.1": (settings_gradle, r'com\.android\.application"\) version "8\.11\.1"'),
         "Kotlin 2.2.20": (settings_gradle, r'org\.jetbrains\.kotlin\.android"\) version "2\.2\.20"'),
@@ -132,9 +136,9 @@ def verify_source_configuration(repo_root: Path) -> None:
         "plugin minSdk 24": (plugin_gradle, r"minSdk\s*=\s*24\b"),
         "plugin AGP 8.11.1": (plugin_gradle, r"com\.android\.tools\.build:gradle:8\.11\.1"),
         "plugin Gradle 8.14": (plugin_wrapper_properties, r"gradle-8\.14-all\.zip"),
-        "64-bit TDLib ABIs": (
+        "release TDLib ABIs": (
             plugin_gradle,
-            r"abiFilters\s+'arm64-v8a',\s*'x86_64'",
+            r"abiFilters\s+'armeabi-v7a',\s*'arm64-v8a',\s*'x86_64'",
         ),
         "MainActivity package": (main_activity, rf"package\s+{re.escape(EXPECTED_APPLICATION_ID)}\b"),
         "TDLib source commit": (
@@ -203,13 +207,16 @@ def parse_relocation_sensitive_sections(output: str) -> list[str]:
     )
 
 
-def verify_elf(path: Path, objdump: Path) -> tuple[list[int], bool, str]:
+def verify_elf(
+    path: Path, objdump: Path, minimum_load_alignment: int
+) -> tuple[list[int], bool, str]:
     program_headers = run([str(objdump), "-p", str(path)]).stdout
     alignments = parse_objdump_load_alignments(program_headers)
     relro = bool(re.search(r"^\s*RELRO\b", program_headers, re.MULTILINE))
-    if min(alignments) < MINIMUM_LOAD_ALIGNMENT:
+    if min(alignments) < minimum_load_alignment:
         raise VerificationError(
-            f"{path.name} has LOAD alignment {min(alignments):#x}; expected at least 0x4000"
+            f"{path.name} has LOAD alignment {min(alignments):#x}; "
+            f"expected at least {minimum_load_alignment:#x}"
         )
     relro_status = "enabled"
     if not relro:
@@ -331,7 +338,14 @@ def main() -> int:
                 library = native_root / entry
                 print(f"Verifying {entry}", flush=True)
                 try:
-                    alignments, relro, relro_status = verify_elf(library, objdump)
+                    minimum_load_alignment = MINIMUM_LOAD_ALIGNMENT_BY_ABI.get(abi)
+                    if minimum_load_alignment is None:
+                        raise VerificationError(
+                            f"No native alignment policy configured for ABI {abi}"
+                        )
+                    alignments, relro, relro_status = verify_elf(
+                        library, objdump, minimum_load_alignment
+                    )
                 except VerificationError as error:
                     raise VerificationError(f"{entry}: {error}") from error
                 digest = sha256(library)
@@ -350,6 +364,9 @@ def main() -> int:
                         "sha256": digest,
                         "load_alignments": [f"0x{value:x}" for value in alignments],
                         "minimum_load_alignment": f"0x{min(alignments):x}",
+                        "required_minimum_load_alignment": (
+                            f"0x{minimum_load_alignment:x}"
+                        ),
                         "gnu_relro": relro,
                         "relro_verification": relro_status,
                     }

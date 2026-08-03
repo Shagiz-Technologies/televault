@@ -5,8 +5,9 @@ A release is not production-ready until every P0 item is complete against the ex
 ## P0 — technical release gates
 
 - [x] Compile SDK and target SDK are pinned to API 36.
-- [x] Android release artifacts are 64-bit only and pass the documented 16 KB native-page checks.
+- [x] Android release artifacts include `armeabi-v7a`, `arm64-v8a`, and `x86_64`, with the required 64-bit counterparts and reviewed native-page checks.
 - [x] TDLib Android binary provenance and hashes are documented and enforced.
+- [ ] Play-generated APKs install and launch on physical `armeabi-v7a` and `arm64-v8a` devices, including Huawei/EMUI hardware when available.
 - [x] Release signing never silently falls back to debug signing.
 - [x] The merged manifest contains only the reviewed media, internet, biometric, and legacy media permissions.
 - [x] No `MANAGE_EXTERNAL_STORAGE` or `ACCESS_MEDIA_LOCATION` permission.
@@ -17,6 +18,8 @@ A release is not production-ready until every P0 item is complete against the ex
 - [x] Each upload has a persisted operation ID; restart reconciliation searches the bucket before sending again.
 - [ ] Final physical-device login, upload, Vault, logout, and recovery smoke test passes.
 - [ ] Representative multi-gigabyte media and low-disk-space behavior are verified.
+
+Google Play testing covers Huawei devices that have Google Play access. AppGallery or direct signed-APK distribution for Huawei devices without Google Play is a separate release channel and must be validated independently.
 
 ## P0 — reviewer access
 
@@ -49,7 +52,7 @@ dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
 flutter build appbundle --release \
-  --target-platform=android-arm64,android-x64 \
+  --target-platform=android-arm,android-arm64,android-x64 \
   --dart-define=TELEGRAM_API_ID=<release-secret> \
   --dart-define=TELEGRAM_API_HASH=<release-secret>
 ```
@@ -60,7 +63,7 @@ The same production AAB contains the credential-free Reviewer Demo. No alternate
 python3 tool/android/check_release_logs.py --log <captured-log-file>
 ```
 
-Then run the existing API 36, 16 KB, merged-manifest, dependency, and secret/artifact verification. Record the commit SHA, version code, AAB SHA-256, signing-certificate fingerprints, and Play Console track.
+Then run the existing API 36, ABI-payload, 16 KB, merged-manifest, dependency, and secret/artifact verification. Record the commit SHA, version code, AAB SHA-256, signing-certificate fingerprints, and Play Console track.
 
 ## Stop conditions
 

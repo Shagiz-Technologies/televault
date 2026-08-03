@@ -24,6 +24,7 @@ ARG ANDROID_NDK_VERSION=28.2.13676358
 ARG ANDROID_CMAKE_VERSION=3.22.1
 ARG ANDROID_COMMAND_LINE_TOOLS=13114758
 ARG ANDROID_COMMAND_LINE_TOOLS_SHA256=7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
+ARG TDLIB_ABIS="arm64-v8a armeabi-v7a x86_64"
 
 WORKDIR /home
 
@@ -47,21 +48,31 @@ RUN git init td \
     && git -C td checkout --detach FETCH_HEAD \
     && test "$(git -C td rev-parse HEAD)" = "${TDLIB_COMMIT}"
 
-# TDLib's official Android script accepts a source label. Point it at the exact
-# OpenSSL commit rather than a mutable tag while preserving the upstream build.
-RUN sed -i \
+# TDLib's official Android scripts accept a fixed ABI loop. Point OpenSSL at
+# the exact commit archive and replace the loop with a validated build argument
+# so release builds can reproduce every shipped ABI or one ABI in isolation.
+RUN set -eu; \
+    test -n "${TDLIB_ABIS}"; \
+    for abi in ${TDLIB_ABIS}; do \
+        case "${abi}" in \
+            arm64-v8a|armeabi-v7a|x86_64) ;; \
+            *) echo "Unsupported TDLib ABI: ${abi}" >&2; exit 1 ;; \
+        esac; \
+    done; \
+    sed -i \
         's#archive/refs/tags/\$OPENSSL_VERSION.tar.gz#archive/\$OPENSSL_VERSION.tar.gz#' \
-        td/example/android/build-openssl.sh \
-    && sed -i \
-        's/for ABI in arm64-v8a armeabi-v7a x86_64 x86 ; do/for ABI in arm64-v8a x86_64 ; do/' \
-        td/example/android/build-openssl.sh td/example/android/build-tdlib.sh \
-    && ! grep -q 'archive/refs/tags' td/example/android/build-openssl.sh \
-    && ! grep -q 'for ABI in .*armeabi-v7a' \
-        td/example/android/build-openssl.sh td/example/android/build-tdlib.sh \
-    && cd td/example/android \
-    && ./build-openssl.sh \
-        /home/SDK "${ANDROID_NDK_VERSION}" /home/openssl "${OPENSSL_COMMIT}" \
-    && ./build-tdlib.sh \
+        td/example/android/build-openssl.sh; \
+    sed -i \
+        "s/for ABI in arm64-v8a armeabi-v7a x86_64 x86 ; do/for ABI in ${TDLIB_ABIS} ; do/" \
+        td/example/android/build-openssl.sh td/example/android/build-tdlib.sh; \
+    ! grep -q 'archive/refs/tags' td/example/android/build-openssl.sh; \
+    for script in td/example/android/build-openssl.sh td/example/android/build-tdlib.sh; do \
+        grep -Fq "for ABI in ${TDLIB_ABIS} ; do" "${script}"; \
+    done; \
+    cd td/example/android; \
+    ./build-openssl.sh \
+        /home/SDK "${ANDROID_NDK_VERSION}" /home/openssl "${OPENSSL_COMMIT}"; \
+    ./build-tdlib.sh \
         /home/SDK "${ANDROID_NDK_VERSION}" /home/openssl c++_static JSON
 
 RUN mkdir -p /output/libs \
@@ -81,8 +92,9 @@ RUN mkdir -p /output/libs \
         echo "tdlib_interface=JSON"; \
         echo "cmake_build_type=RelWithDebInfo"; \
         echo "android_platform_requested=android-16"; \
+        echo "android_platform_effective_32_bit=android-16"; \
         echo "android_platform_effective_64_bit=android-21"; \
-        echo "abis=arm64-v8a,x86_64"; \
+        printf 'abis='; printf '%s' "${TDLIB_ABIS}" | tr ' ' ','; printf '\n'; \
         echo "base_image=ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90"; \
         /home/SDK/ndk/${ANDROID_NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang \
             --version | head -n 1 | sed 's/^/clang=/' ; \
