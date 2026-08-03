@@ -1,0 +1,44 @@
+TeleVault TDLib armeabi-v7a build report
+========================================
+
+Build date: 2026-08-03
+Builder recipe SHA-256: 6515033f944dcf9d6979babbbef23e3e4ed2071577c8afc173a5b9f1679b40f5
+Binary size: 16424224 bytes
+Binary SHA-256: 16bb8829e757d15450f4f7a3a43f27601fc895e1ecd04807d66b77f02c5abd49
+
+tdlib_commit=022d60202e446ad1287b9fb68e687c8a0760788b
+tdlib_version=1.8.66
+openssl_version=3.5.7 LTS
+openssl_commit=8cf17aaeb4599f8af87fefd810b5b5fee90fe69e
+android_ndk=28.2.13676358
+cmake=3.22.1
+android_command_line_tools=13114758
+android_command_line_tools_sha256=7ec965280a073311c339e571cd5de778b9975026cfcbe79f2b1cdcb1e15317ee
+native_android_sdk_platform=34
+native_android_build_tools=34.0.0
+android_stl=c++_static
+tdlib_interface=JSON
+cmake_build_type=RelWithDebInfo
+android_platform_requested=android-16
+android_platform_effective_32_bit=android-16
+android_platform_effective_64_bit=android-21
+abis=armeabi-v7a
+base_image=ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+clang=Android (13624864, +pgo, +bolt, +lto, +mlgo, based on r530567e) clang version 19.0.1 (https://android.googlesource.com/toolchain/llvm-project 97a699bf4812a18fb657c2779f5296a4ab2694d2)
+cmake_runtime=cmake version 3.22.1-g37088a8
+package=default-jdk version=2:1.21-75+exp1
+package=g++ version=4:13.2.0-7ubuntu1
+package=git version=1:2.43.0-1ubuntu7.3
+package=gperf version=3.1-1build1
+package=make version=4.3-4.1build2
+package=perl version=5.38.2-3.2ubuntu0.3
+package=php-cli version=2:8.3+93ubuntu2
+package=unzip version=6.0-28ubuntu4.1
+package=wget version=1.21.4-1ubuntu4.4
+
+build/tdlib-armeabi-v7a/libs/armeabi-v7a/libtdjson.so: ELF 32-bit LSB shared object, ARM, EABI5 version 1 (SYSV), dynamically linked, BuildID[sha1]=c5992e24d587e0624ded4d6dcaf4a48e95c3fd71, stripped
+
+  LOAD           0x000000 0x00000000 0x00000000 0xf04630 0xf04630 R E 0x1000
+  LOAD           0xf04630 0x00f05630 0x00f05630 0x9fcf4 0xa09d0 RW  0x1000
+  LOAD           0xfa4328 0x00fa6328 0x00fa6328 0x05318 0x2ca61 RW  0x1000
+  GNU_RELRO      0xf04630 0x00f05630 0x00f05630 0x9fcf4 0xa09d0 R   0x1
