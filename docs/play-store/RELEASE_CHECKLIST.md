@@ -19,6 +19,8 @@ A release is not production-ready until every P0 item is complete against the ex
 - [ ] Final physical-device login, upload, Vault, logout, and recovery smoke test passes.
 - [ ] Representative multi-gigabyte media and low-disk-space behavior are verified.
 
+Google Play testing covers Huawei devices that have Google Play access. AppGallery or direct signed-APK distribution for Huawei devices without Google Play is a separate release channel and must be validated independently.
+
 ## P0 — reviewer access
 
 - [x] The production AAB exposes a credential-free Reviewer Demo before production services start.
