@@ -44,7 +44,7 @@ dependencies:
 
   # --- Database (Virtual File System) ---
   drift: ^2.31.0 # SQL Database
-  drift_flutter: ^0.2.1 # Flutter integration for Drift
+  drift_flutter: ^0.2.8 # Flutter integration for Drift
   sqlite3: ^2.4.6
   path_provider: ^2.1.6 # To find where to store the DB
   path: ^1.9.0
