@@ -76,7 +76,7 @@ dependencies:
   encrypt: ^5.0.3
   crypto: ^3.0.3
   connectivity_plus: ^6.1.4
-  battery_plus: ^6.2.1
+  battery_plus: ^7.1.1
   local_auth: ^2.3.0
   flutter_secure_storage: ^10.3.1
   cryptography: 2.9.0
