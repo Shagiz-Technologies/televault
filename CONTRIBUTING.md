@@ -2,7 +2,11 @@
 
 Thanks for helping improve TeleVault. This project handles private media, Telegram sessions, and metadata, so changes must be reviewed with privacy and data integrity in mind.
 
-Read [`GOVERNANCE.md`](GOVERNANCE.md) before contributing. Public contributors should work from a fork and submit pull requests; public repository visibility does not grant push or merge access.
+Read [`GOVERNANCE.md`](GOVERNANCE.md),
+[`DEVELOPMENT.md`](DEVELOPMENT.md), and
+[`docs/CONTRIBUTION_WORKFLOW.md`](docs/CONTRIBUTION_WORKFLOW.md) before
+contributing. Public contributors should work from a fork and submit pull
+requests; public repository visibility does not grant push or merge access.
 
 ## Development setup
 
